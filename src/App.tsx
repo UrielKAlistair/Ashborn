@@ -1,55 +1,72 @@
+import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 function App() {
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const navItems = ["Quest", "Map", "Forge", "Archive"];
   const stats = [
-    { label: "STR", value: 14 },
-    { label: "DEX", value: 11 },
-    { label: "INT", value: 17 },
-    { label: "WIS", value: 13 },
-    { label: "CHR", value: 9 },
+    { label: "STR", value: 3 },
+    { label: "DEX", value: 2 },
+    { label: "INT", value: 8 },
+    { label: "WIS", value: 5 },
+    { label: "CHR", value: 3 },
   ];
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-transparent text-white">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-2xl" />
 
-      <nav className="absolute top-6 left-0 z-10 inline-flex items-center gap-5 rounded-r-[28px] border border-l-0 border-white/12 bg-white/6 py-5 pr-6 pl-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
-        {navItems.map((item) => (
+      <div
+        className={`absolute top-6 left-0 z-10 transition-transform duration-300 ease-out ${
+          navCollapsed ? "-translate-x-[calc(100%-4rem)]" : "translate-x-0"
+        }`}
+      >
+        <div className="relative inline-flex items-center gap-5 rounded-r-[28px] border border-l-0 border-white/12 bg-white/6 py-5 pr-3 pl-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+          {navItems.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="group flex flex-col items-center gap-3 bg-transparent text-white/70"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/12 bg-black/20 shadow-lg shadow-black/15 transition-colors group-hover:border-white/25 group-hover:bg-white/10">
+                <span className="flex h-10 w-10 rotate-45 items-center justify-center rounded-[10px] border border-white/14 bg-white/6">
+                  <span className="-rotate-45 text-[10px] uppercase tracking-[0.22em] text-white/45">
+                    Slot
+                  </span>
+                </span>
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.24em] text-white/45">
+                {item}
+              </span>
+            </button>
+          ))}
           <button
-            key={item}
             type="button"
+            onClick={() => void invoke("exit_app")}
             className="group flex flex-col items-center gap-3 bg-transparent text-white/70"
           >
             <span className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/12 bg-black/20 shadow-lg shadow-black/15 transition-colors group-hover:border-white/25 group-hover:bg-white/10">
               <span className="flex h-10 w-10 rotate-45 items-center justify-center rounded-[10px] border border-white/14 bg-white/6">
                 <span className="-rotate-45 text-[10px] uppercase tracking-[0.22em] text-white/45">
-                  Slot
+                  Quit
                 </span>
               </span>
             </span>
             <span className="text-[10px] uppercase tracking-[0.24em] text-white/45">
-              {item}
+              Quit
             </span>
           </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => void invoke("exit_app")}
-          className="group flex flex-col items-center gap-3 bg-transparent text-white/70"
-        >
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/12 bg-black/20 shadow-lg shadow-black/15 transition-colors group-hover:border-white/25 group-hover:bg-white/10">
-            <span className="flex h-10 w-10 rotate-45 items-center justify-center rounded-[10px] border border-white/14 bg-white/6">
-              <span className="-rotate-45 text-[10px] uppercase tracking-[0.22em] text-white/45">
-                Quit
-              </span>
-            </span>
-          </span>
-          <span className="text-[10px] uppercase tracking-[0.24em] text-white/45">
-            Quit
-          </span>
-        </button>
-      </nav>
+
+          <button
+            type="button"
+            onClick={() => setNavCollapsed((collapsed) => !collapsed)}
+            className="flex h-12 w-8 items-center justify-center rounded-full border border-white/12 bg-black/30 text-lg text-white/55 transition-colors hover:border-white/22 hover:text-white/80"
+            aria-label={navCollapsed ? "Expand navigation" : "Collapse navigation"}
+          >
+            {navCollapsed ? ">" : "<"}
+          </button>
+        </div>
+      </div>
 
       <div className="relative flex min-h-screen justify-end p-6">
         <aside className="w-full max-w-sm self-start rounded-[28px] border border-white/12 bg-white/6 p-5 backdrop-blur-xl">
