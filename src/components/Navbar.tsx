@@ -33,18 +33,21 @@ export function Navbar({
 
   const handleQuit = () => {
     setShowQuitConfirm(false);
-    window.close();
+    window.ashborn?.quit();
   };
 
   useEffect(() => {
-    if (!showQuitConfirm) {
-      return;
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowQuitConfirm(false);
+      if (event.key !== "Escape" || event.defaultPrevented || event.repeat) {
+        return;
       }
+
+      if (showQuitConfirm) {
+        setShowQuitConfirm(false);
+        return;
+      }
+
+      window.ashborn?.hideToTray();
     };
 
     window.addEventListener("keydown", handleKeyDown);
