@@ -1,14 +1,14 @@
 import { AtlasEntryLayout } from "./AtlasEntryLayout";
 
-type GoalSettingPageProps = {
+type PurposePageProps = {
   eyebrow?: string;
 };
 
-export function PhilosophyPage({
+export function PurposePage({
   eyebrow = "Philosophy",
-}: GoalSettingPageProps) {
+}: PurposePageProps) {
   return (
-    <AtlasEntryLayout eyebrow={eyebrow} title="Philosophy">
+    <AtlasEntryLayout eyebrow={eyebrow} title="Purpose">
       <div className="space-y-5 text-sm tracking-[0.12em] text-white/55">
         <div>
           <h3 className="text-base font-semibold tracking-[0.18em] text-white/80">

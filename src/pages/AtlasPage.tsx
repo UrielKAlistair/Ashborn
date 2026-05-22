@@ -1,10 +1,11 @@
 import { CleanRoomPage } from "./atlas/status_ailments/CleanRoomPage";
 import { useState } from "react";
-import { AtlasSidebarHeader, AtlasSidebarSection } from "./atlas/AtlasSidebar";
+import { AtlasSidebarSection } from "./atlas/AtlasSidebar";
 import { FpPage } from "./atlas/attributes/FpPage";
-import { PhilosophyPage } from "./atlas/PhilosophyPage";
 import { HpPage } from "./atlas/attributes/HpPage";
 import { PrimaryStatsPage } from "./atlas/attributes/PrimaryStatsPage";
+import { ProcrastinationPage } from "./atlas/ProcrastinationPage";
+import { PurposePage } from "./atlas/PurposePage";
 import { ResolutePage } from "./atlas/status_ailments/ResolutePage";
 
 type AtlasPageProps = {
@@ -12,7 +13,10 @@ type AtlasPageProps = {
   onNavigate: (path: string) => void;
 };
 
-const philosophyEntry = { label: "Philosophy", path: "/atlas/philosophy" };
+const philosophyEntries = [
+  { label: "Purpose", path: "/atlas/purpose" },
+  { label: "Procrastination", path: "/atlas/procrastination" },
+];
 
 const attributeEntries = [
   { label: "Primary Stats", path: "/atlas/primary-stats" },
@@ -29,14 +33,18 @@ export function AtlasPage({
   currentPath,
   onNavigate,
 }: AtlasPageProps) {
+  const [philosophyOpen, setPhilosophyOpen] = useState(true);
   const [attributesOpen, setAttributesOpen] = useState(false);
   const [statusAilmentsOpen, setStatusAilmentsOpen] = useState(false);
   const selectedPath =
-    currentPath === "/atlas" ? "/atlas/philosophy" : currentPath;
+    currentPath === "/atlas" ? "/atlas/purpose" : currentPath;
 
   const renderAtlasEntry = () => {
-    if (selectedPath === "/atlas/philosophy") {
-      return <PhilosophyPage eyebrow="Philosophy" />;
+    if (selectedPath === "/atlas/purpose") {
+      return <PurposePage eyebrow="Philosophy" />;
+    }
+    if (selectedPath === "/atlas/procrastination") {
+      return <ProcrastinationPage eyebrow="Philosophy" />;
     }
     if (selectedPath === "/atlas/primary-stats") {
       return <PrimaryStatsPage eyebrow="Attributes" />;
@@ -49,17 +57,20 @@ export function AtlasPage({
     if (selectedPath === "/atlas/resolute") {
       return <ResolutePage eyebrow="Status Ailments" />;
     }
-    return <PhilosophyPage eyebrow="Philosophy" />;
+    return <PurposePage eyebrow="Philosophy" />;
   };
 
   return (
-    <section className="-my-6 -ml-6 flex flex-1 self-stretch">
-      <aside className="w-full max-w-sm self-stretch border-r border-white/12 bg-white/6 backdrop-blur-xl">
-        <div className="sticky top-0 h-screen overflow-y-auto px-5 py-6">
-          <AtlasSidebarHeader
-            active={selectedPath === philosophyEntry.path}
-            entry={philosophyEntry}
+    <section className="flex min-h-0 flex-1 gap-6 overflow-hidden">
+      <aside className="flex min-h-0 w-full max-w-sm self-stretch flex-col overflow-hidden rounded-[28px] border border-white/12 bg-white/6 backdrop-blur-xl">
+        <div className="panel-scroll min-h-0 flex-1 overflow-y-auto px-5 py-6">
+          <AtlasSidebarSection
+            entries={philosophyEntries}
+            isOpen={philosophyOpen}
+            label="Philosophy"
             onNavigate={onNavigate}
+            onToggle={() => setPhilosophyOpen((open) => !open)}
+            selectedPath={selectedPath}
           />
 
           <AtlasSidebarSection
@@ -82,8 +93,10 @@ export function AtlasPage({
         </div>
       </aside>
 
-      <div className="flex flex-1 items-start p-6">
-        {renderAtlasEntry()}
+      <div className="flex min-h-0 flex-1 self-stretch overflow-hidden rounded-[28px] border border-white/12 bg-white/6 backdrop-blur-xl">
+        <div className="panel-scroll min-h-0 flex-1 overflow-y-auto p-5 pr-3">
+          {renderAtlasEntry()}
+        </div>
       </div>
     </section>
   );

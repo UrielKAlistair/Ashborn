@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navbar } from "./components/Navbar";
 import { StatPanel } from "./components/StatPanel";
 import { AtlasPage } from "./pages/AtlasPage";
+import { QuestsPage } from "./pages/QuestsPage";
 
 function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname || "/");
@@ -42,6 +43,10 @@ function App() {
       return <AtlasPage currentPath={currentPath} onNavigate={navigate} />;
     }
 
+    if (currentPath === "/quests") {
+      return <QuestsPage />;
+    }
+
     return (
       <>
         <section className="flex flex-1 items-start" />
@@ -51,13 +56,15 @@ function App() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-transparent text-white">
+    <main className="relative h-screen overflow-hidden bg-transparent text-white">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-2xl" />
 
-      <div className="relative flex min-h-screen">
+      <div className="relative flex h-full min-h-0">
         <Navbar currentPath={currentPath} onNavigate={navigate} />
 
-        <div className="flex min-h-screen flex-1 justify-between gap-6 p-6">{renderPage()}</div>
+        <div className="flex min-h-0 flex-1 justify-between gap-6 overflow-hidden p-6">
+          {renderPage()}
+        </div>
       </div>
     </main>
   );

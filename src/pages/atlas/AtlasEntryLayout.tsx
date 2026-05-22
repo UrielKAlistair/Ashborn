@@ -12,7 +12,7 @@ export function AtlasEntryLayout({
   title,
 }: AtlasEntryLayoutProps) {
   return (
-    <section className="min-h-[16rem] w-full rounded-[28px] border border-white/12 bg-white/6 p-5 backdrop-blur-xl">
+    <section className="min-h-full w-full">
       <p className="text-xs uppercase tracking-[0.32em] text-white/40">
         {eyebrow}
       </p>
