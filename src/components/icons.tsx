@@ -145,3 +145,43 @@ export function QuitIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function EditIcon({ className }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={withDefaultClasses("h-4 w-4", className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M13.5 6.5L17.5 10.5M4 20H8L18.5 9.5C19.3284 8.67157 19.3284 7.32843 18.5 6.5L17.5 5.5C16.6716 4.67157 15.3284 4.67157 14.5 5.5L4 16V20Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function MoveIcon({ className }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={withDefaultClasses("h-4 w-4", className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M12 3L14.75 5.75M12 3L9.25 5.75M12 3V9M21 12L18.25 9.25M21 12L18.25 14.75M21 12H15M12 21L9.25 18.25M12 21L14.75 18.25M12 21V15M3 12L5.75 14.75M3 12L5.75 9.25M3 12H9"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

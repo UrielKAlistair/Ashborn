@@ -1,4 +1,4 @@
-import { AtlasEntryLayout } from "../AtlasEntryLayout";
+import { AtlasEntryLayout } from "../../../components/atlas/AtlasEntryLayout";
 
 type CleanRoomPageProps = {
   eyebrow?: string;

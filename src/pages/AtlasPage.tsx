@@ -1,6 +1,6 @@
 import { CleanRoomPage } from "./atlas/status_ailments/CleanRoomPage";
 import { useState } from "react";
-import { AtlasSidebarSection } from "./atlas/AtlasSidebar";
+import { AtlasSidebarSection } from "../components/atlas/AtlasSidebar";
 import { FpPage } from "./atlas/attributes/FpPage";
 import { HpPage } from "./atlas/attributes/HpPage";
 import { PrimaryStatsPage } from "./atlas/attributes/PrimaryStatsPage";
