@@ -5,30 +5,38 @@ export function StatPanel({ fp, hp, stats }: StatPanelProps) {
   const fpPercent = Math.max(0, Math.min(100, (fp.current / fp.max) * 100));
 
   return (
-    <aside className="w-full rounded-[28px] border border-white/12 bg-white/6 p-5 backdrop-blur-xl">
-      <div className="flex gap-4">
-        <div className="flex h-[17.5rem] w-[13rem] shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/25 text-center text-xs uppercase tracking-[0.24em] text-white/45">
+    <aside className="flex h-full w-full flex-col rounded-[28px] border border-white/12 bg-white/6 p-4 backdrop-blur-xl">
+      <div className="grid min-h-0 flex-1 grid-cols-[1.35fr_0.9fr] gap-3">
+        <div className="flex min-h-0 items-center justify-center rounded-2xl border border-white/10 bg-black/25 text-center text-[10px] uppercase tracking-[0.22em] text-white/45">
           Character
           <br />
           Pixel Art
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col justify-between">
-          <dl className="mt-1 space-y-1">
+        <div className="min-h-0">
+          <dl className="grid h-full grid-rows-6 gap-1">
             {stats.map((stat) => (
               <div
-                key={stat.label}
-                className="flex items-center justify-between rounded-xl border border-white/8 bg-black/15 px-3 py-2"
+                key={stat.key}
+                className="flex min-h-0 flex-col justify-center rounded-xl border border-white/8 bg-black/15 px-3 py-1.5"
               >
-                <dt className="text-sm tracking-[0.2em] text-white/60">{stat.label}</dt>
-                <dd className="text-base font-medium text-white">{stat.value}</dd>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-[13px] tracking-[0.18em] text-white/60">{stat.key}</dt>
+                  <dd className="text-sm font-medium text-white">{stat.value}</dd>
+                </div>
+                <div className="mt-1 h-1 overflow-hidden rounded-full border border-white/8 bg-black/25">
+                  <div
+                    className="h-full rounded-full bg-[#d7c17d]"
+                    style={{ width: `${stat.xpProgressPercent}%` }}
+                  />
+                </div>
               </div>
             ))}
           </dl>
         </div>
       </div>
 
-      <section className="mt-5 rounded-2xl border border-white/10 bg-black/15 p-4">
+      <section className="mt-3 shrink-0 rounded-2xl border border-white/10 bg-black/15 p-3">
         <div>
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs uppercase tracking-[0.24em] text-white/55">HP</p>
@@ -41,7 +49,7 @@ export function StatPanel({ fp, hp, stats }: StatPanelProps) {
           </div>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs uppercase tracking-[0.24em] text-white/55">FP</p>
             <p className="text-[11px] tracking-[0.16em] text-white/45">
@@ -53,7 +61,7 @@ export function StatPanel({ fp, hp, stats }: StatPanelProps) {
           </div>
         </div>
 
-        <p className="mt-4 text-xs tracking-[0.16em] text-white/45">EXP multiplier: 1.2x</p>
+        <p className="mt-3 text-[11px] tracking-[0.14em] text-white/45">EXP multiplier: 1.2x</p>
       </section>
     </aside>
   );

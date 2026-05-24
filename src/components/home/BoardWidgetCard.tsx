@@ -1,5 +1,5 @@
-import { QuestCard } from "../../pages/home/QuestCard";
-import type { BoardWidget, BoardWidgetData } from "./types";
+import { QuestCard } from "./QuestCard";
+import type { BoardWidget, BoardWidgetData } from "../../shared/types";
 
 export function BoardWidgetCard({
   board,
