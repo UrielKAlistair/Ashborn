@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { AtlasIcon, PlaceholderNavIcon, QuitIcon, QuestIcon, HomeIcon } from "./icons";
+import { AtlasIcon, QuitIcon, QuestIcon, HomeIcon } from "./icons";
 
 type NavIconProps = {
   className?: string;
@@ -21,7 +21,6 @@ type NavbarProps = {
 const navItems: NavItem[] = [
   { label: "Home", path: "/", icon: HomeIcon },
   { label: "Quests", path: "/quests", icon: QuestIcon },
-  { label: "Forge", path: "/forge", icon: PlaceholderNavIcon },
   { label: "Atlas", path: "/atlas", icon: AtlasIcon },
 ];
 

@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, Tray, nativeImage } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
+import { getGameSnapshot, getHomeSnapshot, saveDashboardWidgets, toggleHomeTaskInstance, toggleTaskInstance } from "./db.js";
+import type { BoardWidget } from "../src/shared/types.js";
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -9,8 +11,12 @@ const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
+function resolveAppPath(...segments: string[]) {
+  return path.join(app.getAppPath(), ...segments);
+}
+
 function createTrayImage() {
-  const trayIconPath = path.join(__dirname, "../src/assets/ashborn-tray.png");
+  const trayIconPath = resolveAppPath("src", "assets", "ashborn-tray.png");
 
   if (!fs.existsSync(trayIconPath)) {
     throw new Error(`Tray icon not found at ${trayIconPath}`);
@@ -92,7 +98,7 @@ function createWindow() {
   if (isDev) {
     void mainWindow.loadURL("http://localhost:1420");
   } else {
-    void mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    void mainWindow.loadFile(resolveAppPath("dist", "index.html"));
   }
 }
 
@@ -102,6 +108,26 @@ ipcMain.on("app:hide-to-tray", () => {
 
 ipcMain.on("app:quit", () => {
   app.quit();
+});
+
+ipcMain.handle("game:get-snapshot", () => {
+  return getGameSnapshot();
+});
+
+ipcMain.handle("home:get-snapshot", () => {
+  return getHomeSnapshot();
+});
+
+ipcMain.handle("game:toggle-task-instance", (_event, instanceId: string) => {
+  return toggleTaskInstance(instanceId);
+});
+
+ipcMain.handle("home:toggle-task-instance", (_event, instanceId: string) => {
+  return toggleHomeTaskInstance(instanceId);
+});
+
+ipcMain.handle("game:save-dashboard-widgets", (_event, widgets: BoardWidget[]) => {
+  return saveDashboardWidgets(widgets);
 });
 
 app.whenReady().then(() => {

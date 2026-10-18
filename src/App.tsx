@@ -1,21 +1,15 @@
 import { useEffect, useState } from "react";
 import { Navbar } from "./components/Navbar";
-import { StatPanel } from "./components/StatPanel";
 import { AtlasPage } from "./pages/AtlasPage";
+import { HomePage } from "./pages/HomePage";
 import { QuestsPage } from "./pages/QuestsPage";
+import { getLevelFromXp, getXpProgressPercent } from "./shared/progression";
+import type { BoardWidget, GameSnapshot, HomeSnapshot } from "./shared/types";
 
 function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname || "/");
-  const stats = [
-    { label: "STR", value: 3 },
-    { label: "DEX", value: 2 },
-    { label: "INT", value: 8 },
-    { label: "WIS", value: 5 },
-    { label: "CHR", value: 3 },
-    { label: "MND", value: 1 },
-  ];
-  const hp = { current: 112, max: 145 };
-  const fp = { current: 75, max: 145 };
+  const [gameSnapshot, setGameSnapshot] = useState<GameSnapshot | null>(null);
+  const [homeSnapshot, setHomeSnapshot] = useState<HomeSnapshot | null>(null);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -29,6 +23,30 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    if (window.ashborn) {
+      if (currentPath === "/quests") {
+        void window.ashborn.getGameSnapshot().then((nextSnapshot) => {
+          if (isMounted) {
+            setGameSnapshot(nextSnapshot);
+          }
+        });
+      } else if (!currentPath.startsWith("/atlas/") && currentPath !== "/atlas") {
+        void window.ashborn.getHomeSnapshot().then((nextSnapshot) => {
+          if (isMounted) {
+            setHomeSnapshot(nextSnapshot);
+          }
+        });
+      }
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPath]);
+
   const navigate = (path: string) => {
     if (path === currentPath) {
       return;
@@ -38,20 +56,79 @@ function App() {
     setCurrentPath(path);
   };
 
+  const toggleTaskInstance = async (instanceId: string) => {
+    const nextSnapshot = await window.ashborn?.toggleTaskInstance(instanceId);
+
+    if (nextSnapshot) {
+      setGameSnapshot(nextSnapshot);
+    }
+  };
+
+  const saveDashboardWidgets = async (widgets: BoardWidget[]) => {
+    const nextSnapshot = await window.ashborn?.saveDashboardWidgets(widgets);
+
+    if (nextSnapshot) {
+      setHomeSnapshot(nextSnapshot);
+    }
+  };
+
   const renderPage = () => {
     if (currentPath === "/atlas" || currentPath.startsWith("/atlas/")) {
       return <AtlasPage currentPath={currentPath} onNavigate={navigate} />;
     }
 
     if (currentPath === "/quests") {
-      return <QuestsPage />;
+      if (!gameSnapshot) {
+        return (
+          <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-[28px] border border-white/12 bg-white/6 text-sm tracking-[0.16em] text-white/50 backdrop-blur-xl">
+            Loading...
+          </section>
+        );
+      }
+
+      return (
+        <QuestsPage
+          initialInstances={gameSnapshot.instances}
+          initialQuestCategories={gameSnapshot.questCategories}
+          initialQuestlines={gameSnapshot.questlines}
+          onToggleTaskInstance={toggleTaskInstance}
+          tasks={gameSnapshot.tasks}
+        />
+      );
+    }
+
+    if (!homeSnapshot) {
+      return (
+        <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-[28px] border border-white/12 bg-white/6 text-sm tracking-[0.16em] text-white/50 backdrop-blur-xl">
+          Loading...
+        </section>
+      );
+    }
+
+    const hp = homeSnapshot.character.resources.find((resource) => resource.key === "HP");
+    const fp = homeSnapshot.character.resources.find((resource) => resource.key === "FP");
+
+    if (!hp || !fp) {
+      return (
+        <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-[28px] border border-white/12 bg-white/6 px-8 text-center text-sm tracking-[0.16em] text-white/50 backdrop-blur-xl">
+          Database is empty. Create character resources, attributes, quest data, and dashboard widgets to begin.
+        </section>
+      );
     }
 
     return (
-      <>
-        <section className="flex flex-1 items-start" />
-        <StatPanel fp={fp} hp={hp} stats={stats} />
-      </>
+      <HomePage
+        allBoardsData={homeSnapshot.boards}
+        initialDashConfig={homeSnapshot.dashboardWidgets}
+        fp={{ current: fp.current, max: fp.max }}
+        hp={{ current: hp.current, max: hp.max }}
+        onSaveWidgets={saveDashboardWidgets}
+        stats={homeSnapshot.character.attributes.map((attribute) => ({
+          key: attribute.key,
+          value: getLevelFromXp(attribute.xp),
+          xpProgressPercent: getXpProgressPercent(attribute.xp),
+        }))}
+      />
     );
   };
 

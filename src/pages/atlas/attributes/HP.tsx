@@ -20,16 +20,11 @@ export function HpPage({ eyebrow = "Attributes" }: HpPageProps) {
           unsurprisingly, you don&apos;t operate well on low HP, unlike in
           games, where you deal the same damage no matter what HP you&apos;re
           at. I think that it&apos;s obvious that I need to take care of
-          myself and abusing that by itself makes me feel worse. On the other
+          myself and abusing my HP bar intrinsically makes me feel worse. On the other
           hand, having a healthy sleep schedule, eating 3 meals, and doing a
           bit of exercise makes a huge difference in the overall headspace.
         </p>
 
-        <p>
-          I&apos;m hoping to set up healthy habits in a small, actionable
-          fashion, while making sure the costs of neglecting them are more
-          visible via the EXP multiplier.
-        </p>
       </div>
     </AtlasEntryLayout>
   );

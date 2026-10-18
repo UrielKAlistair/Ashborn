@@ -1,14 +1,10 @@
-import { useState } from "react";
 import { AtlasEntryLayout } from "../../../components/atlas/AtlasEntryLayout";
 
 type FpPageProps = {
   eyebrow?: string;
 };
 
-const privateGraphSrc = "/fp-quick-graph.png";
-
 export function FpPage({ eyebrow = "Attributes" }: FpPageProps) {
-  const [graphAvailable, setGraphAvailable] = useState(true);
 
   return (
     <AtlasEntryLayout eyebrow={eyebrow} title="FP">
@@ -39,28 +35,18 @@ export function FpPage({ eyebrow = "Attributes" }: FpPageProps) {
           </a>
           {" "}it is observed that dopamine depleted rats seldom engage in
           sustained effort to obtain tastier food, opting instead to be lazy
-          and eat inferior chow. We end up being unwilling to put in the effort
-          for the things good for us, very often from being depleted of
-          dopamine by technology.
+          and eat inferior chow.
         </p>
 
         <p>
-          The FP bar is a crude attempt at modelling this nature: each day
-          offers a large amount of FP that can lend itself to sustained effort,
-          but engaging in highly dopaminergic activities incurs a large
-          percentage based FP cost that cripples our ability to do other
-          things. Doing work first thing in the day is thus, actually, well
-          motivated advice: it becomes progressively harder and provides less
-          reinforcement with increasing dopamine depletion.
+          In my experience, I often end up in episodes of being unwilling to put in any work
+          at all in life, entering a nihilistic trance, where all effort is deemed 
+          futile, unrewarding and misguided. Although there are more complex reasons for this,
+          constantly depleting myself of dopamine has a non-trivial contribution.
         </p>
-
+        
         <p>
-          I want to model the idea that I need to maintain myself such that I
-          have healthy FP levels in order to be productive, and make that really
-          apparent with this aspect. I&apos;m not making any hard FP
-          constraints to tasks: I&apos;m only making FP heavily influence the
-          EXP multiplier, which is a nice way I can materialize ideas to
-          action.
+          This state must be avoided at all costs.
         </p>
 
         <div>
@@ -105,23 +91,8 @@ export function FpPage({ eyebrow = "Attributes" }: FpPageProps) {
         <p>
           I have got into rather problematic spirals with shame, because a loss
           of control due to constant shame, results in further failure and
-          further shame. Because awareness itself is self-control, I took the
-          time to sit and analyze my mind, and what my strongest triggers are.
-          Quick graph here.
+          further shame.
         </p>
-
-        {graphAvailable ? (
-          <img
-            src={privateGraphSrc}
-            alt="Quick graph"
-            onError={() => setGraphAvailable(false)}
-            className="w-full rounded-sm border border-white/12"
-          />
-        ) : (
-          <div className="flex h-56 w-full items-center justify-center rounded-sm border border-white/12 bg-black/20 text-sm uppercase tracking-[0.24em] text-white/35">
-            Redacted
-          </div>
-        )}
 
         <p>
           The best thing to allow natural processing of emotions is to not
