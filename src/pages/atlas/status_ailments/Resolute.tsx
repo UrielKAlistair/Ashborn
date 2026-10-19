@@ -9,14 +9,13 @@ export function ResolutePage({
 }: ResolutePageProps) {
   return (
     <AtlasEntryLayout eyebrow={eyebrow} title="Resolute">
-      <p className="text-sm tracking-[0.12em] text-white/55">
+      <div className="text-sm tracking-[0.12em] text-white/55">
         <div>
           <h3 className="text-base font-semibold tracking-[0.18em] text-white/80">
             Resolve manifests as Discipline
           </h3>
         </div>
-        
-      </p>
+      </div>
     </AtlasEntryLayout>
   );
 }

@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { AtlasIcon, QuitIcon, QuestIcon, HomeIcon } from "./icons";
+import { AtlasIcon, QuitIcon, HomeIcon } from "./icons";
 
 type NavIconProps = {
   className?: string;
@@ -20,7 +20,6 @@ type NavbarProps = {
 
 const navItems: NavItem[] = [
   { label: "Home", path: "/", icon: HomeIcon },
-  { label: "Quests", path: "/quests", icon: QuestIcon },
   { label: "Atlas", path: "/atlas", icon: AtlasIcon },
 ];
 
@@ -43,6 +42,12 @@ export function Navbar({
 
       if (showQuitConfirm) {
         setShowQuitConfirm(false);
+        return;
+      }
+
+      // In a text field, Escape leaves the field instead of hiding the window
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select")) {
+        event.target.blur();
         return;
       }
 

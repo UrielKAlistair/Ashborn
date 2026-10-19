@@ -1,67 +1,36 @@
-import type { ResourceKey, Task, TaskEffect, TaskInstance } from "../src/shared/types.js";
+import type { StatKey } from "../src/shared/types.js";
 
-export type TaskRow = {
+export type GraphNodeRow = {
   id: string;
-  questline_id: string;
+  parent_id: string | null;
   title: string;
-  note: string | null;
-  kind: Task["kind"];
-  recurrence_frequency: "weekly" | "monthly" | null;
-  recurrence_weekdays: string | null;
-  recurrence_month_days: string | null;
-  scheduled_for: string | null;
-  keep_until_complete: number | null;
-};
-
-export type TaskEffectRow = {
-  task_id: string;
-  kind: TaskEffect["kind"];
-  target: string;
-  amount: number;
-  position: number;
-};
-
-export type TaskInstanceRow = {
-  id: string;
-  task_id: string;
-  date: string;
-  status: TaskInstance["status"];
+  stat: StatKey | null;
+  active: number;
+  created_at: string;
   completed_at: string | null;
+  own_xp: number; // computed in the select, not stored
 };
 
-export type CategoryRow = {
+export type GraphEdgeRow = {
+  from_id: string;
+  to_id: string;
+};
+
+export type RoutineRow = {
   id: string;
   title: string;
+  cue: string;
+  weekdays: string;
 };
 
-export type CategoryQuestlineRow = {
-  category_id: string;
-  questline_id: string;
-  position: number;
+export type RoutineCheckRow = {
+  routine_id: string;
+  date: string;
 };
 
-export type CharacterAttributeRow = {
-  attribute_key: string;
-  xp: number;
-};
-
-export type CharacterResourceRow = {
-  resource_key: ResourceKey;
-  current: number;
-  max: number;
-};
-
-export type LedgerRow = {
-  kind: TaskEffect["kind"];
-  target: string;
-  amount: number;
-};
-
-export type DashboardWidgetRow = {
-  board_id: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  position: number;
+export type DeadlineRow = {
+  id: string;
+  title: string;
+  due_date: string;
+  done_at: string | null;
 };

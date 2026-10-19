@@ -1,75 +1,42 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navbar } from "./components/Navbar";
+import { applyDelta, callApi } from "./lib/api";
 import { AtlasPage } from "./pages/AtlasPage";
-import { HomePage } from "./pages/HomePage";
-import { QuestsPage } from "./pages/QuestsPage";
-import { getLevelFromXp, getXpProgressPercent } from "./shared/progression";
-import type { BoardWidget, GameSnapshot, HomeSnapshot } from "./shared/types";
+import { HomePage, type Act } from "./pages/home/HomePage";
+import type { Snapshot } from "./shared/types";
 
 function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname || "/");
-  const [gameSnapshot, setGameSnapshot] = useState<GameSnapshot | null>(null);
-  const [homeSnapshot, setHomeSnapshot] = useState<HomeSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname || "/");
-    };
+    const handlePopState = () => setCurrentPath(window.location.pathname || "/");
 
     window.addEventListener("popstate", handlePopState);
-
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
+    callApi("getSnapshot").then(setSnapshot, (reason: Error) => setError(reason.message));
+  }, []);
 
-    if (window.ashborn) {
-      if (currentPath === "/quests") {
-        void window.ashborn.getGameSnapshot().then((nextSnapshot) => {
-          if (isMounted) {
-            setGameSnapshot(nextSnapshot);
-          }
-        });
-      } else if (!currentPath.startsWith("/atlas/") && currentPath !== "/atlas") {
-        void window.ashborn.getHomeSnapshot().then((nextSnapshot) => {
-          if (isMounted) {
-            setHomeSnapshot(nextSnapshot);
-          }
-        });
-      }
+  const act = useCallback<Act>(async (name, ...args) => {
+    try {
+      const delta = await callApi(name, ...args);
+      setSnapshot((current) => current && applyDelta(current, delta));
+      setError(null);
+    } catch (reason) {
+      // IPC wraps main-process errors as "Error invoking remote method '...': Error: <message>"
+      setError(String((reason as Error).message).replace(/^.*Error: /, ""));
     }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentPath]);
+  }, []);
 
   const navigate = (path: string) => {
-    if (path === currentPath) {
-      return;
-    }
+    if (path === currentPath) return;
 
     window.history.pushState({}, "", path);
     setCurrentPath(path);
-  };
-
-  const toggleTaskInstance = async (instanceId: string) => {
-    const nextSnapshot = await window.ashborn?.toggleTaskInstance(instanceId);
-
-    if (nextSnapshot) {
-      setGameSnapshot(nextSnapshot);
-    }
-  };
-
-  const saveDashboardWidgets = async (widgets: BoardWidget[]) => {
-    const nextSnapshot = await window.ashborn?.saveDashboardWidgets(widgets);
-
-    if (nextSnapshot) {
-      setHomeSnapshot(nextSnapshot);
-    }
   };
 
   const renderPage = () => {
@@ -77,59 +44,15 @@ function App() {
       return <AtlasPage currentPath={currentPath} onNavigate={navigate} />;
     }
 
-    if (currentPath === "/quests") {
-      if (!gameSnapshot) {
-        return (
-          <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-[28px] border border-white/12 bg-white/6 text-sm tracking-[0.16em] text-white/50 backdrop-blur-xl">
-            Loading...
-          </section>
-        );
-      }
-
-      return (
-        <QuestsPage
-          initialInstances={gameSnapshot.instances}
-          initialQuestCategories={gameSnapshot.questCategories}
-          initialQuestlines={gameSnapshot.questlines}
-          onToggleTaskInstance={toggleTaskInstance}
-          tasks={gameSnapshot.tasks}
-        />
-      );
-    }
-
-    if (!homeSnapshot) {
+    if (!snapshot) {
       return (
         <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-[28px] border border-white/12 bg-white/6 text-sm tracking-[0.16em] text-white/50 backdrop-blur-xl">
-          Loading...
+          {error ?? "Loading..."}
         </section>
       );
     }
 
-    const hp = homeSnapshot.character.resources.find((resource) => resource.key === "HP");
-    const fp = homeSnapshot.character.resources.find((resource) => resource.key === "FP");
-
-    if (!hp || !fp) {
-      return (
-        <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-[28px] border border-white/12 bg-white/6 px-8 text-center text-sm tracking-[0.16em] text-white/50 backdrop-blur-xl">
-          Database is empty. Create character resources, attributes, quest data, and dashboard widgets to begin.
-        </section>
-      );
-    }
-
-    return (
-      <HomePage
-        allBoardsData={homeSnapshot.boards}
-        initialDashConfig={homeSnapshot.dashboardWidgets}
-        fp={{ current: fp.current, max: fp.max }}
-        hp={{ current: hp.current, max: hp.max }}
-        onSaveWidgets={saveDashboardWidgets}
-        stats={homeSnapshot.character.attributes.map((attribute) => ({
-          key: attribute.key,
-          value: getLevelFromXp(attribute.xp),
-          xpProgressPercent: getXpProgressPercent(attribute.xp),
-        }))}
-      />
-    );
+    return <HomePage snapshot={snapshot} act={act} />;
   };
 
   return (
@@ -139,10 +62,18 @@ function App() {
       <div className="relative flex h-full min-h-0">
         <Navbar currentPath={currentPath} onNavigate={navigate} />
 
-        <div className="flex min-h-0 flex-1 justify-between gap-6 overflow-hidden p-6">
-          {renderPage()}
-        </div>
+        <div className="flex min-h-0 flex-1 justify-between gap-6 overflow-hidden p-6">{renderPage()}</div>
       </div>
+
+      {error && snapshot ? (
+        <button
+          type="button"
+          onClick={() => setError(null)}
+          className="absolute bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-red-400/30 bg-black/85 px-4 py-2 text-xs text-red-200"
+        >
+          {error} ×
+        </button>
+      ) : null}
     </main>
   );
 }

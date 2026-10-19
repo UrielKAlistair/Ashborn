@@ -29,34 +29,6 @@ export function AtlasSidebarItem({
   );
 }
 
-type AtlasSidebarHeaderProps = {
-  active?: boolean;
-  entry: AtlasSidebarEntry;
-  onNavigate: (path: string) => void;
-};
-
-export function AtlasSidebarHeader({
-  active = false,
-  entry,
-  onNavigate,
-}: AtlasSidebarHeaderProps) {
-  return (
-    <button
-      type="button"
-      onClick={() => onNavigate(entry.path)}
-      className="flex w-full items-center justify-between border border-white/10 bg-black/15 px-4 py-3 text-left"
-    >
-      <span
-        className={`text-xs uppercase tracking-[0.28em] ${
-          active ? "text-white/88" : "text-white/55"
-        }`}
-      >
-        {entry.label}
-      </span>
-    </button>
-  );
-}
-
 type AtlasSidebarSectionProps = {
   entries: AtlasSidebarEntry[];
   isOpen: boolean;

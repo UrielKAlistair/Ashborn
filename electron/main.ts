@@ -2,8 +2,7 @@ import { app, BrowserWindow, ipcMain, Tray, nativeImage } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
-import { getGameSnapshot, getHomeSnapshot, saveDashboardWidgets, toggleHomeTaskInstance, toggleTaskInstance } from "./db.js";
-import type { BoardWidget } from "../src/shared/types.js";
+import { api } from "./api.js";
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -80,8 +79,6 @@ function createWindow() {
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
-    alwaysOnTop: false,
-    maximizable: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -96,7 +93,7 @@ function createWindow() {
   mainWindow.maximize();
 
   if (isDev) {
-    void mainWindow.loadURL("http://localhost:1420");
+    void mainWindow.loadURL("http://127.0.0.1:1420");
   } else {
     void mainWindow.loadFile(resolveAppPath("dist", "index.html"));
   }
@@ -110,30 +107,23 @@ ipcMain.on("app:quit", () => {
   app.quit();
 });
 
-ipcMain.handle("game:get-snapshot", () => {
-  return getGameSnapshot();
-});
+// Each api method is exposed as the IPC channel "api:<name>"
+for (const [name, method] of Object.entries(api)) {
+  ipcMain.handle(`api:${name}`, (_event, ...args: unknown[]) =>
+    (method as (...methodArgs: unknown[]) => unknown)(...args),
+  );
+}
 
-ipcMain.handle("home:get-snapshot", () => {
-  return getHomeSnapshot();
-});
-
-ipcMain.handle("game:toggle-task-instance", (_event, instanceId: string) => {
-  return toggleTaskInstance(instanceId);
-});
-
-ipcMain.handle("home:toggle-task-instance", (_event, instanceId: string) => {
-  return toggleHomeTaskInstance(instanceId);
-});
-
-ipcMain.handle("game:save-dashboard-widgets", (_event, widgets: BoardWidget[]) => {
-  return saveDashboardWidgets(widgets);
-});
-
-app.whenReady().then(() => {
-  createWindow();
-  createTray();
-});
+// A second launch focuses the running window instead of opening another window and tray icon
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", showMainWindow);
+  app.whenReady().then(() => {
+    createWindow();
+    createTray();
+  });
+}
 
 app.on("activate", () => {
   if (!mainWindow) {

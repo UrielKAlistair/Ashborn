@@ -1,32 +1,28 @@
-export function getXpThresholdForLevel(level: number) {
-  return 50 * level * level;
+// One press of a node's + button, and the credit for completing a node
+export const PROGRESS_UNIT = 10;
+
+// A node's bar fills every NODE_LEVEL_XP, so each press moves it a tenth of the way
+export const NODE_LEVEL_XP = 100;
+
+// Character stats: going from level L to L + 1 costs STAT_LEVEL_STEP * L, so reaching
+// level L takes STAT_LEVEL_STEP * L(L - 1) / 2 in total and level grows like sqrt(xp).
+const STAT_LEVEL_STEP = 100;
+
+export type Level = {
+  level: number;
+  percent: number; // progress through the current level, 0 to 100
+};
+
+export function nodeLevel(xp: number): Level {
+  return {
+    level: Math.floor(xp / NODE_LEVEL_XP) + 1,
+    percent: ((xp % NODE_LEVEL_XP) / NODE_LEVEL_XP) * 100,
+  };
 }
 
-export function getLevelFromXp(xp: number) {
-  let level = 1;
-  let remainingXp = xp;
+export function statLevel(xp: number): Level {
+  const level = Math.floor((1 + Math.sqrt(1 + (8 * xp) / STAT_LEVEL_STEP)) / 2);
+  const reached = (STAT_LEVEL_STEP * level * (level - 1)) / 2;
 
-  while (remainingXp >= getXpThresholdForLevel(level)) {
-    remainingXp -= getXpThresholdForLevel(level);
-    level += 1;
-  }
-
-  return level;
-}
-
-export function getXpProgressPercent(xp: number) {
-  const level = getLevelFromXp(xp);
-  let xpIntoLevel = xp;
-
-  for (let currentLevel = 1; currentLevel < level; currentLevel += 1) {
-    xpIntoLevel -= getXpThresholdForLevel(currentLevel);
-  }
-
-  const threshold = getXpThresholdForLevel(level);
-
-  if (threshold <= 0) {
-    return 0;
-  }
-
-  return Math.max(0, Math.min(100, (xpIntoLevel / threshold) * 100));
+  return { level, percent: ((xp - reached) / (STAT_LEVEL_STEP * level)) * 100 };
 }
