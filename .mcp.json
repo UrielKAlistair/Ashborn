@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ashborn": {
+      "command": "npm",
+      "args": ["run", "-s", "agent"]
+    }
+  }
+}

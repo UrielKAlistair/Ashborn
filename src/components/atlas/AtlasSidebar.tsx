@@ -21,7 +21,7 @@ export function AtlasSidebarItem({
       className={`block w-full border px-4 py-3 text-left text-sm tracking-[0.18em] transition-colors ${
         active
           ? "border-white/18 bg-white/10 text-white/88"
-          : "border-white/8 bg-black/15 text-white/72 hover:border-white/12 hover:bg-white/8"
+          : "border-white/8 bg-night/50 text-white/72 hover:border-white/10 hover:bg-white/8"
       }`}
     >
       {entry.label}
@@ -51,7 +51,7 @@ export function AtlasSidebarSection({
       <button
         type="button"
         onClick={onToggle}
-        className="mt-5 flex w-full items-center justify-between border border-white/10 bg-black/15 px-4 py-3 text-left"
+        className="mt-5 flex w-full items-center justify-between border border-white/10 bg-night/50 px-4 py-3 text-left"
       >
         <span className="text-xs uppercase tracking-[0.28em] text-white/55">
           {label}

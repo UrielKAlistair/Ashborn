@@ -26,3 +26,16 @@ dist-ssr
 
 # Working design notes
 docs/design.md
+
+# Test output
+test-results
+playwright-report
+
+# Credentials
+.env
+
+# Supabase CLI link cache
+supabase/.temp
+
+# Agent server build
+dist-mcp

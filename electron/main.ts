@@ -2,7 +2,6 @@ import { app, BrowserWindow, ipcMain, Tray, nativeImage } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
-import { api } from "./api.js";
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -77,8 +76,7 @@ function createWindow() {
     height: 650,
     autoHideMenuBar: true,
     frame: false,
-    transparent: true,
-    backgroundColor: "#00000000",
+    backgroundColor: "#02040d",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -106,13 +104,6 @@ ipcMain.on("app:hide-to-tray", () => {
 ipcMain.on("app:quit", () => {
   app.quit();
 });
-
-// Each api method is exposed as the IPC channel "api:<name>"
-for (const [name, method] of Object.entries(api)) {
-  ipcMain.handle(`api:${name}`, (_event, ...args: unknown[]) =>
-    (method as (...methodArgs: unknown[]) => unknown)(...args),
-  );
-}
 
 // A second launch focuses the running window instead of opening another window and tray icon
 if (!app.requestSingleInstanceLock()) {

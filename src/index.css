@@ -1,17 +1,26 @@
 @import "tailwindcss";
+@import "@fontsource/jetbrains-mono/400.css";
+
+/* The night palette of the homepage's trail: the page, and the panels that sit on it */
+@theme {
+  --color-night: #02040d;
+  --color-night-panel: #040a1c;
+  --color-night-card: #08112b;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
 
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
-  background: transparent;
+  background: var(--color-night);
   overflow: hidden;
 }
 
 body {
   height: 100vh;
-  font-family: "IBM Plex Mono", "Fira Code", "SFMono-Regular", monospace;
+  font-family: var(--font-mono);
 }
 
 .panel-scroll {

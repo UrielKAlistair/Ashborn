@@ -1,0 +1,12 @@
+// A flat-topped hexagonal grid in "odd columns shifted down" layout: the fabric behind the thread
+// graph. Cells are drawn slightly small, leaving hairline gaps.
+
+export const hexCellScale = 0.9;
+
+export const hexRowHeight = (radius: number) => Math.sqrt(3) * radius;
+export const hexColumnWidth = (radius: number) => 1.5 * radius;
+
+export const hexCentre = (col: number, row: number, radius: number) => ({
+  x: col * hexColumnWidth(radius),
+  y: row * hexRowHeight(radius) + (Math.abs(col) % 2 === 1 ? hexRowHeight(radius) / 2 : 0),
+});

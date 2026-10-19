@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { AtlasIcon, QuitIcon, HomeIcon } from "./icons";
+import { AlarmsIcon, AtlasIcon, CookbookIcon, HomeIcon, QuitIcon, TreasuryIcon } from "./icons";
 
 type NavIconProps = {
   className?: string;
@@ -18,9 +18,12 @@ type NavbarProps = {
   onNavigate: (path: string) => void;
 };
 
-const navItems: NavItem[] = [
+export const navItems: NavItem[] = [
   { label: "Home", path: "/", icon: HomeIcon },
+  { label: "Alarms", path: "/alarms", icon: AlarmsIcon },
   { label: "Atlas", path: "/atlas", icon: AtlasIcon },
+  { label: "Cookbook", path: "/cookbook", icon: CookbookIcon },
+  { label: "Treasury", path: "/treasury", icon: TreasuryIcon },
 ];
 
 export function Navbar({
@@ -62,7 +65,7 @@ export function Navbar({
   }, [showQuitConfirm]);
 
   return (
-    <aside className="relative z-10 flex h-full min-h-0 w-24 shrink-0 flex-col items-center border-r border-white/12 bg-white/6 px-3 py-6 backdrop-blur-xl">
+    <aside className="relative z-10 flex h-full min-h-0 w-24 shrink-0 flex-col items-center border-r border-white/10 bg-night-panel px-3 py-6">
       <div className="flex flex-1 flex-col items-center gap-4">
         {navItems.map((item) => {
           const isActive =
@@ -86,7 +89,7 @@ export function Navbar({
                   className={`flex h-12 w-12 rotate-45 items-center justify-center rounded-[12px] border transition-colors ${
                     isActive
                       ? "border-white/30 bg-white/10"
-                      : "border-white/14 bg-white/6 group-hover:border-white/22 group-hover:bg-white/10"
+                      : "border-white/12 bg-white/6 group-hover:border-white/22 group-hover:bg-white/10"
                   }`}
                 >
                   <Icon className={`-rotate-45 ${labelColorClass}`} />
@@ -107,7 +110,7 @@ export function Navbar({
           className="group flex flex-col items-center gap-3 bg-transparent text-white/70"
         >
           <span className="flex h-14 w-14 items-center justify-center text-white/45 transition-colors group-hover:text-white/70">
-            <span className="flex h-12 w-12 rotate-45 items-center justify-center rounded-[12px] border border-white/14 bg-white/6 transition-colors group-hover:border-white/22 group-hover:bg-white/10">
+            <span className="flex h-12 w-12 rotate-45 items-center justify-center rounded-[12px] border border-white/12 bg-white/6 transition-colors group-hover:border-white/22 group-hover:bg-white/10">
               <QuitIcon className="-rotate-45 h-5 w-5 text-white/45" />
             </span>
           </span>
@@ -120,14 +123,14 @@ export function Navbar({
       {showQuitConfirm
         ? createPortal(
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-night/70 px-4 backdrop-blur-sm"
               onClick={() => setShowQuitConfirm(false)}
             >
               <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="quit-dialog-title"
-                className="w-full max-w-[16rem] rounded-2xl border border-white/14 bg-black/80 p-4 text-center shadow-xl shadow-black/25"
+                className="w-full max-w-[16rem] rounded-2xl border border-white/12 bg-night-card/95 p-4 text-center shadow-xl shadow-black/25"
                 onClick={(event) => event.stopPropagation()}
               >
                 <h2
@@ -143,7 +146,7 @@ export function Navbar({
                   <button
                     type="button"
                     onClick={() => setShowQuitConfirm(false)}
-                    className="flex-1 rounded-lg border border-white/12 bg-white/6 px-3 py-2 text-xs uppercase tracking-[0.18em] text-white/68 transition-colors hover:border-white/18 hover:bg-white/10 hover:text-white/82"
+                    className="flex-1 rounded-lg border border-white/10 bg-white/6 px-3 py-2 text-xs uppercase tracking-[0.18em] text-white/68 transition-colors hover:border-white/18 hover:bg-white/10 hover:text-white/82"
                   >
                     Cancel
                   </button>

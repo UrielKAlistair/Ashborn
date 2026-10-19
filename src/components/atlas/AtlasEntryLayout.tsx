@@ -19,7 +19,7 @@ export function AtlasEntryLayout({
       <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">
         {title}
       </h1>
-      <div className="mt-6 rounded-2xl border border-white/10 bg-black/15 p-5">
+      <div className="mt-6 rounded-2xl border border-white/10 bg-night/50 p-5">
         {children}
       </div>
     </section>

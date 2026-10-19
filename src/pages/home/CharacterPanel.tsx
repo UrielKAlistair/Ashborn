@@ -1,25 +1,27 @@
-import mage1 from "../../assets/mage_1.png";
-import mage2 from "../../assets/mage_2.png";
-import mage3 from "../../assets/mage_3.png";
-import mage4 from "../../assets/mage_4.png";
+import { palettes } from "../../lib/theme";
 import { statLevel } from "../../shared/progression";
+import type { StatKey, ThreadColor } from "../../shared/types";
 import { statKeys, type GraphModel } from "./graphModel";
+import { Portrait, portraitTiers } from "./Portrait";
 
-// The portrait advances one sprite every PORTRAIT_TIER_LEVELS overall levels
-const portraits = [mage1, mage2, mage3, mage4];
+// The portrait advances one sprite tier every PORTRAIT_TIER_LEVELS overall levels
 const PORTRAIT_TIER_LEVELS = 5;
+// Each stat's bar has a colour of its own, unrelated to the colours of threads
+const statColors: Record<StatKey, ThreadColor> = { STR: "red", DEX: "orange", INT: "blue", WIS: "green", CHR: "violet", MND: "teal" };
 
 export function CharacterPanel({ model }: { model: GraphModel }) {
   const overall = statLevel(model.totalStatXp);
-  const portrait = portraits[Math.min(portraits.length - 1, Math.floor((overall.level - 1) / PORTRAIT_TIER_LEVELS))];
+  const tier = Math.min(portraitTiers, Math.floor((overall.level - 1) / PORTRAIT_TIER_LEVELS) + 1);
 
   return (
-    <section className="shrink-0 rounded-[24px] border border-white/12 bg-white/6 p-4 backdrop-blur-xl">
-      <div className="flex gap-4">
-        <div className="flex w-24 shrink-0 flex-col items-center">
-          <img src={portrait} alt="" className="h-24 w-24 object-contain [image-rendering:pixelated]" />
-          <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-white/55">Lv {overall.level}</p>
-          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-black/30">
+    <section className="shrink-0 rounded-3xl border border-white/10 bg-night-panel p-4">
+      <div className="flex gap-8">
+        <div className="ml-3 flex w-24 shrink-0 flex-col items-center">
+          <div className="flex w-24 items-end justify-center">
+            <Portrait tier={tier} />
+          </div>
+          <p className="mt-3 text-[10px] uppercase tracking-[0.22em] text-white/55">Lv {overall.level}</p>
+          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-night/50">
             <div className="h-full rounded-full bg-[#d7c17d]" style={{ width: `${overall.percent}%` }} />
           </div>
         </div>
@@ -33,8 +35,8 @@ export function CharacterPanel({ model }: { model: GraphModel }) {
                   <dt className="text-[11px] tracking-[0.18em] text-white/55">{key}</dt>
                   <dd className="text-sm text-white/90">{level}</dd>
                 </div>
-                <div className="mt-1 h-1 overflow-hidden rounded-full border border-white/8 bg-black/25">
-                  <div className="h-full rounded-full bg-[#d7c17d]" style={{ width: `${percent}%` }} />
+                <div className="mt-1 h-1 overflow-hidden rounded-full border border-white/8 bg-night/50">
+                  <div className={`h-full rounded-full ${palettes[statColors[key]].bar}`} style={{ width: `${percent}%` }} />
                 </div>
               </div>
             );

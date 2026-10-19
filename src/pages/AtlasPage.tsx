@@ -45,7 +45,7 @@ export function AtlasPage({
 
   return (
     <section className="flex min-h-0 flex-1 gap-6 overflow-hidden">
-      <aside className="flex min-h-0 w-full max-w-sm self-stretch flex-col overflow-hidden rounded-[28px] border border-white/12 bg-white/6 backdrop-blur-xl">
+      <aside className="flex min-h-0 w-full max-w-sm self-stretch flex-col overflow-hidden rounded-3xl border border-white/10 bg-night-panel">
         <div className="panel-scroll min-h-0 flex-1 overflow-y-auto px-5 py-6">
 
           <AtlasSidebarSection
@@ -68,7 +68,7 @@ export function AtlasPage({
         </div>
       </aside>
 
-      <div className="flex min-h-0 flex-1 self-stretch overflow-hidden rounded-[28px] border border-white/12 bg-white/6 backdrop-blur-xl">
+      <div className="flex min-h-0 flex-1 self-stretch overflow-hidden rounded-3xl border border-white/10 bg-night-panel">
         <div className="panel-scroll min-h-0 flex-1 overflow-y-auto p-5 pr-3">
           {renderAtlasEntry()}
         </div>
