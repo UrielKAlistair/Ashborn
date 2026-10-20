@@ -13,12 +13,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { prompter } from "../scripts/ask.mjs";
-import { createApi } from "../src/lib/api";
-import { buildGraphModel, isDone, threadOf, type GraphModel } from "../src/pages/home/graphModel";
-import { daysBetween, today, week, weekdayOf } from "../src/shared/dates";
+import { createApi, readKitchen } from "../src/lib/api";
+import { buildGraphModel, isDone, statKeys, threadOf, trainedStats, type GraphModel } from "../src/shared/graphModel";
+import { daysBetween, toISODate, today, week, weekdayOf } from "../src/shared/dates";
+import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
 import { byTime, nextOccurrence } from "../src/shared/schedule";
-import { threadColors, type Delta, type Snapshot, type StatKey } from "../src/shared/types";
+import { mealSlots, stockUnits, threadColors, type Delta, type Kitchen, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
 const sessionFile = process.env.ASHBORN_SESSION_FILE ?? path.join(homedir(), ".config", "ashborn", "agent-session.json");
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -66,7 +67,7 @@ function registerTools(server: McpServer) {
     "overview",
     {
       description:
-        "Shows the user's tracker: steps ready to do now, every thread with its steps nested as an indented list (done steps marked [x], prerequisites shown as 'after'), hidden threads, today's routines and open deadlines. Ids in brackets are what the other tools take. Call this first.",
+        "Shows the user's tracker: steps ready to do now, every thread with its steps nested as an indented list (done steps marked [x], prerequisites shown as 'after'), hidden threads, today's routines and open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
       inputSchema: { thread_id: z.string().optional().describe("Show only this thread") },
     },
     async ({ thread_id }) => text(describe(await api.getSnapshot(), thread_id)),
@@ -83,7 +84,7 @@ function registerTools(server: McpServer) {
           .array(
             z.object({
               ref: z.string().describe("Your label for this step, unique in this call"),
-              title: z.string(),
+              title: z.string().describe("A few words (about 2 to 4): titles show on small cards in the graph"),
               parent: z.string().optional().describe("Ref or id of the step this one sits inside"),
               after: z.array(z.string()).optional().describe("Refs or ids of sibling prerequisites"),
             }),
@@ -127,6 +128,21 @@ function registerTools(server: McpServer) {
   );
 
   server.registerTool(
+    "shelve",
+    {
+      description: "Shelves threads or steps: they stay on the graph, greyed, and nothing inside them is offered as ready until they are unshelved.",
+      inputSchema: { ids },
+    },
+    async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { shelved: true })), "Shelved"),
+  );
+
+  server.registerTool(
+    "unshelve",
+    { description: "Takes threads or steps off the shelf.", inputSchema: { ids } },
+    async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { shelved: false })), "Unshelved"),
+  );
+
+  server.registerTool(
     "reopen",
     { description: "Marks done steps as not done.", inputSchema: { ids } },
     async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { done: false })), "Reopened"),
@@ -134,7 +150,7 @@ function registerTools(server: McpServer) {
 
   server.registerTool(
     "rename",
-    { description: "Renames a thread or step.", inputSchema: { id, title: z.string().min(1) } },
+    { description: "Renames a thread or step. Keep titles to a few words: they show on small cards.", inputSchema: { id, title: z.string().min(1) } },
     async ({ id, title }) => run([() => api.updateNode(id, { title })], "Renamed"),
   );
 
@@ -174,21 +190,25 @@ function registerTools(server: McpServer) {
       description: "Logs a session of progress on a thread (10 XP), for work that did not complete a step.",
       inputSchema: { id },
     },
-    async ({ id }) => run([() => api.levelUp(id)], "Levelled up"),
+    async ({ id }) => run([() => api.levelUp(id, crypto.randomUUID())], "Levelled up"),
   );
 
   server.registerTool(
     "update_thread",
     {
-      description: "Sets which stat a thread trains, its colour (null is white), and whether it is shown on the dashboard.",
+      description:
+        "Sets which stats a thread trains and how much, its colour (null is white), and whether it is shown on the dashboard. Each XP earned in the thread adds weight × XP to each stat.",
       inputSchema: {
         id,
-        stat: z.enum(["STR", "DEX", "INT", "WIS", "CHR", "MND"]).nullable().optional(),
+        stat_weights: z
+          .partialRecord(z.enum(statKeys), z.number().nonnegative())
+          .optional()
+          .describe('Weight per stat, e.g. {"INT": 0.2, "CHR": 0.1}; replaces the thread\'s weights, and {} trains nothing'),
         color: z.enum(threadColors).nullable().optional(),
         shown: z.boolean().optional(),
       },
     },
-    async ({ id, stat, color, shown }) => run([() => api.updateNode(id, { stat: stat as StatKey | null | undefined, color, active: shown })], "Updated"),
+    async ({ id, stat_weights, color, shown }) => run([() => api.updateNode(id, { statWeights: stat_weights, color, active: shown })], "Updated"),
   );
 
   server.registerTool(
@@ -198,7 +218,7 @@ function registerTools(server: McpServer) {
       inputSchema: { title: z.string().min(1), due_date: z.string().describe("YYYY-MM-DD"), alarm_time: clock.optional() },
     },
     async ({ title, due_date, alarm_time }) =>
-      run([() => api.createDeadline({ title, dueDate: due_date, alarmTime: alarm_time ?? null })], "Added deadline"),
+      run([() => api.createDeadline({ id: crypto.randomUUID(), title, dueDate: due_date, alarmTime: alarm_time ?? null })], "Added deadline"),
   );
 
   server.registerTool(
@@ -253,11 +273,269 @@ function registerTools(server: McpServer) {
     async ({ title, weekdays, cue, time, alarm }) => {
       if (alarm && alarm !== "none" && !time) return failure("An alarm needs a time.");
       return run(
-        [() => api.createRoutine({ title, cue: cue ?? "", weekdays: weekdays as typeof week, time: time ?? null, alarm: alarm ?? "none" })],
+        [() => api.createRoutine({ id: crypto.randomUUID(), title, cue: cue ?? "", weekdays: weekdays as typeof week, time: time ?? null, alarm: alarm ?? "none" })],
         "Added routine",
       );
     },
   );
+
+  // The Kitchen. Amounts are given and shown in the item's own unit (kg for rice); a recipe
+  // amount may use another unit of the same kind (g), converted when it is saved.
+  const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD");
+  const slot = z.enum(mealSlots);
+  const unit = z.enum(stockUnits);
+  const recipeIds = z.array(z.string()).optional().describe("Recipe ids, as shown by `kitchen`");
+
+  server.registerTool(
+    "kitchen",
+    {
+      description:
+        "Shows the kitchen in full: stock items with amounts and targets, the meal plan from 2 days ago to 6 ahead ([x] cooked, [-] cancelled, (default) when it comes from the default week), the default week, and every recipe with its text, tracked ingredients and reminders. Ids in brackets are what the kitchen tools take.",
+      inputSchema: {},
+    },
+    async () => text(describeKitchen(await readKitchen(db))),
+  );
+
+  server.registerTool(
+    "save_recipe",
+    {
+      description:
+        "Creates a recipe, or replaces one when `id` is given: what you pass replaces that part (title, body, ingredients, reminders); what you leave out stays. `body` is free text for the reader, with any amounts and formatting. `ingredients` are only the tracked bulk staples cooking deducts from stock (rice, beans; never spices), each naming a stock item by id or name, in a unit of the item's kind. `reminders` are alarms rung for a planned meal using the recipe: `offset_minutes` (negative is earlier) from the meal's time, or from another reminder given by its `ref`. A new recipe with no reminders given gets one, 'Start prep', 45 minutes before the meal; pass [] for none.",
+      inputSchema: {
+        id: z.string().optional().describe("Recipe id to replace"),
+        title: z.string().min(1).optional().describe("Needed for a new recipe"),
+        body: z.string().optional(),
+        ingredients: z
+          .array(z.object({ item: z.string().describe("Stock item id or name"), amount: z.number().positive(), unit, name: z.string().optional().describe("Defaults to the item's name") }))
+          .optional(),
+        reminders: z
+          .array(
+            z.object({
+              ref: z.string().describe("Your label for it, unique in this call"),
+              label: z.string().min(1),
+              offset_minutes: z.number().int(),
+              from: z.string().optional().describe("Ref of the reminder this one is timed from; omit to time it from the meal"),
+            }),
+          )
+          .optional(),
+      },
+    },
+    async ({ id, title, body, ingredients, reminders }) => {
+      const kitchen = await readKitchen(db);
+      const existing = id ? kitchen.recipes.find((recipe) => recipe.id === id) : undefined;
+      if (id && !existing) return failure(`No recipe ${id}.`);
+      if (!title && !existing) return failure("A new recipe needs a title.");
+
+      const resolved: Recipe["ingredients"] = ingredients ? [] : (existing?.ingredients ?? []);
+      for (const ingredient of ingredients ?? []) {
+        const item = findItem(kitchen.items, ingredient.item);
+        if (!item) return failure(`No stock item "${ingredient.item}". Add it with add_stock_item first; spices and the like are not tracked.`);
+        if (!sameKind(item.unit, ingredient.unit)) return failure(`${item.name} is counted in ${item.unit}, so ${ingredient.amount} ${ingredient.unit} cannot be used.`);
+        resolved.push({ id: crypto.randomUUID(), itemId: item.id, name: ingredient.name ?? item.name, amount: toBase(ingredient.amount, ingredient.unit), unit: ingredient.unit });
+      }
+
+      const refs = new Map((reminders ?? []).map((reminder) => [reminder.ref, crypto.randomUUID()]));
+      const unknown = (reminders ?? []).find((reminder) => reminder.from && !refs.has(reminder.from));
+      if (unknown) return failure(`Reminder "${unknown.ref}" is timed from "${unknown.from}", which is not a ref in this call.`);
+      const timed: Recipe["reminders"] = reminders
+        ? reminders.map((reminder) => ({ id: refs.get(reminder.ref)!, label: reminder.label, offsetMinutes: reminder.offset_minutes, anchorId: reminder.from ? refs.get(reminder.from)! : null }))
+        : (existing?.reminders ?? [{ id: crypto.randomUUID(), anchorId: null, ...DEFAULT_REMINDER }]);
+
+      const recipe = { id: existing?.id ?? crypto.randomUUID(), title: title ?? existing!.title, body: body ?? existing?.body ?? "", ingredients: resolved, reminders: timed };
+      return run([() => api.saveRecipe(recipe)], `Saved recipe ${recipe.title} [${recipe.id}]`);
+    },
+  );
+
+  server.registerTool(
+    "delete_recipe",
+    { description: "Deletes a recipe. Meals that used it keep their description.", inputSchema: { id: z.string() } },
+    async ({ id }) => run([() => api.deleteRecipe(id)], "Deleted recipe"),
+  );
+
+  server.registerTool(
+    "add_stock_item",
+    {
+      description:
+        "Starts tracking a bulk staple (a carbohydrate or protein source: rice, beans, lentils). Never spices or the like. `unit` is how it is shown; `target` (the amount to keep on hand) and `on_hand` are in that unit.",
+      inputSchema: { name: z.string().min(1), unit, target: z.number().nonnegative(), on_hand: z.number().nonnegative().optional() },
+    },
+    async ({ name, unit, target, on_hand }) => {
+      const id = crypto.randomUUID();
+      const changes = [() => api.createStockItem({ id, name, unit, target: toBase(target, unit) })];
+      if (on_hand) changes.push(() => api.setStock(crypto.randomUUID(), id, toBase(on_hand, unit)));
+      return run(changes, `Added ${name} [${id}]`);
+    },
+  );
+
+  server.registerTool(
+    "update_stock_item",
+    {
+      description: "Renames a stock item, changes its target (in its unit), or its unit to another of the same kind (kg to g).",
+      inputSchema: { id: z.string(), name: z.string().min(1).optional(), unit: unit.optional(), target: z.number().nonnegative().optional() },
+    },
+    async ({ id, name, unit, target }) => {
+      const item = (await readKitchen(db)).items.find((candidate) => candidate.id === id);
+      if (!item) return failure(`No stock item ${id}.`);
+      return run([() => api.updateStockItem(id, { name, unit, target: target === undefined ? undefined : toBase(target, unit ?? item.unit) })], "Updated");
+    },
+  );
+
+  server.registerTool(
+    "delete_stock_item",
+    { description: "Stops tracking a stock item. Recipe ingredients naming it stay, untracked.", inputSchema: { id: z.string() } },
+    async ({ id }) => run([() => api.deleteStockItem(id)], "Deleted stock item"),
+  );
+
+  server.registerTool(
+    "adjust_stock",
+    {
+      description: "Corrects a stock item by hand, in its unit: `set` the amount on hand (after counting), or `add` to it (a restock; negative takes some away).",
+      inputSchema: { id: z.string(), set: z.number().nonnegative().optional(), add: z.number().optional() },
+    },
+    async ({ id, set, add }) => {
+      if ((set === undefined) === (add === undefined)) return failure("Give either set or add.");
+      const item = (await readKitchen(db)).items.find((candidate) => candidate.id === id);
+      if (!item) return failure(`No stock item ${id}.`);
+      const onHand = set !== undefined ? toBase(set, item.unit) : item.onHand + toBase(add!, item.unit);
+      return run([() => api.setStock(crypto.randomUUID(), id, onHand)], `${item.name}: ${amount(onHand, item.unit)}`);
+    },
+  );
+
+  server.registerTool(
+    "plan_meals",
+    {
+      description:
+        "Plans meals on dates: each a short description ('rice with butter beans') and optionally recipes. This replaces what those dates and slots showed (their own plan or the default week), and plans a cancelled meal again. A meal already cooked keeps its stock deduction.",
+      inputSchema: { meals: z.array(z.object({ date, slot, description: z.string(), recipes: recipeIds })).min(1) },
+    },
+    async ({ meals }) =>
+      run(
+        meals.map((meal) => () => planMeal(meal.date, meal.slot, meal.description, meal.recipes ?? [], "planned")),
+        `Planned ${meals.length} meal${meals.length === 1 ? "" : "s"}`,
+      ),
+  );
+
+  server.registerTool(
+    "cancel_meals",
+    {
+      description: "Cancels meals in advance (eating out), which also silences their reminders. Without `slots`, cancels the whole day. A cooked meal cannot be cancelled.",
+      inputSchema: { date, slots: z.array(slot).optional() },
+    },
+    async ({ date, slots }) => {
+      const kitchen = await readKitchen(db);
+      return run(
+        (slots ?? [...mealSlots]).map((each) => () => {
+          const shown = shownMeal(kitchen, date, each);
+          return planMeal(date, each, shown.description, shown.recipeIds, "cancelled");
+        }),
+        "Cancelled",
+      );
+    },
+  );
+
+  server.registerTool(
+    "set_default_meals",
+    {
+      description: "Sets the default week: what a weekday's slot shows when its date has no meal planned. Planning a date overrides it for that date only.",
+      inputSchema: {
+        meals: z.array(z.object({ weekday: z.enum(week as [string, ...string[]]), slot, description: z.string(), recipes: recipeIds })).min(1),
+      },
+    },
+    async ({ meals }) =>
+      run(
+        meals.map((meal) => () => api.setDefaultMeal({ weekday: meal.weekday as (typeof week)[number], slot: meal.slot, description: meal.description, recipeIds: meal.recipes ?? [] })),
+        "Default week set",
+      ),
+  );
+
+  server.registerTool(
+    "cook_meal",
+    {
+      description: "Marks a meal cooked, which deducts its recipes' tracked ingredients from stock. Says which ingredients are no longer tracked.",
+      inputSchema: { date, slot },
+    },
+    async ({ date, slot }) => {
+      try {
+        const { kitchen } = await api.cookMeal(date, slot, crypto.randomUUID());
+        const { untracked } = mealDeductions(kitchen!, shownMeal(kitchen!, date, slot));
+        return text(untracked.length ? `Cooked. Not deducted (no longer tracked): ${untracked.join(", ")}.` : "Cooked.");
+      } catch (error) {
+        return failure((error as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    "uncook_meal",
+    { description: "Unticks a cooked meal, putting back exactly what cooking it deducted.", inputSchema: { date, slot } },
+    async ({ date, slot }) => run([() => api.uncookMeal(date, slot)], "Unticked"),
+  );
+}
+
+// Plans or cancels a meal; a date with no meal of its own gets one with a new id
+function planMeal(date: string, slot: (typeof mealSlots)[number], description: string, recipeIds: string[], status: "planned" | "cancelled") {
+  return api.setMeal({ id: crypto.randomUUID(), date, slot, description, recipeIds, status });
+}
+
+const findItem = (items: StockItem[], idOrName: string) =>
+  items.find((item) => item.id === idOrName) ?? items.find((item) => item.name.toLowerCase() === idOrName.trim().toLowerCase());
+
+// An amount in base units, shown in a unit: "1.5 kg"
+function amount(base: number, unit: StockUnit) {
+  return `${Number(fromBase(base, unit).toFixed(3))} ${unit}`;
+}
+
+function describeKitchen(kitchen: Kitchen, short = false): string {
+  const titleOf = (recipeId: string) => kitchen.recipes.find((recipe) => recipe.id === recipeId)?.title ?? "?";
+  const lines: string[] = [
+    "Stock:",
+    ...(kitchen.items.length
+      ? kitchen.items.map((item) => `- ${item.name} [${item.id}]: ${amount(item.onHand, item.unit)} of ${amount(item.target, item.unit)}`)
+      : ["- nothing tracked"]),
+    "",
+    "Meal plan:",
+  ];
+  const days = short ? [0, 1, 2] : [-2, -1, 0, 1, 2, 3, 4, 5, 6];
+  for (const offset of days) {
+    const day = new Date();
+    day.setDate(day.getDate() + offset);
+    const date = toISODate(day);
+    for (const each of mealSlots) {
+      const meal = shownMeal(kitchen, date, each);
+      if (!meal.description && meal.recipeIds.length === 0 && meal.status === "planned") continue;
+      const mark = meal.status === "cooked" ? "x" : meal.status === "cancelled" ? "-" : " ";
+      const recipes = meal.recipeIds.length ? ` (recipes: ${meal.recipeIds.map((recipeId) => `${titleOf(recipeId)} [${recipeId}]`).join(", ")})` : "";
+      lines.push(`- [${mark}] ${date} ${weekdayOf(date)} ${each}: ${meal.description || "(no description)"}${recipes}${meal.fromDefault ? " (default)" : ""}`);
+    }
+  }
+  if (short) {
+    lines.push("", "Recipes:", ...(kitchen.recipes.length ? kitchen.recipes.map((recipe) => `- ${recipe.title} [${recipe.id}]`) : ["- none"]));
+    return lines.join("\n");
+  }
+
+  lines.push(
+    "",
+    "Default week:",
+    ...(kitchen.defaultWeek.length
+      ? kitchen.defaultWeek.map((meal) => `- ${meal.weekday} ${meal.slot}: ${meal.description}${meal.recipeIds.length ? ` (recipes: ${meal.recipeIds.map(titleOf).join(", ")})` : ""}`)
+      : ["- not set"]),
+    "",
+    "Recipes:",
+  );
+  for (const recipe of kitchen.recipes) {
+    const labelOf = (reminderId: string) => recipe.reminders.find((reminder) => reminder.id === reminderId)?.label ?? "?";
+    lines.push(
+      `## ${recipe.title} [${recipe.id}]`,
+      ...recipe.ingredients.map((ingredient) => {
+        const item = kitchen.items.find((candidate) => candidate.id === ingredient.itemId);
+        return `- ${ingredient.name}: ${amount(ingredient.amount, ingredient.unit)}${item ? "" : " (untracked)"}`;
+      }),
+      ...recipe.reminders.map((reminder) => `- reminder "${reminder.label}": ${reminder.offsetMinutes} min from ${reminder.anchorId ? `"${labelOf(reminder.anchorId)}"` : "the meal"}`),
+      recipe.body,
+      "",
+    );
+  }
+  return lines.join("\n");
 }
 
 // Runs changes one after another and stops at the first that fails
@@ -284,11 +562,12 @@ function describe(snapshot: Snapshot, threadId?: string) {
 
   for (const thread of shown) {
     const level = nodeLevel(model.totalXp.get(thread.id) ?? 0);
-    lines.push(`# ${thread.title} [${thread.id}] Lv ${level.level}${thread.stat ? `, trains ${thread.stat}` : ""}${thread.color ? `, ${thread.color}` : ""}`);
+    const trains = trainedStats(thread.statWeights).map(([key, weight]) => `${key} ${weight}`);
+    lines.push(`# ${thread.title} [${thread.id}] Lv ${level.level}${trains.length ? `, trains ${trains.join(", ")}` : ""}${thread.color ? `, ${thread.color}` : ""}${thread.shelved ? " (shelved)" : ""}`);
     outline(model, snapshot, thread.id, 1, lines);
     lines.push("");
   }
-  if (hidden.length) lines.push("Hidden threads:", ...hidden.map((thread) => `- ${thread.title} [${thread.id}]`), "");
+  if (hidden.length) lines.push("Hidden threads:", ...hidden.map((thread) => `- ${thread.title} [${thread.id}]${thread.shelved ? " (shelved)" : ""}`), "");
 
   if (!threadId) {
     const weekday = weekdayOf(today());
@@ -318,6 +597,9 @@ function describe(snapshot: Snapshot, threadId?: string) {
               `- ${deadline.title}: due ${deadline.dueDate} (in ${daysBetween(today(), deadline.dueDate)} days)${deadline.alarmTime ? `, alarm at ${deadline.alarmTime}` : ""}`,
           )
         : ["- none"]),
+      "",
+      "Kitchen (more with the kitchen tool):",
+      describeKitchen(snapshot.kitchen, true),
     );
   }
 
@@ -327,7 +609,7 @@ function describe(snapshot: Snapshot, threadId?: string) {
 function outline(model: GraphModel, snapshot: Snapshot, parentId: string, depth: number, lines: string[]) {
   for (const step of model.children.get(parentId) ?? []) {
     const after = snapshot.edges.filter((edge) => edge.to === step.id).map((edge) => model.byId.get(edge.from)?.title);
-    lines.push(`${"  ".repeat(depth - 1)}- [${isDone(step) ? "x" : " "}] ${step.title} [${step.id}]${after.length ? ` (after: ${after.join("; ")})` : ""}`);
+    lines.push(`${"  ".repeat(depth - 1)}- [${isDone(step) ? "x" : " "}] ${step.title} [${step.id}]${after.length ? ` (after: ${after.join("; ")})` : ""}${step.shelved ? " (shelved)" : ""}`);
     outline(model, snapshot, step.id, depth + 1, lines);
   }
 }

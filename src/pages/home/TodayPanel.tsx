@@ -1,9 +1,10 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useToday } from "../../lib/useToday";
 import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
+import { threadOf, type GraphModel } from "../../shared/graphModel";
 import { byTime } from "../../shared/schedule";
 import type { AlarmKind, Snapshot, Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
-import { threadOf, type GraphModel } from "./graphModel";
 import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
@@ -74,7 +75,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         ) : (
           routines.map((routine) => (
             <div key={routine.id} className="group flex items-start gap-3 rounded-xl border border-white/8 bg-night/50 px-3 py-2">
-              <Tick done={checked.has(routine.id)} onClick={() => void act("toggleRoutine", routine.id, date)} className="mt-0.5" />
+              <Tick done={checked.has(routine.id)} onClick={() => void act("setRoutineCheck", routine.id, date, !checked.has(routine.id))} className="mt-0.5" />
               <div className="min-w-0 flex-1">
                 <p className={`text-xs ${checked.has(routine.id) ? "text-white/45 line-through" : "text-white/85"}`}>{routine.title}</p>
                 {routine.time || routine.cue ? (
@@ -127,7 +128,7 @@ function RoutineForm({ act }: { act: Act }) {
 
   const submit = () => {
     if (!title.trim() || days.length === 0) return;
-    void act("createRoutine", { title: title.trim(), cue: cue.trim(), weekdays: days, time: time || null, alarm: time ? alarm : "none" });
+    void act("createRoutine", { id: crypto.randomUUID(), title: title.trim(), cue: cue.trim(), weekdays: days, time: time || null, alarm: time ? alarm : "none" });
     setTitle("");
     setCue("");
     setTime("");
@@ -176,7 +177,7 @@ function DeadlineForm({ act }: { act: Act }) {
 
   const submit = () => {
     if (!title.trim() || !dueDate) return;
-    void act("createDeadline", { title: title.trim(), dueDate, alarmTime: alarmTime || null });
+    void act("createDeadline", { id: crypto.randomUUID(), title: title.trim(), dueDate, alarmTime: alarmTime || null });
     setTitle("");
     setAlarmTime("");
     setOpen(false);
@@ -223,26 +224,6 @@ function closeOnEscape(close: () => void) {
       close();
     }
   };
-}
-
-// Today's date, refreshed at midnight and on focus: the app can sit in the tray for days
-function useToday() {
-  const [date, setDate] = useState(today);
-
-  useEffect(() => {
-    const refresh = () => setDate(today());
-    const now = new Date();
-    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const timeout = window.setTimeout(refresh, nextMidnight.getTime() - now.getTime() + 1000);
-    window.addEventListener("focus", refresh);
-
-    return () => {
-      window.clearTimeout(timeout);
-      window.removeEventListener("focus", refresh);
-    };
-  }, [date]);
-
-  return date;
 }
 
 function AddButton({ onClick }: { onClick: () => void }) {

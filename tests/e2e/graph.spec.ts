@@ -28,6 +28,7 @@ test.beforeAll(async () => {
   profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
   const env = { ...process.env } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE; // set in some shells; it makes Electron start as plain Node
+  env.ASHBORN_BACKUP_DIR = path.join(profile, "backups"); // the test user's data stays out of the real backups
   app = await electron.launch({ args: [`--user-data-dir=${profile}`, "."], env });
   page = await app.firstWindow();
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -141,17 +142,22 @@ test("home graph", async () => {
     await expect(upNext()).toContainText("Implement an MLP");
   });
 
-  await test.step("level-up and ticks count toward the thread's stat and today's progress", async () => {
+  await test.step("level-up and ticks train the thread's stats by weight, and count toward today's progress", async () => {
     await card("Deep Learning").getByTitle("Options").click();
-    await page.locator(".react-flow__node-toolbar select").selectOption("INT");
+    await page.getByLabel("INT weight").fill("1.5");
+    await page.getByLabel("INT weight").press("Enter");
+    await page.getByLabel("CHR weight").fill("0.5");
+    await page.getByLabel("CHR weight").press("Enter");
     await page.getByRole("radio", { name: "violet" }).click();
     await expect(page.getByRole("radio", { name: "violet" })).toHaveAttribute("aria-checked", "true");
     await expect(card("Deep Learning").locator(".bg-violet-400")).toHaveCount(1);
     await card("Deep Learning").getByTitle("Level up: log a session of progress").click();
-    await expect(page.locator("dl div[title='20 xp']", { hasText: "INT" })).toHaveCount(1);
+    // 20 xp in the thread: one tick and one level-up
+    await expect(page.locator("dl div[title='30 xp']", { hasText: "INT" })).toHaveCount(1);
+    await expect(page.locator("dl div[title='10 xp']", { hasText: "CHR" })).toHaveCount(1);
     await expect(page.getByText("2 steps of progress today")).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.locator(".react-flow__node-toolbar select")).toHaveCount(0);
+    await expect(page.getByLabel("INT weight")).toHaveCount(0);
     expect(await windowVisible()).toBe(true);
   });
 
@@ -182,7 +188,7 @@ test("home graph", async () => {
     await rename(card("Deep Learning").getByText("Deep Learning"), page.locator(".react-flow__node-thread input"), "Deep Learning II");
     await expect(page.locator(".react-flow__node-thread", { hasText: "Deep Learning II" })).toBeVisible();
     await card("Deep Learning II").getByTitle("Options").click();
-    await expect(page.locator(".react-flow__node-toolbar input")).toHaveCount(0);
+    await expect(page.locator(".react-flow__node-toolbar input:not([type=number])")).toHaveCount(0);
     await expect(page.locator(".react-flow__node-toolbar").getByRole("button", { name: "Delete" })).toHaveCount(1);
     await page.keyboard.press("Escape");
   });
@@ -285,7 +291,7 @@ test("home graph", async () => {
     await page.getByRole("button", { name: "Home" }).click();
   });
 
-  await test.step("a phone-sized window opens on today's list; the graph is a tap away, edited through ⋯", async () => {
+  await test.step("a phone-sized window opens on today's list; Home's menu holds the graph and the character", async () => {
     await app.evaluate(({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0];
       window.unmaximize();
@@ -294,7 +300,17 @@ test("home graph", async () => {
     await expect(page.locator(".react-flow")).toHaveCount(0);
     await expect(upNext()).toBeVisible();
 
-    await page.getByRole("button", { name: "graph" }).click();
+    const openScreen = async (section: string, screen: string) => {
+      await page.getByRole("button", { name: section, exact: true }).click();
+      await page.getByRole("menu", { name: section }).getByRole("menuitem", { name: screen }).click();
+      await expect(page.getByRole("menu")).toHaveCount(0);
+    };
+
+    await openScreen("Home", "Character");
+    await expect(page.getByText("STR")).toBeVisible();
+    await expect(upNext()).toBeHidden();
+
+    await openScreen("Home", "Graph");
     await expect(page.locator(".react-flow")).toBeVisible();
     await expect(page.locator(".react-flow__handle").first()).toBeHidden(); // no linking by hand on the phone
     await card("Deep Learning II").getByRole("button", { name: "Actions" }).click();
@@ -303,8 +319,11 @@ test("home graph", async () => {
     await addInput().press("Enter");
     await expect(card("Added on the phone")).toBeVisible();
 
-    await page.getByRole("button", { name: "today" }).click();
+    await openScreen("Home", "To-do");
     await expect(upNext()).toContainText("Added on the phone");
+
+    await openScreen("Kitchen", "Stocks");
+    await expect(page.getByRole("heading", { name: "Stocks" })).toBeVisible();
   });
 
   expect(pageErrors).toEqual([]);

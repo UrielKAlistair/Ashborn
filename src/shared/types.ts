@@ -1,6 +1,8 @@
 export type Weekday = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
 export type ISODate = string; // YYYY-MM-DD, local time
 export type StatKey = "STR" | "DEX" | "INT" | "WIS" | "CHR" | "MND";
+// Positive weights; the stats listed share a thread's XP in proportion to them
+export type StatWeights = Partial<Record<StatKey, number>>;
 export type ClockTime = string; // HH:MM, local time
 export const threadColors = ["red", "orange", "amber", "green", "teal", "blue", "violet", "pink"] as const;
 export type ThreadColor = (typeof threadColors)[number];
@@ -15,11 +17,12 @@ export type GraphNode = {
   id: string;
   parentId: string | null;
   title: string;
-  stat: StatKey | null; // threads only: the stat all work in the thread trains
+  statWeights: StatWeights; // threads only: the stats work in the thread trains; empty trains none
   color: ThreadColor | null; // threads only: the colour the user gave it; null is white
   active: boolean; // threads only: shown on the dashboard
   createdAt: string;
   completedAt: string | null; // a step is done when this is set
+  shelved: boolean; // greyed, and nothing inside it is ready, until unshelved
   ownXp: number; // level-ups plus the completion credit
   position: Point | null; // where the user put it, relative to its box; null: laid out automatically
   size: Extent | null; // the size the user gave it; null: as small as its content allows
@@ -74,6 +77,83 @@ export type Deadline = {
 // Level-ups and completed steps on `date`
 export type ProgressToday = { date: ISODate; count: number };
 
+// The Kitchen. Amounts are in the base unit of their kind (g, ml, count); a unit says how an
+// amount is shown or was written.
+export const stockUnits = ["g", "kg", "ml", "l", "count"] as const;
+export type StockUnit = (typeof stockUnits)[number];
+export type UnitKind = "mass" | "volume" | "count";
+// Each unit's kind, and how many base units one of it is
+export const units: Record<StockUnit, { kind: UnitKind; base: number }> = {
+  g: { kind: "mass", base: 1 },
+  kg: { kind: "mass", base: 1000 },
+  ml: { kind: "volume", base: 1 },
+  l: { kind: "volume", base: 1000 },
+  count: { kind: "count", base: 1 },
+};
+
+export const mealSlots = ["breakfast", "lunch", "dinner"] as const;
+export type MealSlot = (typeof mealSlots)[number];
+// When each meal is eaten; reminders are timed from these
+export const mealTimes: Record<MealSlot, ClockTime> = { breakfast: "08:00", lunch: "13:00", dinner: "20:00" };
+// The dates the app holds meals for: from this many days back to this many ahead of today
+export const mealDaysBack = 2;
+export const mealDaysAhead = 6;
+
+export type StockItem = {
+  id: string;
+  name: string;
+  unit: StockUnit; // how it is shown
+  target: number; // base units
+  onHand: number; // base units: the latest reading plus the meals cooked after it
+  readAt: string | null; // when the latest reading was made; null if never counted
+};
+
+// One change to a stock item, in base units. The snapshot holds only those of meals it holds.
+export type StockChange = { id: string; itemId: string; mealId: string | null; amount: number; madeAt: string };
+
+export type RecipeIngredient = {
+  id: string;
+  itemId: string | null; // null: the stock item was dropped, so nothing is deducted
+  name: string;
+  amount: number; // base units of the item's kind
+  unit: StockUnit; // the unit it was written in
+};
+
+// An alarm the recipe sets for a meal using it: offsetMinutes from the meal's time, or from
+// another reminder of the same recipe
+export type RecipeReminder = { id: string; label: string; offsetMinutes: number; anchorId: string | null };
+
+export type Recipe = {
+  id: string;
+  title: string;
+  body: string; // free text for the reader, never parsed
+  ingredients: RecipeIngredient[];
+  reminders: RecipeReminder[];
+};
+
+export type MealStatus = "planned" | "cooked" | "cancelled";
+
+// A meal stored for a date: planned, cooked or cancelled
+export type Meal = {
+  id: string;
+  date: ISODate;
+  slot: MealSlot;
+  description: string;
+  status: MealStatus;
+  recipeIds: string[];
+};
+
+// What a weekday's slot shows when its date has no meal of its own
+export type DefaultMeal = { weekday: Weekday; slot: MealSlot; description: string; recipeIds: string[] };
+
+export type Kitchen = {
+  items: StockItem[];
+  recipes: Recipe[];
+  defaultWeek: DefaultMeal[];
+  meals: Meal[]; // dated from mealDaysBack ago to mealDaysAhead ahead
+  mealChanges: StockChange[]; // the stock changes of those meals
+};
+
 // What the app loads once at start
 export type Snapshot = {
   nodes: GraphNode[];
@@ -83,6 +163,7 @@ export type Snapshot = {
   deadlines: Deadline[];
   alarms: Alarm[]; // recurring ones, and one-offs still to ring
   progressToday: ProgressToday;
+  kitchen: Kitchen;
 };
 
 // What a change returns: only the rows it touched. Upserts replace by id; removals drop by id.
@@ -100,11 +181,13 @@ export type Delta = {
   alarms?: Alarm[];
   removedAlarmIds?: string[];
   progressToday?: ProgressToday;
+  kitchen?: Kitchen; // replaces the whole Kitchen
 };
 
 export type NodePatch = {
   title?: string;
-  stat?: StatKey | null;
+  statWeights?: StatWeights;
+  shelved?: boolean;
   color?: ThreadColor | null;
   active?: boolean;
   done?: boolean;
@@ -125,14 +208,26 @@ export type AshbornApi = {
   resetLayout(ids: string[]): Promise<Delta>; // back to automatic placement and size
   addEdge(edge: GraphEdge): Promise<Delta>;
   removeEdge(edge: GraphEdge): Promise<Delta>;
-  levelUp(nodeId: string): Promise<Delta>;
-  createRoutine(routine: Omit<Routine, "id">): Promise<Delta>;
+  levelUp(nodeId: string, id: string): Promise<Delta>; // ids made by the caller, so a resend counts once
+  createRoutine(routine: Routine): Promise<Delta>;
   deleteRoutine(id: string): Promise<Delta>;
-  toggleRoutine(routineId: string, date: ISODate): Promise<Delta>;
-  createDeadline(deadline: Omit<Deadline, "id">): Promise<Delta>;
+  setRoutineCheck(routineId: string, date: ISODate, checked: boolean): Promise<Delta>;
+  createDeadline(deadline: Deadline): Promise<Delta>;
   completeDeadline(id: string): Promise<Delta>;
   deleteDeadline(id: string): Promise<Delta>;
   createAlarm(alarm: Alarm): Promise<Delta>; // the id is made by the caller, so it works offline
   updateAlarm(id: string, patch: AlarmPatch): Promise<Delta>;
   deleteAlarm(id: string): Promise<Delta>;
+
+  // The Kitchen. Cooking, uncooking and adjusting stock work offline; the rest needs a connection.
+  createStockItem(item: Omit<StockItem, "onHand" | "readAt">): Promise<Delta>; // id made by the caller
+  updateStockItem(id: string, patch: Partial<Omit<StockItem, "id" | "onHand">>): Promise<Delta>; // unit: same kind only
+  deleteStockItem(id: string): Promise<Delta>; // its ingredients become untracked
+  setStock(id: string, itemId: string, amount: number): Promise<Delta>; // a reading: the amount on hand, base units; id made by the caller
+  saveRecipe(recipe: Recipe, isNew?: boolean): Promise<Delta>; // creates or replaces; refuses a unit of the wrong kind and reminder loops; isNew false: an edit, refused if the recipe was deleted meanwhile
+  deleteRecipe(id: string): Promise<Delta>;
+  setMeal(meal: Omit<Meal, "status"> & { status: "planned" | "cancelled" }): Promise<Delta>; // a cooked meal stays cooked
+  cookMeal(date: ISODate, slot: MealSlot, id: string): Promise<Delta>; // id: used if the date has no meal yet
+  uncookMeal(date: ISODate, slot: MealSlot): Promise<Delta>;
+  setDefaultMeal(meal: DefaultMeal): Promise<Delta>;
 };

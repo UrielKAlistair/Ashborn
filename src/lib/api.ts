@@ -1,23 +1,49 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { today } from "../shared/dates";
+import { toISODate, today } from "../shared/dates";
+import { recipeProblems, sameKind } from "../shared/kitchen";
 import { PROGRESS_UNIT } from "../shared/progression";
-import type { Alarm, AlarmKind, AshbornApi, Deadline, Delta, GraphEdge, GraphNode, ProgressToday, Routine, Snapshot, StatKey, ThreadColor, Weekday } from "../shared/types";
+import {
+  mealDaysAhead,
+  mealDaysBack,
+  type Alarm,
+  type AlarmKind,
+  type AshbornApi,
+  type Deadline,
+  type Delta,
+  type GraphEdge,
+  type GraphNode,
+  type Kitchen,
+  type MealSlot,
+  type MealStatus,
+  type ProgressToday,
+  type Routine,
+  type Snapshot,
+  type StatWeights,
+  type StockUnit,
+  type ThreadColor,
+  type Weekday,
+} from "../shared/types";
 
-// The api methods that change data (and so return a Delta)
-export type Mutation = {
-  [K in keyof AshbornApi]: Awaited<ReturnType<AshbornApi[K]>> extends Delta ? K : never;
-}[keyof AshbornApi];
+// The api methods that change data (and so return a Delta). A Snapshot also fits the shape of a
+// Delta, so getSnapshot is left out by name.
+export type Mutation = Exclude<
+  {
+    [K in keyof AshbornApi]: Awaited<ReturnType<AshbornApi[K]>> extends Delta ? K : never;
+  }[keyof AshbornApi],
+  "getSnapshot"
+>;
 
 // Rows as Supabase returns them (see supabase/migrations)
 export type NodeRow = {
   id: string;
   parent_id: string | null;
   title: string;
-  stat: StatKey | null;
+  stat_weights: StatWeights;
   color: ThreadColor | null;
   active: boolean;
   created_at: string;
   completed_at: string | null;
+  shelved: boolean;
   logged_xp?: number; // only from the nodes_with_xp view
   x: number | null;
   y: number | null;
@@ -27,17 +53,37 @@ export type NodeRow = {
 export type RoutineRow = { id: string; title: string; cue: string; weekdays: Weekday[]; time: string | null; alarm: AlarmKind };
 export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean };
 export type DeadlineRow = { id: string; title: string; due_date: string; done_at: string | null; alarm_time: string | null };
+type StockRow = { id: string; name: string; unit: StockUnit; target: number; on_hand: number; read_at: string | null };
+type RecipeRow = {
+  id: string;
+  title: string;
+  body: string;
+  recipe_ingredients: { id: string; item_id: string | null; name: string; amount: number; unit: StockUnit }[];
+  recipe_reminders: { id: string; label: string; offset_minutes: number; anchor_id: string | null }[];
+};
+type MealRow = {
+  id: string;
+  date: string;
+  slot: MealSlot;
+  description: string;
+  status: MealStatus;
+  meal_recipes: { recipe_id: string }[];
+  stock_changes: { id: string; item_id: string; amount: number; made_at: string }[];
+};
+type DefaultMealRow = { weekday: Weekday; slot: MealSlot; description: string; default_meal_recipes: { recipe_id: string }[] };
 
 // The data store over Supabase. Nodes are read and written through the nodes_with_xp view so
 // each change returns the node with its XP in one round trip.
-export function createApi(db: SupabaseClient): AshbornApi {
+// `clock` says when a change was made: now for a change made online, the time it was queued for one
+// sent later. Every write is stamped with it, so the later change wins whatever order they arrive in.
+export function createApi(db: SupabaseClient, clock: () => Date = () => new Date()): AshbornApi {
   const nodes = () => db.from("nodes_with_xp");
 
   const readNode = async (id: string) => toNode(must(await nodes().select().eq("id", id).single()));
 
-  return {
+  return inRowOrder({
     async getSnapshot() {
-      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, progressToday] = await Promise.all([
+      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, progressToday, kitchen] = await Promise.all([
         nodes().select().order("created_at"),
         db.from("graph_edges").select("from_id, to_id"),
         db.from("routines").select().order("created_at"),
@@ -45,6 +91,7 @@ export function createApi(db: SupabaseClient): AshbornApi {
         db.from("deadlines").select().is("done_at", null).order("due_date"),
         db.from("alarms").select().or(`at.is.null,at.gt.${new Date().toISOString()}`).order("created_at"),
         readProgressToday(db),
+        readKitchen(db),
       ]);
 
       return {
@@ -55,18 +102,24 @@ export function createApi(db: SupabaseClient): AshbornApi {
         deadlines: must(deadlineRows).map(toDeadline),
         alarms: must(alarmRows).map(toAlarm),
         progressToday,
+        kitchen,
       };
     },
 
-    async createNode(title, parentId, id) {
-      return { nodes: [toNode(must(await nodes().insert({ id, title, parent_id: parentId }).select().single()))] };
+    async createNode(title, parentId, id = crypto.randomUUID()) {
+      must(await db.from("graph_nodes").upsert({ id, title, parent_id: parentId }, { onConflict: "id", ignoreDuplicates: true }));
+      return { nodes: [await readNode(id)] };
     },
 
-    async updateNode(id, { title, stat, color, active, done }) {
-      const completed_at = done === undefined ? undefined : done ? new Date().toISOString() : null;
-      const node = toNode(must(await nodes().update({ title, stat, color, active, completed_at }).eq("id", id).select().single()));
+    async updateNode(id, { title, statWeights, color, active, done, shelved }) {
+      const at = clock().toISOString();
+      const completed_at = done === undefined ? undefined : done ? at : null;
+      const stat_weights = statWeights && positiveWeights(statWeights);
+      const fields = { title, stat_weights, color, active, completed_at, shelved };
+      const row = must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).eq("id", id).select().maybeSingle());
+      if (!row) throw new Error("This step was deleted on another device.");
 
-      return { nodes: [node], progressToday: done === undefined ? undefined : await readProgressToday(db) };
+      return { nodes: [toNode(row as NodeRow)], progressToday: done === undefined ? undefined : await readProgressToday(db) };
     },
 
     async deleteNode(id) {
@@ -89,7 +142,8 @@ export function createApi(db: SupabaseClient): AshbornApi {
     },
 
     async resetLayout(ids) {
-      const rows = must(await nodes().update({ x: null, y: null, width: null, height: null }).in("id", ids).select()) as NodeRow[];
+      const fields = { x: null, y: null, width: null, height: null };
+      const rows = must(await nodes().update({ ...fields, changed_at: stamps(fields, clock().toISOString()) }).in("id", ids).select()) as NodeRow[];
 
       return { nodes: rows.map(toNode) };
     },
@@ -106,15 +160,18 @@ export function createApi(db: SupabaseClient): AshbornApi {
       return { removedEdges: [edge] };
     },
 
-    async levelUp(nodeId) {
-      must(await db.from("progress_log").insert({ node_id: nodeId, amount: PROGRESS_UNIT }));
+    // The id makes a level-up sent twice count once
+    async levelUp(nodeId, id) {
+      const row = { event_id: id, node_id: nodeId, amount: PROGRESS_UNIT, logged_at: clock().toISOString() };
+      deletedIfMissing(await db.from("progress_log").upsert(row, { onConflict: "event_id", ignoreDuplicates: true }), "This step");
       const [node, progressToday] = await Promise.all([readNode(nodeId), readProgressToday(db)]);
 
       return { nodes: [node], progressToday };
     },
 
-    async createRoutine({ title, cue, weekdays, time, alarm }) {
-      return { routines: [toRoutine(must(await db.from("routines").insert({ title, cue, weekdays, time, alarm }).select().single()))] };
+    async createRoutine({ id, title, cue, weekdays, time, alarm }) {
+      must(await db.from("routines").upsert({ id, title, cue, weekdays, time, alarm }, { onConflict: "id", ignoreDuplicates: true }));
+      return { routines: [toRoutine(must(await db.from("routines").select().eq("id", id).single()))] };
     },
 
     async deleteRoutine(id) {
@@ -123,21 +180,27 @@ export function createApi(db: SupabaseClient): AshbornApi {
       return { removedRoutineIds: [id] };
     },
 
-    async toggleRoutine(routineId, date) {
-      const removed = must(await db.from("routine_checks").delete().eq("routine_id", routineId).eq("date", date).select());
-      if (removed.length === 0) must(await db.from("routine_checks").insert({ routine_id: routineId, date }));
+    // Absolute rather than a toggle, so sending it twice, or after another device's tick, is harmless
+    async setRoutineCheck(routineId, date, checked) {
+      if (checked) {
+        const row = { routine_id: routineId, date };
+        deletedIfMissing(await db.from("routine_checks").upsert(row, { onConflict: "routine_id,date", ignoreDuplicates: true }), "This routine");
+      } else {
+        must(await db.from("routine_checks").delete().eq("routine_id", routineId).eq("date", date));
+      }
 
-      return { routineCheck: { routineId, date, checked: removed.length === 0 } };
+      return { routineCheck: { routineId, date, checked } };
     },
 
-    async createDeadline({ title, dueDate, alarmTime }) {
-      const row = must(await db.from("deadlines").insert({ title, due_date: dueDate, alarm_time: alarmTime }).select().single());
-
-      return { deadlines: [toDeadline(row)] };
+    async createDeadline({ id, title, dueDate, alarmTime }) {
+      must(await db.from("deadlines").upsert({ id, title, due_date: dueDate, alarm_time: alarmTime }, { onConflict: "id", ignoreDuplicates: true }));
+      return { deadlines: [toDeadline(must(await db.from("deadlines").select().eq("id", id).single()))] };
     },
 
     async completeDeadline(id) {
-      must(await db.from("deadlines").update({ done_at: new Date().toISOString() }).eq("id", id));
+      const at = clock().toISOString();
+      const row = must(await db.from("deadlines").update({ done_at: at, changed_at: { done_at: at } }).eq("id", id).select().maybeSingle());
+      if (!row) throw new Error("This deadline was deleted on another device.");
 
       return { removedDeadlineIds: [id] };
     },
@@ -149,11 +212,15 @@ export function createApi(db: SupabaseClient): AshbornApi {
     },
 
     async createAlarm(alarm) {
-      return { alarms: [toAlarm(must(await db.from("alarms").insert(alarm).select().single()))] };
+      must(await db.from("alarms").upsert(alarm, { onConflict: "id", ignoreDuplicates: true }));
+      return { alarms: [toAlarm(must(await db.from("alarms").select().eq("id", alarm.id).single()))] };
     },
 
     async updateAlarm(id, patch) {
-      return { alarms: [toAlarm(must(await db.from("alarms").update(patch).eq("id", id).select().single()))] };
+      const row = must(await db.from("alarms").update({ ...patch, changed_at: stamps(patch, clock().toISOString()) }).eq("id", id).select().maybeSingle());
+      if (!row) throw new Error("This alarm was deleted on another device.");
+
+      return { alarms: [toAlarm(row as AlarmRow)] };
     },
 
     async deleteAlarm(id) {
@@ -161,7 +228,191 @@ export function createApi(db: SupabaseClient): AshbornApi {
 
       return { removedAlarmIds: [id] };
     },
+
+    // Every Kitchen change returns the whole Kitchen, read again
+    async createStockItem({ id, name, unit, target }) {
+      must(await db.from("stock_items").upsert({ id, name, unit, target }, { onConflict: "id", ignoreDuplicates: true }));
+      return { kitchen: await readKitchen(db) };
+    },
+
+    async updateStockItem(id, patch) {
+      const current = must(await db.from("stock_items").select("unit").eq("id", id).maybeSingle()) as { unit: StockUnit } | null;
+      if (!current) throw new Error("This stock item was deleted on another device.");
+      if (patch.unit && !sameKind(current.unit, patch.unit)) throw new Error(`An item counted in ${current.unit} cannot change to ${patch.unit}.`);
+      const row = must(await db.from("stock_items").update({ ...patch, changed_at: stamps(patch, clock().toISOString()) }).eq("id", id).select("id").maybeSingle());
+      if (!row) throw new Error("This stock item was deleted on another device.");
+      return { kitchen: await readKitchen(db) };
+    },
+
+    async deleteStockItem(id) {
+      must(await db.from("stock_items").delete().eq("id", id));
+      return { kitchen: await readKitchen(db) };
+    },
+
+    // A reading: the amount on hand when counted. The id makes sending it twice count once.
+    async setStock(id, itemId, amount) {
+      const row = { id, item_id: itemId, amount, kind: "reading", made_at: clock().toISOString() };
+      deletedIfMissing(await db.from("stock_changes").upsert(row, { onConflict: "id", ignoreDuplicates: true }), "This stock item");
+      return { kitchen: await readKitchen(db) };
+    },
+
+    async saveRecipe(recipe, isNew = true) {
+      const items = (must(await db.from("stock_on_hand").select()) as StockRow[]).map(toStockItem);
+      const problems = recipeProblems(recipe, items);
+      if (problems.length > 0) throw new Error(problems.join(" "));
+      must(
+        await db.rpc("save_recipe", {
+          recipe: {
+            id: recipe.id,
+            title: recipe.title,
+            body: recipe.body,
+            ingredients: recipe.ingredients.map((ingredient) => ({ id: ingredient.id, item_id: ingredient.itemId, name: ingredient.name, amount: ingredient.amount, unit: ingredient.unit })),
+            reminders: recipe.reminders.map((reminder) => ({ id: reminder.id, label: reminder.label, offset_minutes: reminder.offsetMinutes, anchor_id: reminder.anchorId })),
+          },
+          is_new: isNew,
+          changed: clock().toISOString(),
+        }),
+      );
+      return { kitchen: await readKitchen(db) };
+    },
+
+    async deleteRecipe(id) {
+      must(await db.from("recipes").delete().eq("id", id));
+      return { kitchen: await readKitchen(db) };
+    },
+
+    async setMeal({ id, date, slot, description, recipeIds, status }) {
+      const args = { meal_id: id, meal_date: date, meal_slot: slot, meal_description: description, recipe_ids: recipeIds, meal_status: status };
+      must(await db.rpc("set_meal", { ...args, changed: clock().toISOString() }));
+      return { kitchen: await readKitchen(db) };
+    },
+
+    async cookMeal(date, slot, id) {
+      must(await db.rpc("cook_meal", { meal_id: id, meal_date: date, meal_slot: slot, changed: clock().toISOString() }));
+      return { kitchen: await readKitchen(db) };
+    },
+
+    async uncookMeal(date, slot) {
+      must(await db.rpc("uncook_meal", { meal_date: date, meal_slot: slot, changed: clock().toISOString() }));
+      return { kitchen: await readKitchen(db) };
+    },
+
+    async setDefaultMeal({ weekday, slot, description, recipeIds }) {
+      const args = { meal_weekday: weekday, meal_slot: slot, meal_description: description, recipe_ids: recipeIds };
+      must(await db.rpc("set_default_meal", { ...args, changed: clock().toISOString() }));
+      return { kitchen: await readKitchen(db) };
+    },
+  });
+}
+
+// The rows each change touches. Every Kitchen change shares one key, since each returns the
+// whole Kitchen and an earlier reply arriving late would put back older data.
+const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string[] } = {
+  createNode: (_title, _parentId, id) => (id ? [`node:${id}`] : []),
+  updateNode: (id) => [`node:${id}`],
+  deleteNode: (id) => [`node:${id}`],
+  moveNode: (id) => [`node:${id}`],
+  placeNodes: (places) => places.map((place) => `node:${place.id}`),
+  resetLayout: (ids) => ids.map((id) => `node:${id}`),
+  addEdge: (edge) => [`edge:${edge.from}->${edge.to}`],
+  removeEdge: (edge) => [`edge:${edge.from}->${edge.to}`],
+  levelUp: (nodeId) => [`node:${nodeId}`],
+  createRoutine: (routine) => [`routine:${routine.id}`],
+  deleteRoutine: (id) => [`routine:${id}`],
+  setRoutineCheck: (routineId, date) => [`routine:${routineId}@${date}`],
+  createDeadline: (deadline) => [`deadline:${deadline.id}`],
+  completeDeadline: (id) => [`deadline:${id}`],
+  deleteDeadline: (id) => [`deadline:${id}`],
+  createAlarm: (alarm) => [`alarm:${alarm.id}`],
+  updateAlarm: (id) => [`alarm:${id}`],
+  deleteAlarm: (id) => [`alarm:${id}`],
+  createStockItem: () => ["kitchen"],
+  updateStockItem: () => ["kitchen"],
+  deleteStockItem: () => ["kitchen"],
+  setStock: () => ["kitchen"],
+  saveRecipe: () => ["kitchen"],
+  deleteRecipe: () => ["kitchen"],
+  setMeal: () => ["kitchen"],
+  cookMeal: () => ["kitchen"],
+  uncookMeal: () => ["kitchen"],
+  setDefaultMeal: () => ["kitchen"],
+};
+
+// Sends changes to the same row one after another, in the order they were made, so a later change
+// can never be overwritten by an earlier one that reached the database last. Changes to different
+// rows still go at once.
+function inRowOrder(api: AshbornApi): AshbornApi {
+  const queue = keyedQueue();
+  const wrapped = { ...api } as Record<string, unknown>;
+  for (const name of Object.keys(rowKeys) as Mutation[]) {
+    const method = api[name] as (...args: unknown[]) => Promise<Delta>;
+    const keysOf = rowKeys[name] as (...args: unknown[]) => string[];
+    wrapped[name] = (...args: unknown[]) => queue(keysOf(...args), () => method(...args));
+  }
+  return wrapped as AshbornApi;
+}
+
+// Runs each task after every earlier task that shares one of its keys has settled (failed ones
+// included); tasks with no key in common run at once
+export function keyedQueue() {
+  const last = new Map<string, Promise<unknown>>();
+  return <T>(keys: string[], task: () => Promise<T>): Promise<T> => {
+    const before = keys.map((key) => last.get(key)?.catch(() => {}));
+    const run = Promise.all(before).then(task);
+    const settled = run.catch(() => {});
+    for (const key of keys) last.set(key, settled);
+    void settled.then(() => keys.forEach((key) => last.get(key) === settled && last.delete(key)));
+    return run;
   };
+}
+
+// The Kitchen, with meals from mealDaysBack ago to mealDaysAhead ahead
+export async function readKitchen(db: SupabaseClient): Promise<Kitchen> {
+  const day = (offset: number) => {
+    const date = new Date();
+    date.setDate(date.getDate() + offset);
+    return toISODate(date);
+  };
+  const [itemRows, recipeRows, defaultRows, mealRows] = await Promise.all([
+    db.from("stock_on_hand").select().order("created_at"),
+    db
+      .from("recipes")
+      .select("id, title, body, recipe_ingredients(*), recipe_reminders(*)")
+      .order("created_at")
+      .order("position", { referencedTable: "recipe_ingredients" })
+      .order("position", { referencedTable: "recipe_reminders" }),
+    db.from("default_meals").select("weekday, slot, description, default_meal_recipes(recipe_id)"),
+    db
+      .from("meals")
+      .select("id, date, slot, description, status, meal_recipes(recipe_id), stock_changes(id, item_id, amount, made_at)")
+      .gte("date", day(-mealDaysBack))
+      .lte("date", day(mealDaysAhead)),
+  ]);
+  const meals = must(mealRows) as MealRow[];
+
+  return {
+    items: (must(itemRows) as StockRow[]).map(toStockItem),
+    recipes: (must(recipeRows) as RecipeRow[]).map((row) => ({
+      id: row.id,
+      title: row.title,
+      body: row.body,
+      ingredients: row.recipe_ingredients.map((i) => ({ id: i.id, itemId: i.item_id, name: i.name, amount: Number(i.amount), unit: i.unit })),
+      reminders: row.recipe_reminders.map((r) => ({ id: r.id, label: r.label, offsetMinutes: r.offset_minutes, anchorId: r.anchor_id })),
+    })),
+    defaultWeek: (must(defaultRows) as DefaultMealRow[]).map((row) => ({
+      weekday: row.weekday,
+      slot: row.slot,
+      description: row.description,
+      recipeIds: row.default_meal_recipes.map((link) => link.recipe_id),
+    })),
+    meals: meals.map((row) => ({ id: row.id, date: row.date, slot: row.slot, description: row.description, status: row.status, recipeIds: row.meal_recipes.map((link) => link.recipe_id) })),
+    mealChanges: meals.flatMap((row) => row.stock_changes.map((change) => ({ id: change.id, itemId: change.item_id, mealId: row.id, amount: Number(change.amount), madeAt: change.made_at }))),
+  };
+}
+
+// Numeric columns can arrive as strings, so amounts are read with Number
+function toStockItem(row: StockRow) {
+  return { id: row.id, name: row.name, unit: row.unit, target: Number(row.target), onHand: Number(row.on_hand), readAt: row.read_at };
 }
 
 // Level-ups and completed steps today. Times are stored in UTC, so the local day becomes a range.
@@ -186,15 +437,21 @@ export function toNode(row: NodeRow): GraphNode {
     id: row.id,
     parentId: row.parent_id,
     title: row.title,
-    stat: row.stat,
+    statWeights: row.stat_weights,
     color: row.color,
     active: row.active,
     createdAt: row.created_at,
     completedAt: row.completed_at,
+    shelved: row.shelved,
     ownXp: (row.logged_xp ?? 0) + (row.completed_at ? PROGRESS_UNIT : 0),
     position: row.x === null || row.y === null ? null : { x: row.x, y: row.y },
     size: row.width === null || row.height === null ? null : { width: row.width, height: row.height },
   };
+}
+
+// A zero weight trains nothing, so only positive weights are stored
+function positiveWeights(weights: StatWeights): StatWeights {
+  return Object.fromEntries(Object.entries(weights).filter(([, weight]) => weight > 0));
 }
 
 export function toEdge(row: { from_id: string; to_id: string }): GraphEdge {
@@ -218,14 +475,43 @@ function toClock(time: string | null) {
   return time ? time.slice(0, 5) : null;
 }
 
+// A stamp for each field being set (those left undefined are not sent)
+function stamps(fields: Record<string, unknown>, at: string) {
+  return Object.fromEntries(Object.keys(fields).filter((key) => fields[key] !== undefined).map((key) => [key, at]));
+}
+
+// A failed request, with the Postgres or PostgREST error code and the HTTP status, so the offline
+// queue can tell a change that can never succeed from one worth sending again
+export class ServerError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+type Result = { error: PostgrestError | null; status?: number };
+
+function fail(result: Result): never {
+  throw new ServerError(result.error!.message, result.error!.code ?? "", result.status ?? 0);
+}
+
+// An insert referring to a row deleted elsewhere fails its foreign key; say so in words
+function deletedIfMissing(result: Result, what: string) {
+  if (result.error?.code === "23503") throw new Error(`${what} was deleted on another device.`);
+  if (result.error) fail(result);
+}
+
 // Unwraps a Supabase result, turning its error into a thrown one
-function must<T>(result: { data: T; error: PostgrestError | null }): NonNullable<T> {
-  if (result.error) throw new Error(result.error.message);
+function must<T>(result: Result & { data: T }): NonNullable<T> {
+  if (result.error) fail(result);
   return result.data as NonNullable<T>;
 }
 
-function countOf(result: { count: number | null; error: PostgrestError | null }) {
-  if (result.error) throw new Error(result.error.message);
+function countOf(result: Result & { count: number | null }) {
+  if (result.error) fail(result);
   return result.count ?? 0;
 }
 
@@ -256,6 +542,7 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
     deadlines: merge(snapshot.deadlines, (deadline) => deadline.id, delta.deadlines, new Set(delta.removedDeadlineIds)),
     alarms: merge(snapshot.alarms, (alarm) => alarm.id, delta.alarms, new Set(delta.removedAlarmIds)),
     progressToday: delta.progressToday ?? snapshot.progressToday,
+    kitchen: delta.kitchen ?? snapshot.kitchen,
   };
 }
 

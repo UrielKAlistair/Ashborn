@@ -21,12 +21,13 @@ const idleSheets = byTier(import.meta.glob<string>("../../assets/Idle_sheets/*.p
 
 export const portraitTiers = Math.max(...Object.keys(stills).map(Number));
 
-export function Portrait({ tier }: { tier: number }) {
+// `zoom` enlarges the figure beyond its usual size (the phone's character screen)
+export function Portrait({ tier, zoom = 1 }: { tier: number; zoom?: number }) {
   const sheet = idleSheets[tier];
   return sheet ? (
-    <Figure key={sheet} src={sheet} cell={SHEET_CELL} scale={SHEET_SCALE} />
+    <Figure key={sheet} src={sheet} cell={SHEET_CELL} scale={SHEET_SCALE * zoom} />
   ) : (
-    <Figure key={stills[tier]} src={stills[tier]} cell={null} scale={STILL_SCALE} />
+    <Figure key={stills[tier]} src={stills[tier]} cell={null} scale={STILL_SCALE * zoom} />
   );
 }
 
@@ -69,7 +70,8 @@ function Figure({ src, cell, scale }: { src: string; cell: number | null; scale:
     };
   }, [src, cell, scale]);
 
-  return <canvas ref={canvasRef} aria-hidden="true" />;
+  // Enlarged pixel art stays crisp rather than blurred
+  return <canvas ref={canvasRef} aria-hidden="true" className={scale > 1 ? "[image-rendering:pixelated]" : undefined} />;
 }
 
 // The cells holding a figure, in reading order; the smallest box (relative to a cell) holding the figure

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 type IconProps = {
   className?: string;
 };
@@ -115,7 +117,7 @@ export function QuitIcon({ className }: IconProps) {
   );
 }
 
-export function CookbookIcon({ className }: IconProps) {
+export function KitchenIcon({ className }: IconProps) {
   return (
     <svg
       aria-hidden="true"
@@ -166,5 +168,79 @@ export function AlarmsIcon({ className }: IconProps) {
       <circle cx="12" cy="13" r="8" />
       <path d="M12 9v4l2 2M5 3 2 6M22 6l-3-3M6.38 18.7 4 21M17.64 18.67 20 21" />
     </svg>
+  );
+}
+
+// The screen icons below are from Lucide (lucide.dev), ISC licence: list-checks, network,
+// circle-user-round, calendar-days, chart-bar, book-open
+function LucideIcon({ className, children }: IconProps & { children: ReactNode }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={withDefaultClasses("h-6 w-6", className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {children}
+    </svg>
+  );
+}
+
+export function TodoIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <path d="m3 17 2 2 4-4M3 7l2 2 4-4M13 6h8M13 12h8M13 18h8" />
+    </LucideIcon>
+  );
+}
+
+export function GraphIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <rect x="16" y="16" width="6" height="6" rx="1" />
+      <rect x="2" y="16" width="6" height="6" rx="1" />
+      <rect x="9" y="2" width="6" height="6" rx="1" />
+      <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8" />
+    </LucideIcon>
+  );
+}
+
+export function CharacterIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <path d="M18 20a6 6 0 0 0-12 0" />
+      <circle cx="12" cy="10" r="4" />
+      <circle cx="12" cy="12" r="10" />
+    </LucideIcon>
+  );
+}
+
+export function MealPlanIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <rect width="18" height="18" x="3" y="4" rx="2" />
+      <path d="M8 2v4M16 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" />
+    </LucideIcon>
+  );
+}
+
+export function StocksIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <path d="M3 3v16a2 2 0 0 0 2 2h16M7 16h8M7 11h12M7 6h3" />
+    </LucideIcon>
+  );
+}
+
+export function RecipesIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+    </LucideIcon>
   );
 }

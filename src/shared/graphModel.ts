@@ -1,4 +1,4 @@
-import type { GraphEdge, GraphNode, Snapshot, StatKey } from "../../shared/types";
+import type { GraphEdge, GraphNode, Snapshot, StatKey, StatWeights } from "./types";
 
 export const statKeys: StatKey[] = ["STR", "DEX", "INT", "WIS", "CHR", "MND"];
 
@@ -7,7 +7,8 @@ export type GraphModel = {
   byId: Map<string, GraphNode>;
   children: Map<string | null, GraphNode[]>; // keyed by parent id; null holds the threads
   totalXp: Map<string, number>; // a node's own XP and its steps', plus that of everything upstream
-  ready: Set<string>; // not done, with no unfinished prerequisite or step
+  ready: Set<string>; // not done, not shelved, with no unfinished prerequisite or step
+  shelved: Set<string>; // shelved itself, or inside a shelved box
   statXp: Record<StatKey, number>;
   totalStatXp: number;
 };
@@ -50,29 +51,44 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
     totalXp.set(node.id, sum);
   });
 
+  // Shelved: the node or a box it sits in was shelved. It stays on the graph, greyed, but is
+  // never ready
+  const shelved = new Set(snapshot.nodes.filter((node) => isShelved(byId, node)).map((node) => node.id));
+
   const ready = new Set(
     snapshot.nodes
       .filter(
         (node) =>
           !isDone(node) &&
+          !shelved.has(node.id) &&
           (incoming.get(node.id) ?? []).every((edge) => byId.get(edge.from)?.completedAt) &&
           (children.get(node.id) ?? []).every(isDone),
       )
       .map((node) => node.id),
   );
 
-  // All work in a thread trains the thread's stat
+  // All work in a thread trains each of the thread's stats, scaled by that stat's weight
   const statXp = Object.fromEntries(statKeys.map((key) => [key, 0])) as Record<StatKey, number>;
   let totalStatXp = 0;
   snapshot.nodes.forEach((node) => {
-    const stat = threadOf(byId, node).stat;
-    if (stat) {
-      statXp[stat] += node.ownXp;
-      totalStatXp += node.ownXp;
-    }
+    trainedStats(threadOf(byId, node).statWeights).forEach(([key, weight]) => {
+      statXp[key] += weight * node.ownXp;
+      totalStatXp += weight * node.ownXp;
+    });
   });
 
-  return { byId, children, totalXp, ready, statXp, totalStatXp };
+  return { byId, children, totalXp, ready, shelved, statXp, totalStatXp };
+}
+
+// The stats a thread trains with their weights, in statKeys order
+export function trainedStats(weights: StatWeights): [StatKey, number][] {
+  return statKeys.flatMap((key): [StatKey, number][] => ((weights[key] ?? 0) > 0 ? [[key, weights[key]!]] : []));
+}
+
+function isShelved(byId: Map<string, GraphNode>, node: GraphNode): boolean {
+  if (node.shelved) return true;
+  const parent = node.parentId ? byId.get(node.parentId) : undefined;
+  return parent ? isShelved(byId, parent) : false;
 }
 
 // The thread a node sits in (a thread is its own)

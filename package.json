@@ -9,7 +9,9 @@
     "electron:build": "tsc -p electron/tsconfig.json",
     "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:1420 && npm run electron:build && electron .\"",
     "build": "vite build && npm run electron:build",
+    "appimage": "npm run build && electron-builder --linux AppImage",
     "electron:start": "electron .",
+    "phone": "concurrently -k \"npm run dev\" \"wait-on http://localhost:1420 && npm run electron:build && electron . --phone\"",
     "preview": "vite preview",
     "test": "npm run electron:build && npm run -s agent:build && playwright test",
     "agent:build": "esbuild mcp/server.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=dist-mcp/server.mjs",
@@ -40,10 +42,31 @@
     "@vitejs/plugin-react": "^4.6.0",
     "concurrently": "^9.1.2",
     "electron": "^37.0.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "dev.ashborn.app",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "src/assets/ashborn-tray.png",
+      "!node_modules"
+    ],
+    "linux": {
+      "target": "AppImage",
+      "icon": "src/assets/ashborn-tray.png",
+      "category": "Utility"
+    },
+    "appImage": {
+      "artifactName": "Ashborn.AppImage"
+    }
   }
 }

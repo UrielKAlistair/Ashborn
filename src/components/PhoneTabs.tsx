@@ -1,26 +1,96 @@
-import { navItems } from "./Navbar";
+import { useState } from "react";
+import { phoneSections, screenAt, sectionAt, type Section } from "./sections";
 
-// The phone's navigation: the same pages as the desktop sidebar, as a bottom tab bar
+// The phone's navigation: one tab per section, grouped towards the middle of the bottom edge. A section with several screens
+// opens a menu of them upward from its tab; a tap elsewhere closes it.
 export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; onNavigate: (path: string) => void }) {
+  const [openSection, setOpenSection] = useState<Section | null>(null);
+  const currentSection = sectionAt(currentPath);
+
+  const choose = (section: Section) => {
+    if (section.phone.length === 1) {
+      setOpenSection(null);
+      onNavigate(section.phone[0].path);
+    } else {
+      setOpenSection(openSection === section ? null : section);
+    }
+  };
+
   return (
-    <nav className="relative z-10 flex shrink-0 justify-around border-t border-white/10 bg-night-panel px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      {navItems.map((item) => {
-        const isActive = currentPath === item.path || currentPath.startsWith(`${item.path}/`);
-        const Icon = item.icon;
+    <nav className="relative z-10 flex shrink-0 justify-center gap-4 border-t border-white/10 bg-night-panel px-6 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      {openSection ? <div className="fixed inset-0 z-40" onClick={() => setOpenSection(null)} /> : null}
+
+      {phoneSections.map((section) => {
+        const isActive = section === currentSection;
+        const Icon = section.icon;
         return (
-          <button
-            key={item.path}
-            type="button"
-            onClick={() => onNavigate(item.path)}
-            className={`flex flex-col items-center gap-1 px-3 py-1 ${isActive ? "text-white/85" : "text-white/40"}`}
-          >
-            <span className="flex h-7 items-center">
-              <Icon />
-            </span>
-            <span className="text-[9px] uppercase tracking-[0.2em]">{item.label}</span>
-          </button>
+          <div key={section.label} className="relative flex w-20 justify-center">
+            <button
+              type="button"
+              onClick={() => choose(section)}
+              aria-expanded={section.phone.length > 1 ? openSection === section : undefined}
+              className={`flex flex-col items-center gap-1 px-3 py-1 ${isActive ? "text-white/85" : "text-white/40"}`}
+            >
+              <span className="flex h-7 items-center">
+                <Icon />
+              </span>
+              <span className="text-[9px] uppercase tracking-[0.2em]">{section.label}</span>
+            </button>
+
+            {openSection === section ? (
+              <ScreenMenu
+                section={section}
+                currentPath={currentPath}
+                onChoose={(path) => {
+                  setOpenSection(null);
+                  onNavigate(path);
+                }}
+              />
+            ) : null}
+          </div>
         );
       })}
     </nav>
+  );
+}
+
+// The section's screens, stacked upward and centred above its tab. The tabs sit close together
+// in the middle of the bar, so even the outer tabs' menus keep clear of the screen's edges.
+function ScreenMenu({
+  section,
+  currentPath,
+  onChoose,
+}: {
+  section: Section;
+  currentPath: string;
+  onChoose: (path: string) => void;
+}) {
+  const current = screenAt(currentPath, section.phone);
+
+  return (
+    <div
+      role="menu"
+      aria-label={section.label}
+      className={`absolute bottom-full z-50 mb-3 flex left-1/2 -translate-x-1/2 flex-col-reverse gap-0.5 rounded-2xl border border-white/12 bg-night-card/95 p-1 shadow-xl shadow-black/30`}
+    >
+      {section.phone.map((screen) => {
+        const Icon = screen.icon;
+        const active = screen === current;
+        return (
+          <button
+            key={screen.path}
+            type="button"
+            role="menuitem"
+            onClick={() => onChoose(screen.path)}
+            className={`flex items-center gap-2 rounded-xl px-2.5 py-2 whitespace-nowrap ${
+              active ? "bg-white/10 text-white/85" : "text-white/55"
+            }`}
+          >
+            <Icon className="h-5 w-5" />
+            <span className="text-[10px] uppercase tracking-[0.2em]">{screen.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

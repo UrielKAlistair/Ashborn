@@ -1,106 +1,240 @@
 import { today } from "../shared/dates";
+import { cooked, read, recipeProblems, shownMeal, uncooked } from "../shared/kitchen";
 import { PROGRESS_UNIT } from "../shared/progression";
-import type { Alarm, AlarmPatch, AshbornApi, Delta, Placement, Snapshot } from "../shared/types";
-import type { Mutation } from "./api";
+import type {
+  Alarm,
+  AlarmPatch,
+  AshbornApi,
+  Deadline,
+  DefaultMeal,
+  Delta,
+  GraphEdge,
+  GraphNode,
+  Kitchen,
+  Meal,
+  MealSlot,
+  NodePatch,
+  Placement,
+  Recipe,
+  Routine,
+  Snapshot,
+  StockItem,
+} from "../shared/types";
+import { ServerError, type Mutation } from "./api";
 
 // Changes made without a connection wait here, in order, until it is back
 const queueStorageKey = "ashborn-offline-queue";
 
-export type QueuedChange = { name: Mutation; args: unknown[] };
+// Failed sends of the first change in a row after which the app shows why it is held
+const HELD_TRIES_SHOWN = 3;
 
-// What each change that can wait looks like on screen meanwhile. Ticks, quick adds, alarms and
-// arranging the canvas can wait; anything else needs a connection.
-const preview: Partial<Record<Mutation, (snapshot: Snapshot, args: unknown[]) => Delta | null>> = {
-  createNode: (_snapshot, [title, parentId, id]) => ({
+// `at`: when the change was made, so that when it is sent later it still loses to a change made after it.
+// `tries`: sends of it that met a server error worth trying again.
+export type QueuedChange = { name: Mutation; args: unknown[]; at: string; tries?: number };
+
+type Preview = (snapshot: Snapshot, args: any[], at: string) => Delta; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+// How each change looks on screen until it reaches the server, which may keep something else (a
+// later change made elsewhere); the snapshot read after the queue is sent shows what it kept.
+// Throws when the change could never be accepted.
+const preview: Record<Mutation, Preview> = {
+  createNode: (_snapshot, [title, parentId, id], at) => ({
     nodes: [
       {
-        id: id as string,
-        parentId: parentId as string | null,
-        title: title as string,
-        stat: null,
+        id,
+        parentId,
+        title,
+        statWeights: {},
         color: null,
         active: true,
-        createdAt: new Date().toISOString(),
+        createdAt: at,
         completedAt: null,
+        shelved: false,
         ownXp: 0,
         position: null,
         size: null,
       },
     ],
   }),
-  updateNode: (snapshot, [id, patch]) => {
-    const { done, ...rest } = patch as { done?: boolean };
-    const node = snapshot.nodes.find((candidate) => candidate.id === id);
-    if (done === undefined || Object.keys(rest).length > 0 || !node || Boolean(node.completedAt) === done) return null;
-    const step = done ? 1 : -1;
-    const count = snapshot.progressToday.date === today() ? snapshot.progressToday.count : 0;
-    return {
-      nodes: [{ ...node, completedAt: done ? new Date().toISOString() : null, ownXp: node.ownXp + step * PROGRESS_UNIT }],
-      progressToday: { date: today(), count: Math.max(0, count + step) },
+  updateNode: (snapshot, [id, patch], at) => {
+    const node = existing(snapshot.nodes, id, "This step");
+    const { done, ...fields } = patch as NodePatch;
+    const ticked = done !== undefined && Boolean(node.completedAt) !== done;
+    const step = ticked ? (done ? 1 : -1) : 0;
+    const updated: GraphNode = {
+      ...node,
+      ...definedOnly(fields),
+      completedAt: ticked ? (done ? at : null) : node.completedAt,
+      ownXp: node.ownXp + step * PROGRESS_UNIT,
     };
+    return { nodes: [updated], progressToday: step ? countedToday(snapshot, step) : undefined };
   },
-  toggleRoutine: (snapshot, [routineId, date]) => ({
-    routineCheck: {
-      routineId: routineId as string,
-      date: date as string,
-      checked: !snapshot.routineChecks.some((check) => check.routineId === routineId && check.date === date),
-    },
+  deleteNode: (snapshot, [id]) => ({ removedNodeIds: [id, ...descendants(snapshot.nodes, id)] }),
+  moveNode: (snapshot, [id, parentId]) => ({
+    nodes: [{ ...existing(snapshot.nodes, id, "This step"), parentId, position: null }],
+    removedEdges: snapshot.edges.filter((edge) => edge.from === id || edge.to === id),
   }),
-  completeDeadline: (_snapshot, [id]) => ({ removedDeadlineIds: [id as string] }),
-  // Arranging the canvas
   placeNodes: (snapshot, [places]) => ({
     nodes: (places as Placement[]).flatMap(({ id, position, size }) => {
       const node = snapshot.nodes.find((candidate) => candidate.id === id);
       return node ? [{ ...node, position, size: size ?? node.size }] : [];
     }),
   }),
-  // Alarms ring from the phone, so setting, switching and removing them must work without signal
-  createAlarm: (_snapshot, [alarm]) => ({ alarms: [alarm as Alarm] }),
-  updateAlarm: (snapshot, [id, patch]) => {
-    const alarm = snapshot.alarms.find((candidate) => candidate.id === id);
-    return alarm ? { alarms: [{ ...alarm, ...(patch as AlarmPatch) }] } : null;
+  resetLayout: (snapshot, [ids]) => ({
+    nodes: snapshot.nodes.filter((node) => (ids as string[]).includes(node.id)).map((node) => ({ ...node, position: null, size: null })),
+  }),
+  addEdge: (_snapshot, [edge]) => ({ edges: [edge as GraphEdge] }),
+  removeEdge: (_snapshot, [edge]) => ({ removedEdges: [edge as GraphEdge] }),
+  levelUp: (snapshot, [nodeId]) => {
+    const node = existing(snapshot.nodes, nodeId, "This step");
+    return { nodes: [{ ...node, ownXp: node.ownXp + PROGRESS_UNIT }], progressToday: countedToday(snapshot, 1) };
   },
-  deleteAlarm: (_snapshot, [id]) => ({ removedAlarmIds: [id as string] }),
+  createRoutine: (_snapshot, [routine]) => ({ routines: [routine as Routine] }),
+  deleteRoutine: (_snapshot, [id]) => ({ removedRoutineIds: [id] }),
+  setRoutineCheck: (_snapshot, [routineId, date, checked]) => ({ routineCheck: { routineId, date, checked } }),
+  createDeadline: (_snapshot, [deadline]) => ({ deadlines: [deadline as Deadline] }),
+  completeDeadline: (_snapshot, [id]) => ({ removedDeadlineIds: [id] }),
+  deleteDeadline: (_snapshot, [id]) => ({ removedDeadlineIds: [id] }),
+  createAlarm: (_snapshot, [alarm]) => ({ alarms: [alarm as Alarm] }),
+  updateAlarm: (snapshot, [id, patch]) => ({ alarms: [{ ...existing(snapshot.alarms, id, "This alarm"), ...(patch as AlarmPatch) }] }),
+  deleteAlarm: (_snapshot, [id]) => ({ removedAlarmIds: [id] }),
+  // The Kitchen
+  createStockItem: (snapshot, [item]) => kitchen(snapshot, { items: [...snapshot.kitchen.items, { ...(item as StockItem), onHand: 0, readAt: null }] }),
+  updateStockItem: (snapshot, [id, patch]) => {
+    existing(snapshot.kitchen.items, id, "This stock item");
+    return kitchen(snapshot, { items: snapshot.kitchen.items.map((item) => (item.id === id ? { ...item, ...definedOnly(patch) } : item)) });
+  },
+  deleteStockItem: (snapshot, [id]) =>
+    kitchen(snapshot, {
+      items: snapshot.kitchen.items.filter((item) => item.id !== id),
+      recipes: snapshot.kitchen.recipes.map((recipe) => ({
+        ...recipe,
+        ingredients: recipe.ingredients.map((ingredient) => (ingredient.itemId === id ? { ...ingredient, itemId: null } : ingredient)),
+      })),
+    }),
+  setStock: (snapshot, [, itemId, amount], at) => ({ kitchen: read(snapshot.kitchen, itemId, amount, at) }),
+  saveRecipe: (snapshot, [recipe, isNew = true]) => {
+    if (!isNew) existing(snapshot.kitchen.recipes, (recipe as Recipe).id, (recipe as Recipe).title);
+    const problems = recipeProblems(recipe, snapshot.kitchen.items);
+    if (problems.length > 0) throw new Error(problems.join(" "));
+    return kitchen(snapshot, { recipes: [...snapshot.kitchen.recipes.filter((other) => other.id !== recipe.id), recipe] });
+  },
+  deleteRecipe: (snapshot, [id]) =>
+    kitchen(snapshot, {
+      recipes: snapshot.kitchen.recipes.filter((recipe) => recipe.id !== id),
+      meals: snapshot.kitchen.meals.map((meal) => ({ ...meal, recipeIds: meal.recipeIds.filter((recipeId) => recipeId !== id) })),
+      defaultWeek: snapshot.kitchen.defaultWeek.map((meal) => ({ ...meal, recipeIds: meal.recipeIds.filter((recipeId) => recipeId !== id) })),
+    }),
+  setMeal: (snapshot, [meal]) => {
+    const { fromDefault, ...shown } = shownMeal(snapshot.kitchen, meal.date, meal.slot);
+    if (shown.status === "cooked" && meal.status === "cancelled") throw new Error("This meal was cooked; untick it before cancelling it.");
+    const planned: Meal = { ...(meal as Meal), id: fromDefault ? meal.id : shown.id, status: shown.status === "cooked" ? "cooked" : meal.status };
+    return kitchen(snapshot, { meals: [...snapshot.kitchen.meals.filter((other) => other.id !== planned.id), planned] });
+  },
+  cookMeal: (snapshot, [date, slot, id], at) => ({ kitchen: cooked(snapshot.kitchen, date, slot as MealSlot, id, at) }),
+  uncookMeal: (snapshot, [date, slot]) => ({ kitchen: uncooked(snapshot.kitchen, date, slot as MealSlot) }),
+  setDefaultMeal: (snapshot, [meal]) => {
+    const others = snapshot.kitchen.defaultWeek.filter((other) => other.weekday !== meal.weekday || other.slot !== meal.slot);
+    return kitchen(snapshot, { defaultWeek: [...others, meal as DefaultMeal] });
+  },
 };
 
-// Queues a change for later and returns how it looks meanwhile, or null if it cannot wait
-export function queueChange(snapshot: Snapshot, name: Mutation, args: unknown[]): Delta | null {
-  // A step made offline gets its id now, so it can be ticked before it reaches the server
-  const change = { name, args: name === "createNode" && !args[2] ? [args[0], args[1], crypto.randomUUID()] : args };
-  const delta = preview[name]?.(snapshot, change.args) ?? null;
-  if (delta) saveQueue([...loadQueue(), change]);
+// Queues a change for later and returns how it looks meanwhile. `at` is when the user made it (the
+// click, which may be well before an online attempt failed). A step made offline gets its id now, so
+// it can be changed again before it reaches the server.
+export function queueChange(snapshot: Snapshot, name: Mutation, args: unknown[], made: Date = new Date()): Delta {
+  const at = made.toISOString();
+  const change: QueuedChange = { name, args: withIds(name, args), at };
+  const delta = preview[name](snapshot, change.args, at);
+  saveQueue([...loadQueue(), change]);
   return delta;
+}
+
+function withIds(name: Mutation, args: unknown[]): unknown[] {
+  return name === "createNode" && !args[2] ? [args[0], args[1], crypto.randomUUID()] : args;
+}
+
+function existing<T extends { id: string }>(rows: T[], id: string, what: string): T {
+  const row = rows.find((candidate) => candidate.id === id);
+  if (!row) throw new Error(`${what} was deleted on another device.`);
+  return row;
+}
+
+function descendants(nodes: GraphNode[], id: string): string[] {
+  return nodes.filter((node) => node.parentId === id).flatMap((node) => [node.id, ...descendants(nodes, node.id)]);
+}
+
+function countedToday(snapshot: Snapshot, step: number) {
+  const count = snapshot.progressToday.date === today() ? snapshot.progressToday.count : 0;
+  return { date: today(), count: Math.max(0, count + step) };
+}
+
+function kitchen(snapshot: Snapshot, parts: Partial<Kitchen>): Delta {
+  return { kitchen: { ...snapshot.kitchen, ...parts } };
+}
+
+function definedOnly<T extends object>(patch: T): Partial<T> {
+  return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<T>;
 }
 
 export function queuedCount() {
   return loadQueue().length;
 }
 
-// Sends queued changes in order. Stops at a lost connection, keeping the rest; a change the
-// server refuses is dropped and its error returned.
-export async function sendQueue(api: AshbornApi): Promise<string[]> {
-  const queue = loadQueue();
-  const refused: string[] = [];
-
-  while (queue.length > 0) {
-    const [{ name, args }] = queue;
-    try {
-      await (api[name] as (...params: unknown[]) => Promise<Delta>)(...args);
-    } catch (error) {
-      if (isConnectionError(error)) break;
-      refused.push((error as Error).message);
-    }
-    queue.shift();
-    saveQueue(queue);
+// Thrown when the queue stops on a change worth sending again (no connection, or a server error
+// that may pass); the change and those after it wait. `tries` counts the server errors it has met,
+// and `shown` says whether that is enough to tell the user why.
+export class QueueHeld extends Error {
+  constructor(
+    readonly reason: string,
+    readonly tries: number,
+  ) {
+    super(`fetch failed: queued changes held (${reason})`);
   }
 
-  if (queue.length > 0) throw new Error("fetch failed: connection lost while sending queued changes");
+  get shown() {
+    return this.tries >= HELD_TRIES_SHOWN;
+  }
+}
+
+// Sends queued changes in order, each through an API whose clock says when it was made. A change
+// that can never succeed is dropped and its error returned; at one worth trying again, sending
+// stops and QueueHeld is thrown. The queue is read again before each send, since changes made
+// meanwhile are appended to it.
+export async function sendQueue(apiAt: (at: Date) => AshbornApi): Promise<string[]> {
+  const refused: string[] = [];
+
+  for (let next = loadQueue()[0]; next; next = loadQueue()[0]) {
+    const { name, args, at, tries = 0 } = next;
+    try {
+      const api = apiAt(at ? new Date(at) : new Date()); // queued before changes carried a time: now
+      await (api[name] as (...params: unknown[]) => Promise<Delta>)(...args);
+    } catch (error) {
+      // No connection says nothing about the change; a server error counts against it
+      if (isConnectionError(error)) throw new QueueHeld((error as Error).message, tries);
+      if (!refusedForGood(error)) {
+        saveQueue([{ ...next, tries: tries + 1 }, ...loadQueue().slice(1)]);
+        throw new QueueHeld((error as Error).message, tries + 1);
+      }
+      refused.push((error as Error).message);
+    }
+    saveQueue(loadQueue().slice(1));
+  }
+
   return refused;
+}
+
+// A change the server can never accept: a refusal of ours ("deleted on another device", a unit of
+// the wrong kind), or a Postgres error in the data (22), a constraint (23), access or schema (42),
+// a raised exception (P0001), or a row not found (PGRST116). Anything else (no connection, 5xx, 429, an expired sign-in) may pass.
+function refusedForGood(error: unknown) {
+  if (error instanceof ServerError) return /^(22|23|42)/.test(error.code) || error.code === "P0001" || error.code === "PGRST116";
+  return true;
 }
 
 // Supabase reports an unreachable server as a failed fetch
 export function isConnectionError(error: unknown) {
-  return !navigator.onLine || /fetch|network/i.test((error as Error)?.message ?? "");
+  return error instanceof QueueHeld || !navigator.onLine || /fetch|network/i.test((error as Error)?.message ?? "");
 }
 
 function loadQueue(): QueuedChange[] {

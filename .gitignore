@@ -39,3 +39,9 @@ supabase/.temp
 
 # Agent server build
 dist-mcp
+
+# Packaged desktop app
+release
+
+# Messages between agents, not part of the app
+research/

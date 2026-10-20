@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { emptyKitchen } from "../../src/shared/kitchen";
 import { upcomingAlarms } from "../../src/shared/schedule";
 import type { Alarm, Deadline, Routine, Snapshot } from "../../src/shared/types";
 
@@ -15,6 +16,7 @@ const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   deadlines: [],
   alarms: [],
   progressToday: { date: "2026-10-19", count: 0 },
+  kitchen: emptyKitchen,
   ...parts,
 });
 
@@ -68,4 +70,16 @@ test("standalone alarms: recurring ones on their days, one-offs once, switched-o
   ]);
   expect(found[0].title).toBe("Alarm"); // unlabelled
   expect(found[1]).toMatchObject({ title: "Wake up", kind: "situps" });
+});
+
+test("meal reminders join the schedule as plain alarms; those already past are dropped", () => {
+  const recipe = { id: "r", title: "Dal", body: "", ingredients: [], reminders: [{ id: "prep", label: "Start prep", offsetMinutes: -45, anchorId: null }] };
+  const meals = [
+    { id: "b", date: "2026-10-19", slot: "breakfast" as const, description: "dal", status: "planned" as const, recipeIds: ["r"] },
+    { id: "l", date: "2026-10-19", slot: "lunch" as const, description: "dal", status: "planned" as const, recipeIds: ["r"] },
+  ];
+  const kitchen = { ...emptyKitchen, recipes: [recipe], meals };
+  // At 08:00 the breakfast reminder (07:15) is past; lunch's (12:15) is still to ring
+  expect(times(upcomingAlarms(snapshot({ kitchen }), new Date("2026-10-19T08:00:00"), 1))).toEqual(["meal:2026-10-19:lunch:prep Mon Oct 19 2026 12:15"]);
+  expect(upcomingAlarms(snapshot({ kitchen }), new Date("2026-10-19T08:00:00"), 1)[0]).toMatchObject({ kind: "plain", title: "Start prep (lunch: Dal)" });
 });

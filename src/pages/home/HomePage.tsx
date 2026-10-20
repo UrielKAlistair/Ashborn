@@ -1,13 +1,14 @@
 import { useMemo } from "react";
 import type { Mutation } from "../../lib/api";
+import { buildGraphModel } from "../../shared/graphModel";
 import type { AshbornApi, Snapshot } from "../../shared/types";
 import { CharacterPanel } from "./CharacterPanel";
-import { buildGraphModel } from "./graphModel";
 import { ThreadGraph } from "./ThreadGraph";
 import { TodayPanel } from "./TodayPanel";
 
-// Runs a change in the main process and merges what it returns into the data on screen
-export type Act = <K extends Mutation>(name: K, ...args: Parameters<AshbornApi[K]>) => Promise<void>;
+// Runs a change in the main process and merges what it returns into the data on screen; resolves
+// to whether it was saved (or queued offline)
+export type Act = <K extends Mutation>(name: K, ...args: Parameters<AshbornApi[K]>) => Promise<boolean>;
 
 type HomePageProps = {
   snapshot: Snapshot;

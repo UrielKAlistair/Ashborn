@@ -17,13 +17,13 @@ import {
   type NodeProps,
   type XYPosition,
 } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { paletteOf, palettes } from "../../lib/theme";
+import { isDone, statKeys, type GraphModel } from "../../shared/graphModel";
 import { nodeLevel } from "../../shared/progression";
-import { threadColors, type GraphEdge, type GraphNode, type Snapshot, type StatKey, type ThreadColor } from "../../shared/types";
+import { threadColors, type GraphEdge, type GraphNode, type Snapshot, type StatKey, type StatWeights, type ThreadColor } from "../../shared/types";
 import type { Act } from "./HomePage";
-import { isDone, statKeys, type GraphModel } from "./graphModel";
 import { InlineInput } from "./InlineInput";
 import Territories from "./territory/Territories";
 import { Tick } from "./Tick";
@@ -38,6 +38,23 @@ const collapsedStorageKey = "ashborn-collapsed";
 
 const fitOptions = { padding: 0.15, maxZoom: 1.1 };
 
+// On the phone the whole graph would fit too small to read. The view opens instead on its
+// top-left corner, so the first threads' headers show, as wide as fits but never smaller than
+// PHONE_MIN_ZOOM; the rest is a pan away.
+const PHONE_MIN_ZOOM = 0.75;
+const PHONE_MARGIN = 12;
+// Room at the top for the toolbar (+ New thread, Threads) that floats over the canvas
+const PHONE_TOOLBAR_HEIGHT = 48;
+
+function phoneViewport(shown: GraphNode[], placements: Record<string, Box>, paneWidth: number) {
+  const boxes = shown.flatMap((thread) => (placements[thread.id] ? [placements[thread.id]] : []));
+  const left = Math.min(...boxes.map((box) => box.position.x));
+  const top = Math.min(...boxes.map((box) => box.position.y));
+  const right = Math.max(...boxes.map((box) => box.position.x + box.size.width));
+  const zoom = Math.min(fitOptions.maxZoom, Math.max(PHONE_MIN_ZOOM, (paneWidth - 2 * PHONE_MARGIN) / (right - left)));
+  return { x: PHONE_MARGIN - left * zoom, y: PHONE_TOOLBAR_HEIGHT + PHONE_MARGIN - top * zoom, zoom };
+}
+
 const elk = new ELK();
 
 type Size = { width: number; height: number };
@@ -48,6 +65,7 @@ type CardData = {
   depth: number;
   xp: number;
   hasSteps: boolean;
+  shelved: boolean; // shelved itself, or inside a shelved box: shown greyed
   collapsed: boolean;
   adding: boolean;
   menuOpen: boolean;
@@ -77,7 +95,7 @@ export function ThreadGraph(props: ThreadGraphProps) {
 }
 
 function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
-  const { fitView } = useReactFlow();
+  const { fitView, setViewport } = useReactFlow();
   const [placements, setPlacements] = useState<Record<string, Box>>({});
   // Positions and sizes mid-drag or mid-resize, shown until the layout includes them
   const [moving, setMoving] = useState<Record<string, Partial<Box>>>({});
@@ -132,16 +150,17 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
   // React Flow knows the canvas size (before that, a fit is silently lost). Nodes carry their
   // sizes, so their bounds are known as soon as they are laid out.
   const paneMeasured = useStore((state) => state.width > 0 && state.height > 0);
+  const paneWidth = useStore((state) => state.width);
   useEffect(() => {
     if (!paneMeasured || fittedFor.current === topKey || Object.keys(placements).length === 0) return;
     // A frame later React Flow holds the laid-out nodes; a fit cancelled by a newer layout is
     // not counted as done, so the newer one fits instead
     const frame = window.requestAnimationFrame(() => {
       fittedFor.current = topKey;
-      void fitView(fitOptions).then(() => setShownYet(true));
+      void (phone ? setViewport(phoneViewport(shown, placements, paneWidth)) : fitView(fitOptions)).then(() => setShownYet(true));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [placements, paneMeasured, fitView]);
+  }, [placements, paneMeasured, fitView, setViewport, phone, paneWidth]);
 
   // Escape closes an open menu before the navbar's hide-to-tray handler sees it
   useEffect(() => {
@@ -194,6 +213,7 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
             depth,
             xp: model.totalXp.get(node.id) ?? 0,
             hasSteps: model.children.has(node.id),
+            shelved: model.shelved.has(node.id),
             collapsed: collapsed.has(node.id),
             adding: addingTo === node.id,
             menuOpen: menuFor === node.id,
@@ -392,7 +412,7 @@ function ThreadCard({ data }: NodeProps<Node<CardData>>) {
   const palette = paletteOf(node.color);
 
   return (
-    <div className="relative h-full w-full">
+    <div className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
       <Handles height={threadHeader.height} hidden={data.phone} />
 
       {/* A frosted sheet in the thread's colour, as the trail's chapters are */}
@@ -412,7 +432,7 @@ function ThreadCard({ data }: NodeProps<Node<CardData>>) {
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  void act("levelUp", node.id);
+                  void act("levelUp", node.id, crypto.randomUUID());
                 }}
                 title="Level up: log a session of progress"
                 className="nodrag shrink-0 rounded-md border border-red-300/30 bg-red-400/12 px-1.5 py-0.5 text-[10px] leading-none font-semibold text-red-200 hover:border-red-200/60 hover:bg-red-400/25 hover:text-red-100"
@@ -424,7 +444,10 @@ function ThreadCard({ data }: NodeProps<Node<CardData>>) {
           <BoxButtons data={data} />
         </div>
         <div>
-          <span className="text-[10px] tracking-[0.14em] text-white/45">Lv {level.level}</span>
+          <span className="text-[10px] tracking-[0.14em] text-white/45">
+            Lv {level.level}
+            {node.shelved ? <span className="ml-2 uppercase text-white/60">· Shelved</span> : null}
+          </span>
           <div className="mt-1 h-1.5 overflow-hidden rounded-full border border-white/8 bg-night/50">
             <div className={`h-full rounded-full ${palette.bar}`} style={{ width: `${level.percent}%` }} />
           </div>
@@ -446,9 +469,9 @@ function StepCard({ data, height }: NodeProps<Node<CardData>>) {
 
   return (
     <div
-      className={`relative h-full w-full rounded-xl border ${done ? "border-white/[0.06]" : "border-white/12"} ${
+      className={`group relative h-full w-full rounded-xl border ${done ? "border-white/[0.06]" : "border-white/12"} ${
         holdsSteps ? "bg-white/[0.025]" : done ? "bg-white/[0.015]" : "bg-white/[0.05]"
-      }`}
+      } ${data.shelved ? shelvedLook : ""}`}
     >
       <Handles height={stepRow.height} hidden={data.phone} />
       <div
@@ -471,6 +494,9 @@ function StepCard({ data, height }: NodeProps<Node<CardData>>) {
 }
 
 const nodeTypes = { thread: ThreadCard, step: StepCard };
+
+// A shelved box is greyed but works as usual, so it can be unshelved or ticked
+const shelvedLook = "opacity-45 saturate-0";
 
 // A box's title; double-click to rename (Enter or leaving the field saves, Escape cancels)
 function Title({ node, act, textSize, className }: { node: GraphNode; act: Act; textSize: string; className: string }) {
@@ -505,7 +531,7 @@ function Title({ node, act, textSize, className }: { node: GraphNode; act: Act; 
         event.stopPropagation();
         setEditing(true);
       }}
-      title="Double-click to rename"
+      title={node.title}
       className={`min-w-0 cursor-text ${textSize} ${className}`}
     >
       {node.title}
@@ -559,8 +585,36 @@ function BoxButtons({ data }: { data: CardData }) {
       >
         <PlusIcon />
       </button>
-      {depth === 0 ? <MenuButton data={data} /> : <DeleteButton data={data} />}
+      {depth === 0 ? (
+        <MenuButton data={data} />
+      ) : (
+        <>
+          <ShelveButton data={data} />
+          <DeleteButton data={data} />
+        </>
+      )}
     </div>
+  );
+}
+
+// Shelves or unshelves a step; shown on hover, and always on a shelved step so it can be undone
+function ShelveButton({ data }: { data: CardData }) {
+  const { node, act } = data;
+
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        void act("updateNode", node.id, { shelved: !node.shelved });
+      }}
+      title={node.shelved ? "Unshelve: pursue it again" : "Shelve: keep it, but not now"}
+      className={`nodrag ${boxButton} rounded-[5px] border border-white/20 text-[9px] leading-none text-white/60 hover:border-white/40 hover:text-white/90 ${
+        node.shelved ? "" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+      }`}
+    >
+      ❚❚
+    </button>
   );
 }
 
@@ -659,10 +713,12 @@ function AddRow({ data }: { data: CardData }) {
   );
 }
 
-// A thread's ⋯ button and its small menu: its colour, the stat it trains, layout, hide, delete
+// A thread's ⋯ button and its small menu: its colour, the stats it trains, layout, hide, delete
 function MenuButton({ data }: { data: CardData }) {
   const { node, menuOpen, act, onMenu } = data;
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The menu opens on whichever side of the card has more room in the canvas, so it is never cut off
+  const [side, setSide] = useState(Position.Bottom);
 
   return (
     <>
@@ -670,6 +726,9 @@ function MenuButton({ data }: { data: CardData }) {
         type="button"
         onClick={(event) => {
           event.stopPropagation();
+          const card = event.currentTarget.closest(".react-flow__node")?.getBoundingClientRect();
+          const canvas = event.currentTarget.closest(".react-flow")?.getBoundingClientRect();
+          if (card && canvas) setSide(canvas.bottom - card.bottom >= card.top - canvas.top ? Position.Bottom : Position.Top);
           setConfirmDelete(false);
           onMenu(!menuOpen);
         }}
@@ -679,23 +738,10 @@ function MenuButton({ data }: { data: CardData }) {
         ⋯
       </button>
 
-      <NodeToolbar isVisible={menuOpen} position={Position.Bottom} align="end" offset={6}>
+      <NodeToolbar isVisible={menuOpen} position={side} align="end" offset={6}>
         <div className="nodrag nopan w-60 space-y-2 rounded-xl border border-white/12 bg-night-card/95 p-3 text-xs text-white/75 shadow-xl">
           <ColorPicker node={node} act={act} />
-          <MenuRow label="Trains">
-            <select
-              value={node.stat ?? ""}
-              onChange={(event) => void act("updateNode", node.id, { stat: (event.target.value || null) as StatKey | null })}
-              className="rounded-md border border-white/10 bg-night/70 px-2 py-1 text-xs text-white/85"
-            >
-              <option value="">no stat</option>
-              {statKeys.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
-          </MenuRow>
+          <StatWeightsEditor node={node} act={act} />
 
           <button
             type="button"
@@ -711,6 +757,9 @@ function MenuButton({ data }: { data: CardData }) {
           <div className="flex justify-between gap-2 pt-1">
             <button type="button" onClick={() => void act("updateNode", node.id, { active: false })} className="rounded-md border border-white/10 px-2 py-1 hover:border-white/24">
               Hide thread
+            </button>
+            <button type="button" onClick={() => void act("updateNode", node.id, { shelved: !node.shelved })} className="rounded-md border border-white/10 px-2 py-1 hover:border-white/24">
+              {node.shelved ? "Unshelve" : "Shelve"}
             </button>
             <button
               type="button"
@@ -780,32 +829,23 @@ function PhoneMenu({ data }: { data: CardData }) {
               ) : null}
               {isThread ? (
                 <>
-                  <button type="button" onClick={choose(() => act("levelUp", node.id))} className={phoneItem}>
+                  <button type="button" onClick={choose(() => act("levelUp", node.id, crypto.randomUUID()))} className={phoneItem}>
                     <span className="text-[10px] font-semibold text-red-200">++</span> Level up
                   </button>
                   <div className={phoneItem}>
                     <ColorPicker node={node} act={act} />
                   </div>
-                  <div className={`${phoneItem} justify-between`}>
-                    <span>Trains</span>
-                    <select
-                      value={node.stat ?? ""}
-                      onChange={(event) => void act("updateNode", node.id, { stat: (event.target.value || null) as StatKey | null })}
-                      className="rounded-md border border-white/10 bg-night/70 px-2 py-1 text-sm text-white/85"
-                    >
-                      <option value="">no stat</option>
-                      {statKeys.map((key) => (
-                        <option key={key} value={key}>
-                          {key}
-                        </option>
-                      ))}
-                    </select>
+                  <div className={phoneItem}>
+                    <StatWeightsEditor node={node} act={act} />
                   </div>
                   <button type="button" onClick={choose(() => act("updateNode", node.id, { active: false }))} className={phoneItem}>
                     Hide thread
                   </button>
                 </>
               ) : null}
+              <button type="button" onClick={choose(() => act("updateNode", node.id, { shelved: !node.shelved }))} className={phoneItem}>
+                <span className="text-[9px] text-white/60">❚❚</span> {node.shelved ? "Unshelve: pursue it again" : "Shelve: keep it, but not now"}
+              </button>
               <button
                 type="button"
                 onClick={() => (confirmDelete ? void act("deleteNode", node.id) : setConfirmDelete(true))}
@@ -867,13 +907,70 @@ function ColorPicker({ node, act }: { node: GraphNode; act: Act }) {
   );
 }
 
-function MenuRow({ label, children }: { label: string; children: ReactNode }) {
+// The weight of each stat the thread trains: each XP in the thread adds weight × XP to the stat.
+// A weight is saved when its field loses focus or on Enter; empty is 0. Every save sends the map
+// built from all six fields (the API sends changes to one node in order). The fields take the
+// stored weights back only once no save is pending, and never over an edit not yet saved.
+function StatWeightsEditor({ node, act }: { node: GraphNode; act: Act }) {
+  const [drafts, setDrafts] = useState(() => weightDrafts(node.statWeights));
+  const unsaved = useRef(new Set<StatKey>());
+  const inFlight = useRef(0);
+  const [settled, setSettled] = useState(0);
+  useEffect(() => {
+    if (inFlight.current > 0) return;
+    const stored = weightDrafts(node.statWeights);
+    setDrafts((current) => Object.fromEntries(statKeys.map((key) => [key, unsaved.current.has(key) ? current[key] : stored[key]])) as Record<StatKey, string>);
+  }, [node.statWeights, settled]);
+
+  const save = () => {
+    const weights = Object.fromEntries(statKeys.map((key) => [key, parseWeight(drafts[key]) ?? node.statWeights[key] ?? 0]));
+    unsaved.current.clear();
+    if (statKeys.every((key) => weights[key] === (node.statWeights[key] ?? 0))) return setDrafts(weightDrafts(node.statWeights));
+    inFlight.current += 1;
+    void act("updateNode", node.id, { statWeights: weights }).finally(() => {
+      inFlight.current -= 1;
+      setSettled((count) => count + 1);
+    });
+  };
+
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-white/45">{label}</span>
-      {children}
+    <div className="w-full">
+      <span className="text-white/45">Trains (XP × weight)</span>
+      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
+        {statKeys.map((key) => (
+          <label key={key} className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] tracking-[0.12em] text-white/55">{key}</span>
+            <input
+              type="number"
+              min={0}
+              step="any"
+              inputMode="decimal"
+              placeholder="0"
+              aria-label={`${key} weight`}
+              value={drafts[key]}
+              onChange={(event) => {
+                unsaved.current.add(key);
+                setDrafts({ ...drafts, [key]: event.target.value });
+              }}
+              onBlur={save}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              className="w-12 rounded-md border border-white/10 bg-night/70 px-1.5 py-0.5 text-right text-xs text-white/85 [appearance:textfield] focus:border-white/30 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+          </label>
+        ))}
+      </div>
     </div>
   );
+}
+
+const weightDrafts = (weights: StatWeights) => Object.fromEntries(statKeys.map((key) => [key, weights[key] ? String(weights[key]) : ""])) as Record<StatKey, string>;
+
+// A field's weight, or undefined when it holds no valid one; empty is 0
+function parseWeight(draft: string): number | undefined {
+  const value = draft.trim() === "" ? 0 : Number(draft);
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 // Lays out every rendered level. Inside a box, steps the user has placed keep their place and

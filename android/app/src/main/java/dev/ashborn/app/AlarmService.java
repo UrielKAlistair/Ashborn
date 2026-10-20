@@ -48,6 +48,8 @@ public class AlarmService extends Service {
         }
 
         startForeground(NOTIFICATION_ID, notification(alarm), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        // An alarm that fires while another rings takes its place
+        stopSound();
         startSound();
         vibrator = getSystemService(Vibrator.class);
         vibrator.vibrate(VibrationEffect.createWaveform(new long[] {0, 800, 600}, 0));
@@ -92,12 +94,16 @@ public class AlarmService extends Service {
         }
     }
 
-    private void stopRinging() {
+    private void stopSound() {
         if (player != null) {
             player.release();
             player = null;
         }
         if (vibrator != null) vibrator.cancel();
+    }
+
+    private void stopRinging() {
+        stopSound();
         try {
             AlarmScheduler.setRinging(this, null);
         } catch (JSONException e) {
@@ -109,8 +115,7 @@ public class AlarmService extends Service {
 
     @Override
     public void onDestroy() {
-        if (player != null) player.release();
-        if (vibrator != null) vibrator.cancel();
+        stopSound();
         super.onDestroy();
     }
 

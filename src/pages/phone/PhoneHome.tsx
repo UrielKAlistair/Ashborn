@@ -1,36 +1,37 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { buildGraphModel } from "../../shared/graphModel";
 import type { Snapshot } from "../../shared/types";
-import { buildGraphModel } from "../home/graphModel";
+import { CharacterPanel } from "../home/CharacterPanel";
 import type { Act } from "../home/HomePage";
 import { ThreadGraph } from "../home/ThreadGraph";
 import { TodayPanel } from "../home/TodayPanel";
 
-// The phone's home: what to do today first; the graph one tap away, to look at more than to edit
-export function PhoneHome({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
+export type PhoneHomeScreen = "todo" | "graph" | "character";
+
+// The phone's Home section, one screen at a time: what to do today, the graph (to look at more
+// than to edit), and the character
+export function PhoneHome({ snapshot, act, screen }: { snapshot: Snapshot; act: Act; screen: PhoneHomeScreen }) {
   const model = useMemo(() => buildGraphModel(snapshot), [snapshot]);
-  const [view, setView] = useState<"today" | "graph">("today");
+
+  if (screen === "graph") {
+    return (
+      <section className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-3xl border border-white/10 bg-night-panel">
+        <ThreadGraph snapshot={snapshot} model={model} act={act} phone />
+      </section>
+    );
+  }
+
+  if (screen === "character") {
+    return (
+      <div className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-y-auto">
+        <CharacterPanel model={model} card />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-      <div className="flex self-center rounded-full border border-white/10 bg-night-panel p-1 text-[11px] uppercase tracking-[0.2em]">
-        {(["today", "graph"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setView(option)}
-            className={`rounded-full px-5 py-1.5 ${view === option ? "bg-white/10 text-white" : "text-white/45"}`}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-      {view === "today" ? (
-        <TodayPanel snapshot={snapshot} model={model} act={act} />
-      ) : (
-        <section className="relative min-h-0 flex-1 overflow-hidden rounded-3xl border border-white/10 bg-night-panel">
-          <ThreadGraph snapshot={snapshot} model={model} act={act} phone />
-        </section>
-      )}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <TodayPanel snapshot={snapshot} model={model} act={act} />
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import { toISODate, weekdayOf } from "./dates.js";
+import { mealReminders } from "./kitchen.js";
 import type { AlarmKind, ISODate, Routine, Snapshot } from "./types.js";
 
-// One ring of an alarm: a timed routine on one of its days, or a deadline on its due day
+// One ring of an alarm: a timed routine on one of its days, a deadline on its due day, or a
+// reminder of a recipe for a planned meal
 export type AlarmInstance = {
   key: string; // stable per source and day, so rescheduling replaces rather than duplicates
   at: Date;
@@ -16,7 +18,8 @@ export function byTime(a: Routine, b: Routine) {
 }
 
 // The alarms due from `from` over the next `days` days, soonest first: standalone alarms that are
-// on, timed routines, and deadlines with an alarm. A routine already ticked that day does not ring.
+// on, timed routines, deadlines with an alarm, and meal reminders. A routine already ticked that
+// day does not ring.
 export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): AlarmInstance[] {
   const alarms: AlarmInstance[] = [];
   const checked = new Set(snapshot.routineChecks.map((check) => `${check.routineId}@${check.date}`));
@@ -43,6 +46,8 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
     if (!deadline.alarmTime || deadline.dueDate > lastDate) continue;
     alarms.push({ key: `deadline:${deadline.id}`, at: atTime(deadline.dueDate, deadline.alarmTime), title: `Due today: ${deadline.title}`, kind: "plain" });
   }
+
+  for (const reminder of mealReminders(snapshot.kitchen, from, days)) alarms.push({ ...reminder, kind: "plain" });
 
   return alarms.filter((alarm) => alarm.at > from).sort((a, b) => a.at.getTime() - b.at.getTime());
 }
