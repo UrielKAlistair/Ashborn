@@ -87,7 +87,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         nodes().select().order("created_at"),
         db.from("graph_edges").select("from_id, to_id"),
         db.from("routines").select().order("created_at"),
-        db.from("routine_checks").select("routine_id, date").eq("date", today()),
+        db.from("routine_checks").select("routine_id, date").eq("date", today()).eq("checked", true),
         db.from("deadlines").select().is("done_at", null).order("due_date"),
         db.from("alarms").select().or(`at.is.null,at.gt.${new Date().toISOString()}`).order("created_at"),
         readProgressToday(db),
@@ -180,16 +180,14 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { removedRoutineIds: [id] };
     },
 
-    // Absolute rather than a toggle, so sending it twice, or after another device's tick, is harmless
+    // Absolute rather than a toggle, and stamped: the tick made later wins, whichever device
+    // sends last. Returns what the database kept.
     async setRoutineCheck(routineId, date, checked) {
-      if (checked) {
-        const row = { routine_id: routineId, date };
-        deletedIfMissing(await db.from("routine_checks").upsert(row, { onConflict: "routine_id,date", ignoreDuplicates: true }), "This routine");
-      } else {
-        must(await db.from("routine_checks").delete().eq("routine_id", routineId).eq("date", date));
-      }
+      const row = { routine_id: routineId, date, checked, changed_at: { checked: clock().toISOString() } };
+      const result = await db.from("routine_checks").upsert(row, { onConflict: "routine_id,date" }).select("checked").single();
+      deletedIfMissing(result, "This routine");
 
-      return { routineCheck: { routineId, date, checked } };
+      return { routineCheck: { routineId, date, checked: (result.data as { checked: boolean }).checked } };
     },
 
     async createDeadline({ id, title, dueDate, alarmTime }) {

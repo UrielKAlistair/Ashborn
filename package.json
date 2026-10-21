@@ -17,8 +17,8 @@
     "agent:build": "esbuild mcp/server.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=dist-mcp/server.mjs",
     "agent:login": "npm run agent:build && node dist-mcp/server.mjs login",
     "agent": "npm run -s agent:build && node dist-mcp/server.mjs",
-    "android:build": "vite build && cap sync android && cd android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk-21} ./gradlew assembleDebug -q",
-    "android:install": "npm run android:build && $HOME/Android/Sdk/platform-tools/adb install -r android/app/build/outputs/apk/debug/app-debug.apk"
+    "android:build": "vite build && cap sync android && cd android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk-21} ./gradlew assembleRelease -q",
+    "android:install": "npm run android:build && $HOME/Android/Sdk/platform-tools/adb install -r android/app/build/outputs/apk/release/app-release.apk"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

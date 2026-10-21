@@ -291,6 +291,25 @@ test("home graph", async () => {
     await page.getByRole("button", { name: "Home" }).click();
   });
 
+  await test.step("a routine's or deadline's × warns first, then deletes", async () => {
+    const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    await db.from("routines").insert({ title: "Stretch", weekdays });
+    await db.from("deadlines").insert({ title: "File taxes", due_date: new Date().toLocaleDateString("en-CA") });
+    for (const [title, warning, table] of [
+      ["Stretch", "Delete this routine and its ticks?", "routines"],
+      ["File taxes", "Delete this deadline?", "deadlines"],
+    ]) {
+      const row = page.locator(".group", { hasText: title });
+      await expect(row).toBeVisible({ timeout: 10_000 });
+      await row.hover();
+      await row.getByTitle("Delete").click();
+      await row.getByRole("button", { name: warning }).click();
+      await expect(page.getByText(title)).toHaveCount(0);
+      const { data } = await db.from(table).select("id").eq("title", title);
+      expect(data).toEqual([]);
+    }
+  });
+
   await test.step("a phone-sized window opens on today's list; Home's menu holds the graph and the character", async () => {
     await app.evaluate(({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0];

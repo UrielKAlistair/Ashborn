@@ -28,10 +28,10 @@ Only open work is listed here. What is built, and why it is built that way, is i
       key, the agent's saved session (`~/.config/ashborn/agent-session.json`), and the sign-in a
       hosted phone connector would need. Before the connector below.
 
-## Release
+## Phone release build
 
-- [ ] A signed release build of the Android app before anyone else installs it: the current one
-      is a debug build, so anyone with ADB on the unlocked phone can read its session.
+- [ ] Make the release key and install the release build once (README, "Android app"): let the
+      phone sync, uninstall the debug app, then `npm run android:install`.
 
 ## Agent access
 

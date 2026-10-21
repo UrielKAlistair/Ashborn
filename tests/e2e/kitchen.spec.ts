@@ -76,7 +76,7 @@ test("kitchen", async () => {
     await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("button", { name: "Kitchen", exact: true })).toBeVisible({ timeout: 15_000 });
-    await openScreen("Kitchen", "Kitchen");
+    await openScreen("Kitchen", "Planning");
     await expect(page.getByRole("heading", { name: "Meal plan" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Stocks" })).toBeVisible();
   });
@@ -131,7 +131,7 @@ test("kitchen", async () => {
   });
 
   await test.step("a planned meal, ticked, takes its recipe's amounts off the stocks", async () => {
-    await openScreen("Kitchen", "Kitchen");
+    await openScreen("Kitchen", "Planning");
     await meal("lunch").getByRole("button", { name: "Edit" }).click();
     await page.getByLabel("lunch description").fill("Rice with butter beans");
     await page.getByRole("button", { name: "Rice and beans", pressed: false }).click();
@@ -150,7 +150,7 @@ test("kitchen", async () => {
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("300 g")).toBeVisible();
 
-    await openScreen("Kitchen", "Kitchen");
+    await openScreen("Kitchen", "Planning");
     await meal("lunch").getByTitle("Mark not done").click();
     await expect(amountLabel("Rice")).toHaveText("5 kg / 2 kg");
     await expect(amountLabel("Butter beans")).toHaveText("1 kg / 1 kg");

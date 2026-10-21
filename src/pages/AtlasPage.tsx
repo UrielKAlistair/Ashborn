@@ -1,46 +1,29 @@
-import { CleanRoomPage } from "./atlas/status_ailments/CleanRoom";
 import { useState } from "react";
 import { AtlasSidebarSection } from "../components/atlas/AtlasSidebar";
-import { FpPage } from "./atlas/attributes/FP";
-import { HpPage } from "./atlas/attributes/HP";
-import { PrimaryStatsPage } from "./atlas/attributes/PrimaryStats";
-import { ResolutePage } from "./atlas/status_ailments/Resolute";
+import { CognitiveOffloadingPage } from "./atlas/Design/CognitveOffloading";
+import { ProgressPage } from "./atlas/Design/Progress";
 
 type AtlasPageProps = {
   currentPath: string;
   onNavigate: (path: string) => void;
 };
 
-const attributeEntries = [
-  { label: "Primary Stats", path: "/atlas/primary-stats" },
-  { label: "HP", path: "/atlas/hp" },
-  { label: "FP", path: "/atlas/fp" },
-];
-
-const statusAilmentEntries = [
-  { label: "Clean room", path: "/atlas/clean-room" },
-  { label: "Resolute", path: "/atlas/resolute" },
+const designEntries = [
+  { label: "Cognitive Offloading", path: "/atlas/cognitive-offloading" },
+  { label: "Progress", path: "/atlas/progress" },
 ];
 
 export function AtlasPage({
   currentPath,
   onNavigate,
 }: AtlasPageProps) {
-  const [attributesOpen, setAttributesOpen] = useState(false);
-  const [statusAilmentsOpen, setStatusAilmentsOpen] = useState(false);
+  const [designOpen, setDesignOpen] = useState(false);
 
   const renderAtlasEntry = () => {
-    if (currentPath === "/atlas/primary-stats") {
-      return <PrimaryStatsPage eyebrow="Attributes" />;
+    if (currentPath === "/atlas/cognitive-offloading") {
+      return <CognitiveOffloadingPage eyebrow="Design" />;
     }
-    if (currentPath === "/atlas/hp") return <HpPage eyebrow="Attributes" />;
-    if (currentPath === "/atlas/fp") return <FpPage eyebrow="Attributes" />;
-    if (currentPath === "/atlas/clean-room") {
-      return <CleanRoomPage eyebrow="Status Ailments" />;
-    }
-    if (currentPath === "/atlas/resolute") {
-      return <ResolutePage eyebrow="Status Ailments" />;
-    }
+    if (currentPath === "/atlas/progress") return <ProgressPage eyebrow="Design" />;
   };
 
   return (
@@ -49,20 +32,11 @@ export function AtlasPage({
         <div className="panel-scroll min-h-0 flex-1 overflow-y-auto px-5 py-6">
 
           <AtlasSidebarSection
-            entries={attributeEntries}
-            isOpen={attributesOpen}
-            label="Attributes"
+            entries={designEntries}
+            isOpen={designOpen}
+            label="Design"
             onNavigate={onNavigate}
-            onToggle={() => setAttributesOpen((open) => !open)}
-            selectedPath={currentPath}
-          />
-
-          <AtlasSidebarSection
-            entries={statusAilmentEntries}
-            isOpen={statusAilmentsOpen}
-            label="Status Ailments"
-            onNavigate={onNavigate}
-            onToggle={() => setStatusAilmentsOpen((open) => !open)}
+            onToggle={() => setDesignOpen((open) => !open)}
             selectedPath={currentPath}
           />
         </div>

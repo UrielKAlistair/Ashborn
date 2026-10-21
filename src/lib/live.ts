@@ -71,10 +71,11 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
       ),
     ),
     on("routine_checks", (change) => {
-      const row = (change.eventType === "DELETE" ? change.old : change.new) as { routine_id: string; date: string };
+      // A routine deleted takes its ticks with it; otherwise the row says whether it is ticked
+      const row = (change.eventType === "DELETE" ? change.old : change.new) as { routine_id: string; date: string; checked?: boolean };
       // The app holds only today's checks
       if (row.date === today()) {
-        emit({ routineCheck: { routineId: row.routine_id, date: row.date, checked: change.eventType !== "DELETE" } });
+        emit({ routineCheck: { routineId: row.routine_id, date: row.date, checked: change.eventType !== "DELETE" && row.checked !== false } });
       }
     }),
     on("deadlines", (change) => {

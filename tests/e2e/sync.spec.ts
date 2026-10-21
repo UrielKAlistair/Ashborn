@@ -59,8 +59,9 @@ async function goOffline() {
   await page.context().setOffline(true);
 }
 
-// Back online: the queue is sent, then the data reloaded
+// Back online, once the change made offline is queued: the queue is sent, then the data reloaded
 async function goOnline() {
+  await expect(page.getByText(/will sync when you're back online/)).toBeVisible();
   await page.context().setOffline(false);
   await expect(page.getByText(/will sync/)).toHaveCount(0, { timeout: 15_000 });
   await expect(page.getByText(/^Offline/)).toHaveCount(0, { timeout: 15_000 });
@@ -150,7 +151,7 @@ test("two devices", async () => {
     await page.getByText(/Not saved from offline/).click();
   });
 
-  await test.step("a routine checked on both devices is checked once", async () => {
+  await test.step("a routine checked on both devices is checked once; the tick made later wins", async () => {
     const routine = crypto.randomUUID();
     await deviceB.createRoutine({ id: routine, title: "Sync routine", cue: "", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], time: null, alarm: "none" });
     const row = page.getByText("Sync routine").locator("xpath=ancestor::*[.//button[@title='Mark done']][1]");
@@ -159,8 +160,15 @@ test("two devices", async () => {
     await row.getByTitle("Mark done").click();
     await deviceB.setRoutineCheck(routine, today(), true);
     await goOnline();
-    const { data } = await db.from("routine_checks").select("routine_id").eq("routine_id", routine).eq("date", today());
-    expect(data).toHaveLength(1);
+    const { data } = await db.from("routine_checks").select("checked").eq("routine_id", routine).eq("date", today());
+    expect(data).toEqual([{ checked: true }]);
+
+    // An untick made an hour ago, sent now, loses to the tick made since; one made now wins
+    await createApi(db, () => new Date(Date.now() - HOUR_MS)).setRoutineCheck(routine, today(), false);
+    expect((await db.from("routine_checks").select("checked").eq("routine_id", routine).single()).data).toEqual({ checked: true });
+    await deviceB.setRoutineCheck(routine, today(), false);
+    expect((await db.from("routine_checks").select("checked").eq("routine_id", routine).single()).data).toEqual({ checked: false });
+    await expect(row.getByTitle("Mark done")).toBeVisible({ timeout: 10_000 });
   });
 
   await test.step("level-ups add up, and a replayed one counts once", async () => {
@@ -176,7 +184,7 @@ test("two devices", async () => {
   await test.step("stock: equal readings on both devices give that amount, not twice it", async () => {
     const rice = crypto.randomUUID();
     await deviceB.createStockItem({ id: rice, name: "Rice", unit: "kg", target: 2000, readAt: null });
-    await openScreen("Kitchen", "Kitchen");
+    await openScreen("Kitchen", "Planning");
     await expect(amountLabel("Rice")).toHaveText("0 kg / 2 kg", { timeout: 10_000 });
     await goOffline();
     await setStock("Rice", "4.9");

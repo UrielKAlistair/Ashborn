@@ -32,7 +32,7 @@ function createTrayImage() {
     throw new Error(`Tray icon not found at ${trayIconPath}`);
   }
 
-  return nativeImage.createFromPath(trayIconPath).resize({ width: 16, height: 16 });
+  return nativeImage.createFromPath(trayIconPath);
 }
 
 function showMainWindow() {

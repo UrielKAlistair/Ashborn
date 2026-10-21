@@ -52,7 +52,7 @@ const kitchen: Section = {
   label: "Kitchen",
   icon: KitchenIcon,
   phone: [{ label: "Meal plan", path: "/kitchen", icon: MealPlanIcon }, { label: "Stocks", path: "/kitchen/stocks", icon: StocksIcon }, recipes],
-  desktop: [{ label: "Kitchen", path: "/kitchen", icon: MealPlanIcon }, { ...recipes, label: "Cookbook" }],
+  desktop: [{ label: "Planning", path: "/kitchen", icon: MealPlanIcon }, { ...recipes, label: "Cookbook" }],
 };
 
 const alarms = single("Alarms", "/alarms", AlarmsIcon);

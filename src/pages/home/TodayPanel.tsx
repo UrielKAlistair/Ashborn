@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { threadOf, type GraphModel } from "../../shared/graphModel";
@@ -86,7 +86,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                   </p>
                 ) : null}
               </div>
-              <DeleteButton onClick={() => void act("deleteRoutine", routine.id)} />
+              <DeleteButton warning="Delete this routine and its ticks?" onDelete={() => void act("deleteRoutine", routine.id)} />
             </div>
           ))
         )}
@@ -108,7 +108,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
                 </div>
-                <DeleteButton onClick={() => void act("deleteDeadline", deadline.id)} />
+                <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
             );
           })
@@ -234,9 +234,28 @@ function AddButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function DeleteButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} title="Delete" className="shrink-0 text-xs text-white/0 group-hover:text-white/40 hover:!text-red-300">
+// A ×, shown on hover (always on a touch screen); the first click shows `warning`, a second within
+// a few seconds deletes
+function DeleteButton({ warning, onDelete }: { warning: string; onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const timeout = window.setTimeout(() => setConfirming(false), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [confirming]);
+
+  return confirming ? (
+    <button type="button" onClick={onDelete} className="shrink-0 rounded-md border border-red-300/60 bg-red-500/25 px-2 py-0.5 text-[10px] leading-snug text-red-100">
+      {warning}
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      title="Delete"
+      className="shrink-0 text-xs text-white/0 group-hover:text-white/40 hover:!text-red-300 pointer-coarse:text-white/40"
+    >
       ×
     </button>
   );

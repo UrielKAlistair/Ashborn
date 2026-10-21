@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+def releaseKeyProperties = ['ASHBORN_KEYSTORE', 'ASHBORN_KEYSTORE_PASSWORD', 'ASHBORN_KEY_ALIAS', 'ASHBORN_KEY_PASSWORD']
+ext.releaseKeyGiven = releaseKeyProperties.every { project.hasProperty(it) }
+
+// Building a release without the key would give an unsigned APK that cannot be installed
+gradle.taskGraph.whenReady { graph ->
+    if (!releaseKeyGiven && graph.allTasks.any { it.name.contains('Release') }) {
+        def missing = releaseKeyProperties.findAll { !project.hasProperty(it) }
+        throw new GradleException("Set ${missing.join(', ')} in ~/.gradle/gradle.properties to sign the release build (README, Android app).")
+    }
+}
+
 android {
     namespace = "dev.ashborn.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +27,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // The release key stays outside the repository: its path and passwords come from
+    // ~/.gradle/gradle.properties (ASHBORN_KEYSTORE, ASHBORN_KEYSTORE_PASSWORD, ASHBORN_KEY_ALIAS,
+    // ASHBORN_KEY_PASSWORD)
+    signingConfigs {
+        release {
+            if (releaseKeyGiven) {
+                storeFile file(ASHBORN_KEYSTORE.replaceFirst('^~', System.getProperty('user.home')))
+                storePassword ASHBORN_KEYSTORE_PASSWORD
+                keyAlias ASHBORN_KEY_ALIAS
+                keyPassword ASHBORN_KEY_PASSWORD
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
