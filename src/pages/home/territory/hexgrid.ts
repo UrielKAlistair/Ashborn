@@ -1,4 +1,4 @@
-// A flat-topped hexagonal grid in "odd columns shifted down" layout: the fabric behind the thread
+// A flat-topped hexagonal grid in "odd columns shifted down" layout: the fabric behind the quest
 // graph. Cells are drawn slightly small, leaving hairline gaps.
 
 export const hexCellScale = 0.9;

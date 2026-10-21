@@ -98,14 +98,14 @@ async function openScreen(section: string, screen: string) {
 }
 
 test("two devices", async () => {
-  const thread = crypto.randomUUID();
+  const quest = crypto.randomUUID();
   const alpha = crypto.randomUUID();
   const beta = crypto.randomUUID();
   const gamma = crypto.randomUUID();
 
   await test.step("sign in; device B's steps appear on A", async () => {
-    await deviceB.createNode("Sync", null, thread);
-    for (const [id, title] of [[alpha, "Alpha"], [beta, "Beta"], [gamma, "Gamma"]]) await deviceB.createNode(title, thread, id);
+    await deviceB.createNode("Sync", null, quest);
+    for (const [id, title] of [[alpha, "Alpha"], [beta, "Beta"], [gamma, "Gamma"]]) await deviceB.createNode(title, quest, id);
     await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
     await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -172,12 +172,12 @@ test("two devices", async () => {
   });
 
   await test.step("level-ups add up, and a replayed one counts once", async () => {
-    const before = (await db.from("progress_log").select("id").eq("node_id", thread)).data!.length;
+    const before = (await db.from("progress_log").select("id").eq("node_id", quest)).data!.length;
     const replayed = crypto.randomUUID();
-    await deviceB.levelUp(thread, replayed);
-    await deviceB.levelUp(thread, replayed);
-    await deviceB.levelUp(thread, crypto.randomUUID());
-    const after = (await db.from("progress_log").select("id").eq("node_id", thread)).data!.length;
+    await deviceB.levelUp(quest, replayed);
+    await deviceB.levelUp(quest, replayed);
+    await deviceB.levelUp(quest, crypto.randomUUID());
+    const after = (await db.from("progress_log").select("id").eq("node_id", quest)).data!.length;
     expect(after - before).toBe(2);
   });
 

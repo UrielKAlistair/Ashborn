@@ -20,7 +20,7 @@ import {
   type Snapshot,
   type StatWeights,
   type StockUnit,
-  type ThreadColor,
+  type QuestColor,
   type Weekday,
 } from "../shared/types";
 
@@ -39,7 +39,7 @@ export type NodeRow = {
   parent_id: string | null;
   title: string;
   stat_weights: StatWeights;
-  color: ThreadColor | null;
+  color: QuestColor | null;
   active: boolean;
   created_at: string;
   completed_at: string | null;
@@ -81,7 +81,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
 
   const readNode = async (id: string) => toNode(must(await nodes().select().eq("id", id).single()));
 
-  return inRowOrder({
+  return inRowOrder(db, {
     async getSnapshot() {
       const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, progressToday, kitchen] = await Promise.all([
         nodes().select().order("created_at"),
@@ -303,21 +303,23 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
   });
 }
 
-// The rows each change touches. Every Kitchen change shares one key, since each returns the
-// whole Kitchen and an earlier reply arriving late would put back older data.
+// The rows each change touches or needs to exist: a step waits for its box, a link for its two
+// ends, a tick for its routine, since on screen they may still be on their way. Every Kitchen
+// change shares one key, since each returns the whole Kitchen and an earlier reply arriving late
+// would put back older data.
 const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string[] } = {
-  createNode: (_title, _parentId, id) => (id ? [`node:${id}`] : []),
+  createNode: (_title, parentId, id) => [...(id ? [`node:${id}`] : []), ...(parentId ? [`node:${parentId}`] : [])],
   updateNode: (id) => [`node:${id}`],
   deleteNode: (id) => [`node:${id}`],
-  moveNode: (id) => [`node:${id}`],
+  moveNode: (id, parentId) => [`node:${id}`, ...(parentId ? [`node:${parentId}`] : [])],
   placeNodes: (places) => places.map((place) => `node:${place.id}`),
   resetLayout: (ids) => ids.map((id) => `node:${id}`),
-  addEdge: (edge) => [`edge:${edge.from}->${edge.to}`],
-  removeEdge: (edge) => [`edge:${edge.from}->${edge.to}`],
+  addEdge: (edge) => [`edge:${edge.from}->${edge.to}`, `node:${edge.from}`, `node:${edge.to}`],
+  removeEdge: (edge) => [`edge:${edge.from}->${edge.to}`, `node:${edge.from}`, `node:${edge.to}`],
   levelUp: (nodeId) => [`node:${nodeId}`],
   createRoutine: (routine) => [`routine:${routine.id}`],
   deleteRoutine: (id) => [`routine:${id}`],
-  setRoutineCheck: (routineId, date) => [`routine:${routineId}@${date}`],
+  setRoutineCheck: (routineId, date) => [`routine:${routineId}@${date}`, `routine:${routineId}`],
   createDeadline: (deadline) => [`deadline:${deadline.id}`],
   completeDeadline: (id) => [`deadline:${id}`],
   deleteDeadline: (id) => [`deadline:${id}`],
@@ -338,9 +340,13 @@ const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string
 
 // Sends changes to the same row one after another, in the order they were made, so a later change
 // can never be overwritten by an earlier one that reached the database last. Changes to different
-// rows still go at once.
-function inRowOrder(api: AshbornApi): AshbornApi {
-  const queue = keyedQueue();
+// rows still go at once. Every api over one client shares the order, whatever its clock (the app
+// makes one per change, to stamp it with when it was made).
+const rowQueues = new WeakMap<SupabaseClient, ReturnType<typeof keyedQueue>>();
+
+function inRowOrder(db: SupabaseClient, api: AshbornApi): AshbornApi {
+  const queue = rowQueues.get(db) ?? keyedQueue();
+  rowQueues.set(db, queue);
   const wrapped = { ...api } as Record<string, unknown>;
   for (const name of Object.keys(rowKeys) as Mutation[]) {
     const method = api[name] as (...args: unknown[]) => Promise<Delta>;
@@ -513,48 +519,61 @@ function countOf(result: Result & { count: number | null }) {
   return result.count ?? 0;
 }
 
-// Merges a change into the data on screen. Lists the change doesn't touch keep their identity.
+// Merges a change into the data on screen. Whatever the change leaves as it was keeps its
+// identity, down to the rows, and a change that alters nothing (the echo of our own) returns the
+// snapshot itself, so nothing on screen renders again.
 export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
   const removedNodes = new Set(delta.removedNodeIds);
   const removedEdges = new Set(delta.removedEdges?.map(edgeKey));
+  snapshot.edges.forEach((edge) => (removedNodes.has(edge.from) || removedNodes.has(edge.to)) && removedEdges.add(edgeKey(edge)));
   const check = delta.routineCheck;
+  const wasChecked = check && snapshot.routineChecks.some((c) => c.routineId === check.routineId && c.date === check.date);
 
-  return {
+  const next: Snapshot = {
     nodes: merge(snapshot.nodes, (node) => node.id, delta.nodes, removedNodes),
-    edges:
-      removedNodes.size > 0 || removedEdges.size > 0 || delta.edges
-        ? merge(
-            snapshot.edges.filter((edge) => !removedNodes.has(edge.from) && !removedNodes.has(edge.to)),
-            edgeKey,
-            delta.edges,
-            removedEdges,
-          )
-        : snapshot.edges,
+    edges: merge(snapshot.edges, edgeKey, delta.edges, removedEdges),
     routines: merge(snapshot.routines, (routine) => routine.id, delta.routines, new Set(delta.removedRoutineIds)),
-    routineChecks: check
-      ? [
-          ...snapshot.routineChecks.filter((c) => c.routineId !== check.routineId || c.date !== check.date),
-          ...(check.checked ? [{ routineId: check.routineId, date: check.date }] : []),
-        ]
-      : snapshot.routineChecks,
+    routineChecks:
+      check && check.checked !== wasChecked
+        ? [
+            ...snapshot.routineChecks.filter((c) => c.routineId !== check.routineId || c.date !== check.date),
+            ...(check.checked ? [{ routineId: check.routineId, date: check.date }] : []),
+          ]
+        : snapshot.routineChecks,
     deadlines: merge(snapshot.deadlines, (deadline) => deadline.id, delta.deadlines, new Set(delta.removedDeadlineIds)),
     alarms: merge(snapshot.alarms, (alarm) => alarm.id, delta.alarms, new Set(delta.removedAlarmIds)),
-    progressToday: delta.progressToday ?? snapshot.progressToday,
-    kitchen: delta.kitchen ?? snapshot.kitchen,
+    progressToday: delta.progressToday && !same(delta.progressToday, snapshot.progressToday) ? delta.progressToday : snapshot.progressToday,
+    kitchen: delta.kitchen && !same(delta.kitchen, snapshot.kitchen) ? delta.kitchen : snapshot.kitchen,
   };
+
+  return (Object.keys(next) as (keyof Snapshot)[]).every((key) => next[key] === snapshot[key]) ? snapshot : next;
 }
 
 function edgeKey(edge: { from: string; to: string }) {
   return `${edge.from}->${edge.to}`;
 }
 
-// Upserts keep their place if present and append if new; removals drop by key
+// Rows are built by the to* readers (or spread from one), so equal rows list their keys in the
+// same order and compare equal as JSON
+function same(a: unknown, b: unknown) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// Upserts keep their place if present and append if new; removals drop by key. An upsert equal to
+// the row it replaces keeps the row, and a merge that changes nothing returns `rows` itself.
 function merge<T>(rows: T[], keyOf: (row: T) => string, upserts: T[] = [], removed = new Set<string>()): T[] {
   if (upserts.length === 0 && removed.size === 0) return rows;
 
   const byKey = new Map(rows.map((row) => [keyOf(row), row]));
-  removed.forEach((key) => byKey.delete(key));
-  upserts.forEach((row) => byKey.set(keyOf(row), row));
+  let changed = false;
+  removed.forEach((key) => (changed = byKey.delete(key) || changed));
+  upserts.forEach((row) => {
+    const key = keyOf(row);
+    const before = byKey.get(key);
+    if (before !== undefined && same(before, row)) return;
+    byKey.set(key, row);
+    changed = true;
+  });
 
-  return [...byKey.values()];
+  return changed ? [...byKey.values()] : rows;
 }

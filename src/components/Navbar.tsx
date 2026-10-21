@@ -136,7 +136,7 @@ export function Navbar({
       {showQuitConfirm
         ? createPortal(
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-night/70 px-4 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-night/80 px-4"
               onClick={() => setShowQuitConfirm(false)}
             >
               <div

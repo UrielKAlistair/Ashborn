@@ -5,6 +5,7 @@ import type { Delta, Snapshot } from "../shared/types";
 import { readKitchen, readProgressToday, toAlarm, toDeadline, toEdge, toNode, toRoutine, type AlarmRow, type DeadlineRow, type NodeRow, type RoutineRow } from "./api";
 
 type Row = Record<string, unknown>;
+type EdgeRow = { from_id: string; to_id: string };
 
 // Kitchen changes arrive as bursts (cooking a meal writes the meal and a change per ingredient), and
 // a deleted row carries only its key, so any of them re-reads the whole Kitchen once the burst is over
@@ -14,19 +15,30 @@ const KITCHEN_SETTLE_MS = 300;
 // Streams changes made anywhere (another device, an agent) into the app as Deltas. The app's own
 // changes come back here too, so every Delta is idempotent: merging it twice changes nothing.
 // Deleted rows arrive with only their primary key. Returns a function that stops the stream.
+// Changes do not always arrive in the order they were made: a delete can come before the insert or
+// update it followed (Realtime checks access on those first), and that insert can be dropped. So an
+// insert or update of a row not on screen is read again first, and shown only if the row exists,
+// lest it bring back a row already deleted.
 export function watchChanges(db: SupabaseClient, current: () => Snapshot | null, onDelta: (delta: Delta) => void) {
   const emit = (delta: Delta | Promise<Delta>) => void Promise.resolve(delta).then(onDelta, () => {});
 
-  const nodeChanged = (row: NodeRow) => {
-    // Change rows carry no XP: keep what level-ups logged on the node before, or, before the first
-    // snapshot has loaded, read it
+  // A row's change as it arrived if the row is on screen, or as it is now in the database
+  const checked = <R>(onScreen: (snapshot: Snapshot) => boolean, row: R, read: () => PromiseLike<{ data: unknown }>, toDelta: (row: R) => Delta) => {
     const snapshot = current();
-    if (!snapshot) return readXp(row.id);
-    const before = snapshot.nodes.find((node) => node.id === row.id);
-    const loggedXp = before ? before.ownXp - (before.completedAt ? PROGRESS_UNIT : 0) : 0;
+    if (snapshot && onScreen(snapshot)) return toDelta(row);
+    return Promise.resolve(read()).then(({ data }) => (data ? toDelta(data as R) : {}));
+  };
+
+  const nodeChanged = (row: NodeRow) => {
+    // Change rows carry no XP: keep what level-ups logged on the node before, or, for a node not on
+    // screen, read it (which also tells whether it still exists)
+    const snapshot = current();
+    const before = snapshot?.nodes.find((node) => node.id === row.id);
+    if (!before) return readXp(row.id);
+    const loggedXp = before.ownXp - (before.completedAt ? PROGRESS_UNIT : 0);
     const delta: Delta = { nodes: [toNode({ ...row, logged_xp: loggedXp })] };
     // Ticking or unticking elsewhere moves today's count
-    if ((before?.completedAt ?? null) !== row.completed_at) {
+    if (before.completedAt !== row.completed_at) {
       return readProgressToday(db).then((progressToday) => ({ ...delta, progressToday }));
     }
     return delta;
@@ -53,23 +65,33 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     on("graph_nodes", (change) =>
       emit(change.eventType === "DELETE" ? { removedNodeIds: [change.old.id as string] } : nodeChanged(change.new as NodeRow)),
     ),
-    on("graph_edges", (change) =>
+    on("graph_edges", (change) => {
+      if (change.eventType === "DELETE") return emit({ removedEdges: [toEdge(change.old as EdgeRow)] });
+      const row = change.new as EdgeRow;
       emit(
-        change.eventType === "DELETE"
-          ? { removedEdges: [toEdge(change.old as { from_id: string; to_id: string })] }
-          : { edges: [toEdge(change.new as { from_id: string; to_id: string })] },
-      ),
-    ),
+        checked(
+          (snapshot) => snapshot.edges.some((edge) => edge.from === row.from_id && edge.to === row.to_id),
+          row,
+          () => db.from("graph_edges").select("from_id, to_id").eq("from_id", row.from_id).eq("to_id", row.to_id).maybeSingle(),
+          (fresh) => ({ edges: [toEdge(fresh)] }),
+        ),
+      );
+    }),
     on("progress_log", (change) => {
       if (change.eventType === "INSERT") emit(readXp(change.new.node_id as string));
     }),
-    on("routines", (change) =>
+    on("routines", (change) => {
+      if (change.eventType === "DELETE") return emit({ removedRoutineIds: [change.old.id as string] });
+      const row = change.new as RoutineRow;
       emit(
-        change.eventType === "DELETE"
-          ? { removedRoutineIds: [change.old.id as string] }
-          : { routines: [toRoutine(change.new as RoutineRow)] },
-      ),
-    ),
+        checked(
+          (snapshot) => snapshot.routines.some((routine) => routine.id === row.id),
+          row,
+          () => db.from("routines").select().eq("id", row.id).maybeSingle(),
+          (fresh) => ({ routines: [toRoutine(fresh)] }),
+        ),
+      );
+    }),
     on("routine_checks", (change) => {
       // A routine deleted takes its ticks with it; otherwise the row says whether it is ticked
       const row = (change.eventType === "DELETE" ? change.old : change.new) as { routine_id: string; date: string; checked?: boolean };
@@ -80,15 +102,30 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     }),
     on("deadlines", (change) => {
       const row = change.new as DeadlineRow;
+      if (change.eventType === "DELETE" || row.done_at) {
+        return emit({ removedDeadlineIds: [(change.eventType === "DELETE" ? change.old.id : row.id) as string] });
+      }
       emit(
-        change.eventType === "DELETE" || row.done_at
-          ? { removedDeadlineIds: [(change.eventType === "DELETE" ? change.old.id : row.id) as string] }
-          : { deadlines: [toDeadline(row)] },
+        checked(
+          (snapshot) => snapshot.deadlines.some((deadline) => deadline.id === row.id),
+          row,
+          () => db.from("deadlines").select().eq("id", row.id).is("done_at", null).maybeSingle(),
+          (fresh) => ({ deadlines: [toDeadline(fresh)] }),
+        ),
       );
     }),
-    on("alarms", (change) =>
-      emit(change.eventType === "DELETE" ? { removedAlarmIds: [change.old.id as string] } : { alarms: [toAlarm(change.new as AlarmRow)] }),
-    ),
+    on("alarms", (change) => {
+      if (change.eventType === "DELETE") return emit({ removedAlarmIds: [change.old.id as string] });
+      const row = change.new as AlarmRow;
+      emit(
+        checked(
+          (snapshot) => snapshot.alarms.some((alarm) => alarm.id === row.id),
+          row,
+          () => db.from("alarms").select().eq("id", row.id).maybeSingle(),
+          (fresh) => ({ alarms: [toAlarm(fresh)] }),
+        ),
+      );
+    }),
     ...kitchenTables.map((table) => on(table, kitchenChanged)),
   ];
 

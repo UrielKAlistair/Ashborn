@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
-import { threadOf, type GraphModel } from "../../shared/graphModel";
+import { questOf, type GraphModel } from "../../shared/graphModel";
 import { byTime } from "../../shared/schedule";
 import type { AlarmKind, Snapshot, Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
@@ -22,9 +22,9 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const date = useToday();
   const weekday = weekdayOf(date);
 
-  // Steps you can do now: in a shown thread, nothing unfinished before or inside them
+  // Steps you can do now: in a shown quest, nothing unfinished before or inside them
   const readySteps = snapshot.nodes.filter(
-    (node) => node.parentId && model.ready.has(node.id) && threadOf(model.byId, node).active,
+    (node) => node.parentId && model.ready.has(node.id) && questOf(model.byId, node).active,
   );
 
   // The count is from the last change; after midnight it belongs to yesterday until the next one
@@ -51,9 +51,9 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       ) : null}
 
       <Section title="Up next">
-        {readySteps.length === 0 ? <Empty>Add steps to a thread and the ones you can start show here.</Empty> : null}
+        {readySteps.length === 0 ? <Empty>Add steps to a quest and the ones you can start show here.</Empty> : null}
         {readySteps.map((step) => {
-          const thread = threadOf(model.byId, step);
+          const quest = questOf(model.byId, step);
           return (
             <div key={step.id} className="flex items-start gap-3 rounded-xl border border-white/8 bg-night/50 px-3 py-2">
               <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
@@ -61,7 +61,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                 <p className="text-xs leading-snug text-white/85">{step.title}</p>
                 <p className="mt-1 truncate text-[10px] tracking-[0.12em] text-white/40">
                   {model.byId.get(step.parentId!)?.title}
-                  {thread.id !== step.parentId ? ` · ${thread.title}` : ""}
+                  {quest.id !== step.parentId ? ` · ${quest.title}` : ""}
                 </p>
               </div>
             </div>

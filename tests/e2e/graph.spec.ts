@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-// One walk through the home graph in a fresh profile, signed in as the test user: threads,
+// One walk through the home graph in a fresh profile, signed in as the test user: quests,
 // steps, links, ticking, hiding, XP, renaming, deleting, live changes from elsewhere, and state
 // surviving a reload.
 
@@ -19,7 +19,7 @@ const pageErrors: string[] = [];
 test.beforeAll(async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  // Steps, links and level-ups go with their threads
+  // Steps, links and level-ups go with their quests
   for (const table of ["graph_nodes", "routines", "deadlines", "alarms"]) {
     const { error: wipeError } = await db.from(table).delete().not("id", "is", null);
     if (wipeError) throw wipeError;
@@ -82,11 +82,11 @@ test("home graph", async () => {
     await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
     await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page.getByText("Start a thread")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Start a quest")).toBeVisible({ timeout: 15_000 });
   });
 
-  await test.step("the empty-state box creates a thread", async () => {
-    const first = page.getByPlaceholder("Name your first thread (Enter)");
+  await test.step("the empty-state box creates a quest", async () => {
+    const first = page.getByPlaceholder("Name your first quest (Enter)");
     await first.fill("Deep Learning");
     await first.press("Enter");
     await expect(nodes()).toHaveCount(1);
@@ -124,6 +124,8 @@ test("home graph", async () => {
     await card("Backprop by hand").getByTitle("Mark done").click();
     await expect(card("Backprop by hand").getByTitle("Mark not done")).toBeVisible();
     await expect(page.locator(".react-flow__edge-path").first()).toHaveAttribute("style", /dasharray/);
+    // The tick shows before the server has it; the next step reloads
+    await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("title", "Backprop by hand").single()).data?.completed_at).toBeTruthy();
   });
 
   await test.step("the eye hides and shows a box's steps, and remembers across reloads", async () => {
@@ -142,7 +144,7 @@ test("home graph", async () => {
     await expect(upNext()).toContainText("Implement an MLP");
   });
 
-  await test.step("level-up and ticks train the thread's stats by weight, and count toward today's progress", async () => {
+  await test.step("level-up and ticks train the quest's stats by weight, and count toward today's progress", async () => {
     await card("Deep Learning").getByTitle("Options").click();
     await page.getByLabel("INT weight").fill("1.5");
     await page.getByLabel("INT weight").press("Enter");
@@ -152,7 +154,7 @@ test("home graph", async () => {
     await expect(page.getByRole("radio", { name: "violet" })).toHaveAttribute("aria-checked", "true");
     await expect(card("Deep Learning").locator(".bg-violet-400")).toHaveCount(1);
     await card("Deep Learning").getByTitle("Level up: log a session of progress").click();
-    // 20 xp in the thread: one tick and one level-up
+    // 20 xp in the quest: one tick and one level-up
     await expect(page.locator("dl div[title='30 xp']", { hasText: "INT" })).toHaveCount(1);
     await expect(page.locator("dl div[title='10 xp']", { hasText: "CHR" })).toHaveCount(1);
     await expect(page.getByText("2 steps of progress today")).toBeVisible();
@@ -182,15 +184,18 @@ test("home graph", async () => {
     await addInput().press("Escape");
   });
 
-  await test.step("double-click renames steps and threads; the thread menu has no rename field", async () => {
+  await test.step("double-click renames steps and quests; the quest menu has no rename field", async () => {
     await rename(card("Implement an MLP").getByText("Implement an MLP"), page.locator(".react-flow__node-step input"), "Implement an MLP in numpy");
     await expect(card("MLP in numpy")).toBeVisible();
-    await rename(card("Deep Learning").getByText("Deep Learning"), page.locator(".react-flow__node-thread input"), "Deep Learning II");
-    await expect(page.locator(".react-flow__node-thread", { hasText: "Deep Learning II" })).toBeVisible();
+    await rename(card("Deep Learning").getByText("Deep Learning"), page.locator(".react-flow__node-quest input"), "Deep Learning II");
+    await expect(page.locator(".react-flow__node-quest", { hasText: "Deep Learning II" })).toBeVisible();
     await card("Deep Learning II").getByTitle("Options").click();
     await expect(page.locator(".react-flow__node-toolbar input:not([type=number])")).toHaveCount(0);
     await expect(page.locator(".react-flow__node-toolbar").getByRole("button", { name: "Delete" })).toHaveCount(1);
     await page.keyboard.press("Escape");
+    // Renames show before the server has them; the next step counts what goes offline
+    const saved = async () => (await db.from("graph_nodes").select("title").in("title", ["Implement an MLP in numpy", "Deep Learning II"])).data?.length;
+    await expect.poll(saved).toBe(2);
   });
 
   await test.step("offline, a quick add and a tick wait on the device, then sync", async () => {
@@ -209,8 +214,8 @@ test("home graph", async () => {
   });
 
   await test.step("a step added elsewhere appears live", async () => {
-    const { data: thread } = await db.from("graph_nodes").select("id").eq("title", "Deep Learning II").single();
-    await db.from("graph_nodes").insert({ title: "Added by an agent", parent_id: thread!.id });
+    const { data: quest } = await db.from("graph_nodes").select("id").eq("title", "Deep Learning II").single();
+    await db.from("graph_nodes").insert({ title: "Added by an agent", parent_id: quest!.id });
     await expect(card("Added by an agent")).toBeVisible({ timeout: 10_000 });
   });
 
@@ -222,21 +227,22 @@ test("home graph", async () => {
     await expect(nodes().filter({ hasText: "MLP" })).toHaveCount(0);
   });
 
-  await test.step("a hidden thread comes back from Threads after a reload", async () => {
+  await test.step("a hidden quest comes back from Quests after a reload", async () => {
     await card("Deep Learning II").getByTitle("Options").click();
-    await page.getByRole("button", { name: "Hide thread" }).click();
-    await expect(page.getByText("All threads are hidden")).toBeVisible();
+    await page.getByRole("button", { name: "Hide quest" }).click();
+    await expect(page.getByText("All quests are hidden")).toBeVisible();
+    await expect.poll(async () => (await db.from("graph_nodes").select("active").eq("title", "Deep Learning II").single()).data?.active).toBe(false);
     await page.reload();
-    await expect(page.getByText("All threads are hidden")).toBeVisible();
-    await page.getByRole("button", { name: /Threads/ }).click();
+    await expect(page.getByText("All quests are hidden")).toBeVisible();
+    await page.getByRole("button", { name: /Quests/ }).click();
     await page.locator("label", { hasText: "Deep Learning" }).locator("input").click();
     await expect(card("Deep Learning II")).toBeVisible();
   });
 
-  await test.step("desktop: dragging a thread and resizing a step stick, and survive a reload", async () => {
-    await page.locator(".react-flow__pane").click({ position: { x: 5, y: 400 } }); // closes the Threads list over the canvas
-    const thread = page.locator(".react-flow__node-thread").first();
-    const before = (await thread.boundingBox())!;
+  await test.step("desktop: dragging a quest and resizing a step stick, and survive a reload", async () => {
+    await page.locator(".react-flow__pane").click({ position: { x: 5, y: 400 } }); // closes the Quests list over the canvas
+    const quest = page.locator(".react-flow__node-quest").first();
+    const before = (await quest.boundingBox())!;
     await page.mouse.move(before.x + 120, before.y + 50);
     await page.mouse.down();
     await page.mouse.move(before.x + 220, before.y + 130, { steps: 8 });
@@ -286,8 +292,9 @@ test("home graph", async () => {
     const wake = page.getByRole("switch", { name: "Wake up on" });
     await wake.click();
     await expect(wake).toHaveAttribute("aria-checked", "false");
-    const { data } = await db.from("alarms").select("enabled, time, weekdays, kind").eq("label", "Wake up").single();
-    expect(data).toEqual({ enabled: false, time: "06:00:00", weekdays: ["Mon", "Tue"], kind: "situps" });
+    // The switch shows the change before the server has it
+    const saved = async () => (await db.from("alarms").select("enabled, time, weekdays, kind").eq("label", "Wake up").single()).data;
+    await expect.poll(saved).toEqual({ enabled: false, time: "06:00:00", weekdays: ["Mon", "Tue"], kind: "situps" });
     await page.getByRole("button", { name: "Home" }).click();
   });
 
@@ -305,8 +312,7 @@ test("home graph", async () => {
       await row.getByTitle("Delete").click();
       await row.getByRole("button", { name: warning }).click();
       await expect(page.getByText(title)).toHaveCount(0);
-      const { data } = await db.from(table).select("id").eq("title", title);
-      expect(data).toEqual([]);
+      await expect.poll(async () => (await db.from(table).select("id").eq("title", title)).data).toEqual([]);
     }
   });
 

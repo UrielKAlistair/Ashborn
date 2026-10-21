@@ -1,4 +1,4 @@
-// Ashborn's MCP server: lets an agent read and edit your threads, steps, links, routines and
+// Ashborn's MCP server: lets an agent read and edit your quests, steps, links, routines and
 // deadlines, signed in as you. Changes show up live in the app.
 //
 //   npm run agent:login   sign in once (the session is kept in ~/.config/ashborn/agent-session.json)
@@ -14,12 +14,12 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { prompter } from "../scripts/ask.mjs";
 import { createApi, readKitchen } from "../src/lib/api";
-import { buildGraphModel, isDone, statKeys, threadOf, trainedStats, type GraphModel } from "../src/shared/graphModel";
+import { buildGraphModel, isDone, questOf, statKeys, trainedStats, type GraphModel } from "../src/shared/graphModel";
 import { daysBetween, toISODate, today, week, weekdayOf } from "../src/shared/dates";
 import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
 import { byTime, nextOccurrence } from "../src/shared/schedule";
-import { mealSlots, stockUnits, threadColors, type Delta, type Kitchen, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
+import { mealSlots, questColors, stockUnits, type Delta, type Kitchen, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
 const sessionFile = process.env.ASHBORN_SESSION_FILE ?? path.join(homedir(), ".config", "ashborn", "agent-session.json");
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -67,19 +67,19 @@ function registerTools(server: McpServer) {
     "overview",
     {
       description:
-        "Shows the user's tracker: steps ready to do now, every thread with its steps nested as an indented list (done steps marked [x], prerequisites shown as 'after'), hidden threads, today's routines and open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
-      inputSchema: { thread_id: z.string().optional().describe("Show only this thread") },
+        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list (done steps marked [x], prerequisites shown as 'after'), hidden quests, today's routines and open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
+      inputSchema: { quest_id: z.string().optional().describe("Show only this quest") },
     },
-    async ({ thread_id }) => text(describe(await api.getSnapshot(), thread_id)),
+    async ({ quest_id }) => text(describe(await api.getSnapshot(), quest_id)),
   );
 
   server.registerTool(
     "add_plan",
     {
       description:
-        "Adds several steps at once, nested and linked: the main way to turn a plan into the graph. Each step has a short `ref` of your choosing; `parent` puts it inside another step (a ref from this call or an existing id), otherwise it goes under `parent_id`. `after` lists prerequisites that must be done first; they must share the step's parent. List parents before their steps. With parent_id null, top-level entries become new threads.",
+        "Adds several steps at once, nested and linked: the main way to turn a plan into the graph. Each step has a short `ref` of your choosing; `parent` puts it inside another step (a ref from this call or an existing id), otherwise it goes under `parent_id`. `after` lists prerequisites that must be done first; they must share the step's parent. List parents before their steps. With parent_id null, top-level entries become new quests.",
       inputSchema: {
-        parent_id: z.string().nullable().describe("Existing node the plan goes into, or null for new threads"),
+        parent_id: z.string().nullable().describe("Existing node the plan goes into, or null for new quests"),
         steps: z
           .array(
             z.object({
@@ -130,7 +130,7 @@ function registerTools(server: McpServer) {
   server.registerTool(
     "shelve",
     {
-      description: "Shelves threads or steps: they stay on the graph, greyed, and nothing inside them is offered as ready until they are unshelved.",
+      description: "Shelves quests or steps: they stay on the graph, greyed, and nothing inside them is offered as ready until they are unshelved.",
       inputSchema: { ids },
     },
     async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { shelved: true })), "Shelved"),
@@ -138,7 +138,7 @@ function registerTools(server: McpServer) {
 
   server.registerTool(
     "unshelve",
-    { description: "Takes threads or steps off the shelf.", inputSchema: { ids } },
+    { description: "Takes quests or steps off the shelf.", inputSchema: { ids } },
     async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { shelved: false })), "Unshelved"),
   );
 
@@ -150,14 +150,14 @@ function registerTools(server: McpServer) {
 
   server.registerTool(
     "rename",
-    { description: "Renames a thread or step. Keep titles to a few words: they show on small cards.", inputSchema: { id, title: z.string().min(1) } },
+    { description: "Renames a quest or step. Keep titles to a few words: they show on small cards.", inputSchema: { id, title: z.string().min(1) } },
     async ({ id, title }) => run([() => api.updateNode(id, { title })], "Renamed"),
   );
 
   server.registerTool(
     "move",
     {
-      description: "Moves a step (with its own steps) into another node, or makes it a thread with parent_id null. Its links are removed, since links only join steps in the same box.",
+      description: "Moves a step (with its own steps) into another node, or makes it a quest with parent_id null. Its links are removed, since links only join steps in the same box.",
       inputSchema: { id, parent_id: z.string().nullable() },
     },
     async ({ id, parent_id }) => run([() => api.moveNode(id, parent_id)], "Moved"),
@@ -165,7 +165,7 @@ function registerTools(server: McpServer) {
 
   server.registerTool(
     "delete",
-    { description: "Deletes a thread or step together with every step inside it. Cannot be undone.", inputSchema: { id } },
+    { description: "Deletes a quest or step together with every step inside it. Cannot be undone.", inputSchema: { id } },
     async ({ id }) => run([() => api.deleteNode(id)], "Deleted"),
   );
 
@@ -187,24 +187,24 @@ function registerTools(server: McpServer) {
   server.registerTool(
     "level_up",
     {
-      description: "Logs a session of progress on a thread (10 XP), for work that did not complete a step.",
+      description: "Logs a session of progress on a quest (10 XP), for work that did not complete a step.",
       inputSchema: { id },
     },
     async ({ id }) => run([() => api.levelUp(id, crypto.randomUUID())], "Levelled up"),
   );
 
   server.registerTool(
-    "update_thread",
+    "update_quest",
     {
       description:
-        "Sets which stats a thread trains and how much, its colour (null is white), and whether it is shown on the dashboard. Each XP earned in the thread adds weight × XP to each stat.",
+        "Sets which stats a quest trains and how much, its colour (null is white), and whether it is shown on the dashboard. Each XP earned in the quest adds weight × XP to each stat.",
       inputSchema: {
         id,
         stat_weights: z
           .partialRecord(z.enum(statKeys), z.number().nonnegative())
           .optional()
-          .describe('Weight per stat, e.g. {"INT": 0.2, "CHR": 0.1}; replaces the thread\'s weights, and {} trains nothing'),
-        color: z.enum(threadColors).nullable().optional(),
+          .describe('Weight per stat, e.g. {"INT": 0.2, "CHR": 0.1}; replaces the quest\'s weights, and {} trains nothing'),
+        color: z.enum(questColors).nullable().optional(),
         shown: z.boolean().optional(),
       },
     },
@@ -549,27 +549,27 @@ async function run(changes: Array<() => Promise<Delta>>, done: string) {
 }
 
 // The tracker as an indented outline an agent can read
-function describe(snapshot: Snapshot, threadId?: string) {
+function describe(snapshot: Snapshot, questId?: string) {
   const model = buildGraphModel(snapshot);
-  const threads = (model.children.get(null) ?? []).filter((thread) => (threadId ? thread.id === threadId : true));
-  const shown = threads.filter((thread) => thread.active);
-  const hidden = threads.filter((thread) => !thread.active);
+  const quests = (model.children.get(null) ?? []).filter((quest) => (questId ? quest.id === questId : true));
+  const shown = quests.filter((quest) => quest.active);
+  const hidden = quests.filter((quest) => !quest.active);
   const lines: string[] = [];
 
-  const shownIds = new Set(shown.map((thread) => thread.id));
-  const ready = snapshot.nodes.filter((node) => node.parentId && model.ready.has(node.id) && shownIds.has(threadOf(model.byId, node).id));
+  const shownIds = new Set(shown.map((quest) => quest.id));
+  const ready = snapshot.nodes.filter((node) => node.parentId && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id));
   lines.push("Up next (ready to do now):", ...(ready.length ? ready.map((node) => `- ${node.title} [${node.id}]`) : ["- nothing"]), "");
 
-  for (const thread of shown) {
-    const level = nodeLevel(model.totalXp.get(thread.id) ?? 0);
-    const trains = trainedStats(thread.statWeights).map(([key, weight]) => `${key} ${weight}`);
-    lines.push(`# ${thread.title} [${thread.id}] Lv ${level.level}${trains.length ? `, trains ${trains.join(", ")}` : ""}${thread.color ? `, ${thread.color}` : ""}${thread.shelved ? " (shelved)" : ""}`);
-    outline(model, snapshot, thread.id, 1, lines);
+  for (const quest of shown) {
+    const level = nodeLevel(model.totalXp.get(quest.id) ?? 0);
+    const trains = trainedStats(quest.statWeights).map(([key, weight]) => `${key} ${weight}`);
+    lines.push(`# ${quest.title} [${quest.id}] Lv ${level.level}${trains.length ? `, trains ${trains.join(", ")}` : ""}${quest.color ? `, ${quest.color}` : ""}${quest.shelved ? " (shelved)" : ""}`);
+    outline(model, snapshot, quest.id, 1, lines);
     lines.push("");
   }
-  if (hidden.length) lines.push("Hidden threads:", ...hidden.map((thread) => `- ${thread.title} [${thread.id}]${thread.shelved ? " (shelved)" : ""}`), "");
+  if (hidden.length) lines.push("Hidden quests:", ...hidden.map((quest) => `- ${quest.title} [${quest.id}]${quest.shelved ? " (shelved)" : ""}`), "");
 
-  if (!threadId) {
+  if (!questId) {
     const weekday = weekdayOf(today());
     const routines = snapshot.routines.filter((routine) => routine.weekdays.includes(weekday)).sort(byTime);
     const checked = new Set(snapshot.routineChecks.map((check) => check.routineId));

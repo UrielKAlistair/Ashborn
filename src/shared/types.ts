@@ -1,25 +1,25 @@
 export type Weekday = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
 export type ISODate = string; // YYYY-MM-DD, local time
 export type StatKey = "STR" | "DEX" | "INT" | "WIS" | "CHR" | "MND";
-// Positive weights; the stats listed share a thread's XP in proportion to them
+// Positive weights; the stats listed share a quest's XP in proportion to them
 export type StatWeights = Partial<Record<StatKey, number>>;
 export type ClockTime = string; // HH:MM, local time
-export const threadColors = ["red", "orange", "amber", "green", "teal", "blue", "violet", "pink"] as const;
-export type ThreadColor = (typeof threadColors)[number];
+export const questColors = ["red", "orange", "amber", "green", "teal", "blue", "violet", "pink"] as const;
+export type QuestColor = (typeof questColors)[number];
 
 // How an alarm stops: a plain one is dismissed; the others only after walking or sit-ups,
 // counted by the phone's accelerometer
 export type AlarmKind = "none" | "plain" | "walk" | "situps";
 
-// A node in the graph. Top-level nodes are threads; a node with a parent is a step inside it,
+// A node in the graph. Top-level nodes are quests; a node with a parent is a step inside it,
 // and steps can hold steps of their own. Siblings form a DAG through prerequisite edges.
 export type GraphNode = {
   id: string;
   parentId: string | null;
   title: string;
-  statWeights: StatWeights; // threads only: the stats work in the thread trains; empty trains none
-  color: ThreadColor | null; // threads only: the colour the user gave it; null is white
-  active: boolean; // threads only: shown on the dashboard
+  statWeights: StatWeights; // quests only: the stats work in the quest trains; empty trains none
+  color: QuestColor | null; // quests only: the colour the user gave it; null is white
+  active: boolean; // quests only: shown on the dashboard
   createdAt: string;
   completedAt: string | null; // a step is done when this is set
   shelved: boolean; // greyed, and nothing inside it is ready, until unshelved
@@ -188,7 +188,7 @@ export type NodePatch = {
   title?: string;
   statWeights?: StatWeights;
   shelved?: boolean;
-  color?: ThreadColor | null;
+  color?: QuestColor | null;
   active?: boolean;
   done?: boolean;
 };

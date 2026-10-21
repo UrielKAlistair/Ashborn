@@ -150,7 +150,20 @@ export function queueChange(snapshot: Snapshot, name: Mutation, args: unknown[],
   return delta;
 }
 
-function withIds(name: Mutation, args: unknown[]): unknown[] {
+// Queues changes sent but not answered when the app closes, so they are sent again at the next
+// start; sending a change twice changes nothing more than sending it once
+export function queueUnsent(changes: QueuedChange[]) {
+  if (changes.length > 0) saveQueue([...loadQueue(), ...changes]);
+}
+
+// How a change looks on screen while it is on its way; throws when it could never be accepted
+export function previewChange(snapshot: Snapshot, name: Mutation, args: unknown[], at: string): Delta {
+  return preview[name](snapshot, args, at);
+}
+
+// The arguments with any id the change creates filled in, so its preview and the row the server
+// makes share it
+export function withIds(name: Mutation, args: unknown[]): unknown[] {
   return name === "createNode" && !args[2] ? [args[0], args[1], crypto.randomUUID()] : args;
 }
 
@@ -232,9 +245,9 @@ function refusedForGood(error: unknown) {
   return true;
 }
 
-// Supabase reports an unreachable server as a failed fetch
+// Supabase reports an unreachable server as a failed fetch, and a request given up on as a timeout
 export function isConnectionError(error: unknown) {
-  return error instanceof QueueHeld || !navigator.onLine || /fetch|network/i.test((error as Error)?.message ?? "");
+  return error instanceof QueueHeld || !navigator.onLine || (error as Error)?.name === "TimeoutError" || /fetch|network|timed out/i.test((error as Error)?.message ?? "");
 }
 
 function loadQueue(): QueuedChange[] {

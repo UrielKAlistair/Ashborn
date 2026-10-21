@@ -17,20 +17,21 @@ import {
   type NodeProps,
   type XYPosition,
 } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { paletteOf, palettes } from "../../lib/theme";
 import { isDone, statKeys, type GraphModel } from "../../shared/graphModel";
 import { nodeLevel } from "../../shared/progression";
-import { threadColors, type GraphEdge, type GraphNode, type Snapshot, type StatKey, type StatWeights, type ThreadColor } from "../../shared/types";
+import { questColors, type GraphEdge, type GraphNode, type QuestColor, type Snapshot, type StatKey, type StatWeights } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
 import Territories from "./territory/Territories";
+import type { TerritoryQuest } from "./territory/territoryGrid";
 import { Tick } from "./Tick";
 
-// Box sizes. A thread is a header above its steps; a step is a row that grows into a box when
+// Box sizes. A quest is a header above its steps; a step is a row that grows into a box when
 // it holds steps of its own. A box being added to gets an input row at the bottom.
-const threadHeader = { width: 264, height: 76 };
+const questHeader = { width: 264, height: 76 };
 const stepRow = { width: 248, height: 40 };
 const addRowHeight = 40;
 const padding = 16;
@@ -39,15 +40,15 @@ const collapsedStorageKey = "ashborn-collapsed";
 const fitOptions = { padding: 0.15, maxZoom: 1.1 };
 
 // On the phone the whole graph would fit too small to read. The view opens instead on its
-// top-left corner, so the first threads' headers show, as wide as fits but never smaller than
+// top-left corner, so the first quests' headers show, as wide as fits but never smaller than
 // PHONE_MIN_ZOOM; the rest is a pan away.
 const PHONE_MIN_ZOOM = 0.75;
 const PHONE_MARGIN = 12;
-// Room at the top for the toolbar (+ New thread, Threads) that floats over the canvas
+// Room at the top for the toolbar (+ New quest, Quests) that floats over the canvas
 const PHONE_TOOLBAR_HEIGHT = 48;
 
 function phoneViewport(shown: GraphNode[], placements: Record<string, Box>, paneWidth: number) {
-  const boxes = shown.flatMap((thread) => (placements[thread.id] ? [placements[thread.id]] : []));
+  const boxes = shown.flatMap((quest) => (placements[quest.id] ? [placements[quest.id]] : []));
   const left = Math.min(...boxes.map((box) => box.position.x));
   const top = Math.min(...boxes.map((box) => box.position.y));
   const right = Math.max(...boxes.map((box) => box.position.x + box.size.width));
@@ -56,10 +57,16 @@ function phoneViewport(shown: GraphNode[], placements: Record<string, Box>, pane
 }
 
 const elk = new ELK();
+// ELK runs on the main quest, so each box's layout is kept by its input (its nodes in order,
+// their sizes, its links) and a relayout redoes only the boxes that changed. Oldest dropped first.
+const levelLayouts = new Map<string, ElkNode>();
+const maxLevelLayouts = 500;
 
 type Size = { width: number; height: number };
 type Box = { position: XYPosition; size: Size }; // position is relative to the parent box
 
+// A card's data holds only values, so it stays the same object while they do, and React Flow and
+// the memoised cards skip it
 type CardData = {
   node: GraphNode;
   depth: number;
@@ -70,23 +77,28 @@ type CardData = {
   adding: boolean;
   menuOpen: boolean;
   phone: boolean; // view-only placement, and one labelled menu instead of the small buttons
-  act: Act;
-  onToggleCollapsed: () => void;
-  onAdding: (open: boolean) => void;
-  onMenu: (open: boolean) => void;
-  onResizing: (size: Size) => void;
-  onResized: (size: Size) => void;
-  subtreeIds: () => string[]; // the node and every step inside it
+  actions: CardActions;
 };
 
-type ThreadGraphProps = {
+// What a card can do, one object shared by every card; each takes the card's node id
+type CardActions = {
+  act: Act;
+  toggleCollapsed: (id: string) => void;
+  setAdding: (id: string, open: boolean) => void;
+  setMenu: (id: string, open: boolean) => void;
+  resizing: (id: string, size: Size) => void;
+  resized: (id: string, size: Size) => void;
+  subtreeIds: (id: string) => string[]; // the node and every step inside it
+};
+
+type QuestGraphProps = {
   snapshot: Snapshot;
   model: GraphModel;
   act: Act;
   phone: boolean;
 };
 
-export function ThreadGraph(props: ThreadGraphProps) {
+export function QuestGraph(props: QuestGraphProps) {
   return (
     <ReactFlowProvider>
       <GraphCanvas {...props} />
@@ -94,7 +106,7 @@ export function ThreadGraph(props: ThreadGraphProps) {
   );
 }
 
-function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
+function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   const { fitView, setViewport } = useReactFlow();
   const [placements, setPlacements] = useState<Record<string, Box>>({});
   // Positions and sizes mid-drag or mid-resize, shown until the layout includes them
@@ -103,7 +115,7 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
-  const [threadsOpen, setThreadsOpen] = useState(false);
+  const [questsOpen, setQuestsOpen] = useState(false);
   const fittedFor = useRef<string | null>(null);
   // Hidden until the first layout is fitted: before it, every node sits at the origin
   const [shownYet, setShownYet] = useState(false);
@@ -111,25 +123,28 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
   // A box shows all its steps, done ones greyed, unless the user collapsed it
   const visibleSteps = (id: string) => (collapsed.has(id) ? [] : (model.children.get(id) ?? []));
 
-  const threads = model.children.get(null) ?? [];
-  const shown = threads.filter((thread) => thread.active);
+  const quests = model.children.get(null) ?? [];
 
-  // Rendered nodes, parents before their steps (React Flow needs that order)
-  const rendered: Array<{ node: GraphNode; depth: number }> = [];
-  const visit = (node: GraphNode, depth: number) => {
-    rendered.push({ node, depth });
-    visibleSteps(node.id).forEach((step) => visit(step, depth + 1));
-  };
-  shown.forEach((thread) => visit(thread, 0));
-  const renderedIds = new Set(rendered.map(({ node }) => node.id));
-  const renderedEdges = snapshot.edges.filter((edge) => renderedIds.has(edge.from) && renderedIds.has(edge.to));
-
-  const structureKey = JSON.stringify([
-    rendered.map(({ node }) => [node.id, node.position, node.size]),
-    renderedEdges.map((edge) => [edge.from, edge.to]),
-    addingTo,
-  ]);
-  const topKey = shown.map((thread) => thread.id).join();
+  // Rendered nodes, parents before their steps (React Flow needs that order), and the links
+  // between them; worked out again only when the graph or what is open changes, not per drag move
+  const { shown, rendered, depthOf, renderedEdges, structureKey } = useMemo(() => {
+    const shown = quests.filter((quest) => quest.active);
+    const rendered: Array<{ node: GraphNode; depth: number }> = [];
+    const visit = (node: GraphNode, depth: number) => {
+      rendered.push({ node, depth });
+      visibleSteps(node.id).forEach((step) => visit(step, depth + 1));
+    };
+    shown.forEach((quest) => visit(quest, 0));
+    const depthOf = new Map(rendered.map(({ node, depth }) => [node.id, depth]));
+    const renderedEdges = snapshot.edges.filter((edge) => depthOf.has(edge.from) && depthOf.has(edge.to));
+    const structureKey = JSON.stringify([
+      rendered.map(({ node }) => [node.id, node.position, node.size]),
+      renderedEdges.map((edge) => [edge.from, edge.to]),
+      addingTo,
+    ]);
+    return { shown, rendered, depthOf, renderedEdges, structureKey };
+  }, [model, snapshot.edges, collapsed, addingTo]);
+  const topKey = shown.map((quest) => quest.id).join();
 
   // Re-layout only when the rendered structure changes, not on every level-up
   useEffect(() => {
@@ -146,7 +161,7 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
     };
   }, [structureKey]);
 
-  // Fit the view when the set of threads shown changes, not on every step edit, and only once
+  // Fit the view when the set of quests shown changes, not on every step edit, and only once
   // React Flow knows the canvas size (before that, a fit is silently lost). Nodes carry their
   // sizes, so their bounds are known as soon as they are laid out.
   const paneMeasured = useStore((state) => state.width > 0 && state.height > 0);
@@ -184,56 +199,93 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
       return next;
     });
 
-  const depthOf = new Map(rendered.map(({ node, depth }) => [node.id, depth]));
-
-  const nodes = useMemo<Node<CardData>[]>(
-    () =>
-      rendered.map(({ node, depth }) => {
-        const placement = placements[node.id];
-        const size = moving[node.id]?.size ?? placement?.size ?? (depth === 0 ? threadHeader : stepRow);
-        return {
-          id: node.id,
-          type: depth === 0 ? "thread" : "step",
-          parentId: node.parentId ?? undefined,
-          extent: node.parentId ? ("parent" as const) : undefined,
-          position: moving[node.id]?.position ?? placement?.position ?? { x: 0, y: 0 },
-          draggable: !phone,
-          selectable: false,
-          deletable: false,
-          zIndex: depth * 10,
-          // Known sizes: React Flow then skips measuring, during which it hides the node and
-          // the browser drops focus from any input inside it
-          width: size.width,
-          height: size.height,
-          // React Flow ignores the pointer on nodes that can't be dragged or selected; the
-          // cards' buttons and inputs need it
-          style: { ...size, pointerEvents: "all" },
-          data: {
-            node,
-            depth,
-            xp: model.totalXp.get(node.id) ?? 0,
-            hasSteps: model.children.has(node.id),
-            shelved: model.shelved.has(node.id),
-            collapsed: collapsed.has(node.id),
-            adding: addingTo === node.id,
-            menuOpen: menuFor === node.id,
-            phone,
-            act,
-            onToggleCollapsed: () => setCollapsedFor(node.id, !collapsed.has(node.id)),
-            // Adding to a collapsed box opens it, so the new steps are seen
-            onAdding: (open: boolean) => {
-              if (open) setCollapsedFor(node.id, false);
-              setAddingTo(open ? node.id : null);
-            },
-            onMenu: (open: boolean) => setMenuFor(open ? node.id : null),
-            onResizing: (newSize: Size) => follow(node.id, { size: newSize }),
-            onResized: (newSize: Size) => place(node, { size: newSize }),
-            subtreeIds: () => subtreeOf(model, node.id),
-          },
-        };
-      }),
-    [snapshot, model, placements, moving, collapsed, addingTo, menuFor],
+  // The cards' actions read the latest state through this ref, so `actions` is made once
+  const latest = useRef<CardActions>(null!);
+  latest.current = {
+    act,
+    toggleCollapsed: (id) => setCollapsedFor(id, !collapsed.has(id)),
+    // Adding to a collapsed box opens it, so the new steps are seen
+    setAdding: (id, open) => {
+      if (open) setCollapsedFor(id, false);
+      setAddingTo(open ? id : null);
+    },
+    setMenu: (id, open) => setMenuFor(open ? id : null),
+    resizing: (id, size) => follow(id, { size }),
+    resized: (id, size) => {
+      const node = model.byId.get(id);
+      if (node) place(node, { size });
+    },
+    subtreeIds: (id) => subtreeOf(model, id),
+  };
+  const actions = useMemo<CardActions>(
+    () => ({
+      act: (name, ...args) => latest.current.act(name, ...args),
+      toggleCollapsed: (id) => latest.current.toggleCollapsed(id),
+      setAdding: (id, open) => latest.current.setAdding(id, open),
+      setMenu: (id, open) => latest.current.setMenu(id, open),
+      resizing: (id, size) => latest.current.resizing(id, size),
+      resized: (id, size) => latest.current.resized(id, size),
+      subtreeIds: (id) => latest.current.subtreeIds(id),
+    }),
+    [],
   );
+
+  // Each node keeps its previous object while its position, size and data are unchanged, so a
+  // drag hands React Flow one new node per move, and an edit only the nodes it touched
+  const built = useRef(new Map<string, Node<CardData>>());
+  const nodes = useMemo<Node<CardData>[]>(() => {
+    const previous = built.current;
+    built.current = new Map();
+    return rendered.map(({ node, depth }) => {
+      const placement = placements[node.id];
+      const size = moving[node.id]?.size ?? placement?.size ?? (depth === 0 ? questHeader : stepRow);
+      const position = moving[node.id]?.position ?? placement?.position ?? { x: 0, y: 0 };
+      const data: CardData = {
+        node,
+        depth,
+        xp: model.totalXp.get(node.id) ?? 0,
+        hasSteps: model.children.has(node.id),
+        shelved: model.shelved.has(node.id),
+        collapsed: collapsed.has(node.id),
+        adding: addingTo === node.id,
+        menuOpen: menuFor === node.id,
+        phone,
+        actions,
+      };
+      const kept = previous.get(node.id);
+      // A moved box keeps its data object too, so its card is not drawn again
+      const sameData = kept !== undefined && (Object.keys(data) as (keyof CardData)[]).every((key) => kept.data[key] === data[key]);
+      const unchanged =
+        sameData &&
+        kept.position.x === position.x &&
+        kept.position.y === position.y &&
+        kept.width === size.width &&
+        kept.height === size.height;
+      const next: Node<CardData> = unchanged
+        ? kept
+        : {
+            id: node.id,
+            type: depth === 0 ? "quest" : "step",
+            parentId: node.parentId ?? undefined,
+            extent: node.parentId ? ("parent" as const) : undefined,
+            position,
+            draggable: !phone,
+            selectable: false,
+            deletable: false,
+            zIndex: depth * 10,
+            // Known sizes: React Flow then skips measuring, during which it hides the node and
+            // the browser drops focus from any input inside it
+            width: size.width,
+            height: size.height,
+            // React Flow ignores the pointer on nodes that can't be dragged or selected; the
+            // cards' buttons and inputs need it
+            style: { ...size, pointerEvents: "all" },
+            data: sameData ? kept.data : data,
+          };
+      built.current.set(node.id, next);
+      return next;
+    });
+  }, [rendered, model, placements, moving, collapsed, addingTo, menuFor, phone, actions]);
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -257,21 +309,26 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
           },
         };
       }),
-    [snapshot, model, selectedEdge, collapsed],
+    [renderedEdges, depthOf, model, selectedEdge],
   );
 
-  // Each shown thread claims the hex cells around it, in its colour, following it as it is
-  // dragged
-  const territories = useMemo(
-    () =>
-      shown.flatMap((thread, z) => {
-        const placement = placements[thread.id];
-        if (!placement) return [];
-        const rect = { ...placement.position, ...placement.size, ...moving[thread.id]?.position, ...moving[thread.id]?.size };
-        return [{ id: thread.id, rect, color: thread.color ?? ("none" as const), z }];
-      }),
-    [placements, moving, snapshot],
-  );
+  // Each shown quest claims the hex cells around it, in its colour, following it as it is
+  // dragged. The list stays the same object until a quest moves or changes colour, so moving a
+  // step or editing one does not recolour the grid.
+  const shownTerritories = useRef<TerritoryQuest[]>([]);
+  const territories = useMemo(() => {
+    const next = shown.flatMap((quest, z) => {
+      const placement = placements[quest.id];
+      if (!placement) return [];
+      const rect = { ...placement.position, ...placement.size, ...moving[quest.id]?.position, ...moving[quest.id]?.size };
+      return [{ id: quest.id, rect, color: quest.color ?? ("none" as const), z }];
+    });
+    const previous = shownTerritories.current;
+    const same = (a: TerritoryQuest, b: TerritoryQuest | undefined) =>
+      b !== undefined && a.id === b.id && a.color === b.color && a.z === b.z && (["x", "y", "width", "height"] as const).every((key) => a.rect[key] === b.rect[key]);
+    if (next.length !== previous.length || !next.every((quest, i) => same(quest, previous[i]))) shownTerritories.current = next;
+    return shownTerritories.current;
+  }, [shown, placements, moving]);
 
   // Drags and resizes show at once; the end of one saves it. A node the user places pins its
   // siblings where they are, so the ones still placed automatically do not jump. (React Flow's
@@ -310,7 +367,7 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
         setMenuFor(null);
         setAddingTo(null);
         setSelectedEdge(null);
-        setThreadsOpen(false);
+        setQuestsOpen(false);
       }}
       nodesDraggable={!phone}
       nodeDragThreshold={4}
@@ -327,19 +384,19 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
       colorMode="dark"
       className="!bg-transparent"
     >
-      <Territories threads={territories} />
+      <Territories quests={territories} />
       <Controls position="bottom-left" showInteractive={false} fitViewOptions={{ ...fitOptions, duration: 300 }} />
 
-      {threads.length > 0 ? (
+      {quests.length > 0 ? (
         <Panel position="top-left" className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
-            <InlineInput placeholder="+ New thread" onSubmit={(title) => act("createNode", title, null)} className="w-48" />
+            <InlineInput placeholder="+ New quest" onSubmit={(title) => act("createNode", title, null)} className="w-48" />
             <button
               type="button"
-              onClick={() => setThreadsOpen((open) => !open)}
-              className="rounded-full border border-white/10 bg-night-panel/80 px-3.5 py-1.5 text-[11px] uppercase tracking-[0.18em] text-white/70 backdrop-blur-sm hover:border-white/25 hover:text-white"
+              onClick={() => setQuestsOpen((open) => !open)}
+              className="rounded-full border border-white/10 bg-night-panel/90 px-3.5 py-1.5 text-[11px] uppercase tracking-[0.18em] text-white/70 hover:border-white/25 hover:text-white"
             >
-              Threads {shown.length}/{threads.length}
+              Quests {shown.length}/{quests.length}
             </button>
             {phone ? null : (
               <ResetLayoutButton
@@ -352,14 +409,14 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
             )}
           </div>
 
-          {threadsOpen ? (
-            <div className="w-72 rounded-xl border border-white/10 bg-night-card/95 p-3 backdrop-blur-md">
+          {questsOpen ? (
+            <div className="w-72 rounded-xl border border-white/10 bg-night-card/95 p-3">
               <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">Shown on the dashboard</p>
               <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">
-                {threads.map((thread) => (
-                  <label key={thread.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-xs text-white/75 hover:bg-white/6">
-                    <input type="checkbox" checked={thread.active} onChange={(event) => void act("updateNode", thread.id, { active: event.target.checked })} />
-                    <span className="truncate">{thread.title}</span>
+                {quests.map((quest) => (
+                  <label key={quest.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-xs text-white/75 hover:bg-white/6">
+                    <input type="checkbox" checked={quest.active} onChange={(event) => void act("updateNode", quest.id, { active: event.target.checked })} />
+                    <span className="truncate">{quest.title}</span>
                   </label>
                 ))}
               </div>
@@ -369,7 +426,7 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
       ) : null}
 
       {selectedEdge ? (
-        <Panel position="bottom-center" className="flex items-center gap-3 rounded-xl border border-white/10 bg-night-card/95 px-3 py-2 text-xs text-white/70 backdrop-blur-md">
+        <Panel position="bottom-center" className="flex items-center gap-3 rounded-xl border border-white/10 bg-night-card/95 px-3 py-2 text-xs text-white/70">
           <span className="max-w-72 truncate text-white/60">
             {model.byId.get(selectedEdge.from)?.title} → {model.byId.get(selectedEdge.to)?.title}
           </span>
@@ -388,17 +445,17 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
 
       {shown.length === 0 ? (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 text-center">
-          {threads.length === 0 ? (
+          {quests.length === 0 ? (
             <>
               <p className="max-w-sm text-xs leading-relaxed tracking-[0.12em] text-white/45">
-                Start a thread: something you are learning or building.
+                Start a quest: something you are learning or building.
               </p>
               <div className="pointer-events-auto">
-                <InlineInput placeholder="Name your first thread (Enter)" onSubmit={(title) => act("createNode", title, null)} className="w-72 py-2 text-center" />
+                <InlineInput placeholder="Name your first quest (Enter)" onSubmit={(title) => act("createNode", title, null)} className="w-72 py-2 text-center" />
               </div>
             </>
           ) : (
-            <p className="text-xs tracking-[0.12em] text-white/45">All threads are hidden. Pick some under Threads.</p>
+            <p className="text-xs tracking-[0.12em] text-white/45">All quests are hidden. Pick some under Quests.</p>
           )}
         </div>
       ) : null}
@@ -406,23 +463,24 @@ function GraphCanvas({ snapshot, model, act, phone }: ThreadGraphProps) {
   );
 }
 
-function ThreadCard({ data }: NodeProps<Node<CardData>>) {
-  const { node, xp, act } = data;
+function QuestCard({ data }: NodeProps<Node<CardData>>) {
+  const { node, xp } = data;
+  const { act } = data.actions;
   const level = nodeLevel(xp);
   const palette = paletteOf(node.color);
 
   return (
     <div className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
-      <Handles height={threadHeader.height} hidden={data.phone} />
+      <Handles height={questHeader.height} hidden={data.phone} />
 
-      {/* A frosted sheet in the thread's colour, as the trail's chapters are */}
+      {/* A frosted sheet in the quest's colour, as the trail's chapters are */}
       <div
-        className={`absolute inset-0 overflow-hidden rounded-3xl border bg-night-card/80 shadow-[0_30px_80px_-24px_rgba(0,0,0,0.9)] backdrop-blur-md ${palette.border}`}
+        className={`absolute inset-0 overflow-hidden rounded-3xl border bg-night-card/90 shadow-[0_30px_80px_-24px_rgba(0,0,0,0.9)] ${palette.border}`}
       >
         <div className={`pointer-events-none absolute inset-0 bg-linear-to-b to-transparent to-60% ${palette.tint}`} />
       </div>
 
-      <div className="relative flex flex-col justify-between px-4 py-3" style={{ height: threadHeader.height }}>
+      <div className="relative flex flex-col justify-between px-4 py-3" style={{ height: questHeader.height }}>
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-1 items-start gap-2">
             <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${palette.dot}`} />
@@ -455,13 +513,14 @@ function ThreadCard({ data }: NodeProps<Node<CardData>>) {
       </div>
 
       <AddRow data={data} />
-      <ResizeGrip data={data} minWidth={200} minHeight={threadHeader.height} />
+      <ResizeGrip data={data} minWidth={200} minHeight={questHeader.height} />
     </div>
   );
 }
 
 function StepCard({ data, height }: NodeProps<Node<CardData>>) {
-  const { node, act } = data;
+  const { node } = data;
+  const { act } = data.actions;
   const done = isDone(node);
   const holdsSteps = data.hasSteps && !data.collapsed;
   // A step made taller than one row shows its whole title, wrapped, instead of cutting it short
@@ -493,7 +552,23 @@ function StepCard({ data, height }: NodeProps<Node<CardData>>) {
   );
 }
 
-const nodeTypes = { thread: ThreadCard, step: StepCard };
+// A card draws from its data and size alone; React Flow's other props (its position, among
+// them) change whenever the box it sits in moves
+const sameCard = (before: NodeProps<Node<CardData>>, after: NodeProps<Node<CardData>>) =>
+  before.data === after.data && before.width === after.width && before.height === after.height;
+
+const nodeTypes = { quest: memo(QuestCard, sameCard), step: memo(StepCard, sameCard) };
+
+// A card's actions, bound to its node
+function boundActions({ node, actions }: CardData) {
+  return {
+    act: actions.act,
+    onToggleCollapsed: () => actions.toggleCollapsed(node.id),
+    onAdding: (open: boolean) => actions.setAdding(node.id, open),
+    onMenu: (open: boolean) => actions.setMenu(node.id, open),
+    subtreeIds: () => actions.subtreeIds(node.id),
+  };
+}
 
 // A shelved box is greyed but works as usual, so it can be unshelved or ticked
 const shelvedLook = "opacity-45 saturate-0";
@@ -554,9 +629,10 @@ function Handles({ height, hidden }: { height: number; hidden: boolean }) {
 }
 
 // The top-right buttons of every box: hide/show its steps, add a step inside, then ⋯
-// on a thread or delete on a step
+// on a quest or delete on a step
 function BoxButtons({ data }: { data: CardData }) {
-  const { depth, hasSteps, collapsed, adding, onToggleCollapsed, onAdding } = data;
+  const { depth, hasSteps, collapsed, adding } = data;
+  const { onToggleCollapsed, onAdding } = boundActions(data);
   if (data.phone) return <PhoneMenu data={data} />;
 
   return (
@@ -599,7 +675,8 @@ function BoxButtons({ data }: { data: CardData }) {
 
 // Shelves or unshelves a step; shown on hover, and always on a shelved step so it can be undone
 function ShelveButton({ data }: { data: CardData }) {
-  const { node, act } = data;
+  const { node } = data;
+  const { act } = data.actions;
 
   return (
     <button
@@ -620,7 +697,8 @@ function ShelveButton({ data }: { data: CardData }) {
 
 // A red × in a circle; the first click asks "Delete?", a second deletes the step and its steps
 function DeleteButton({ data }: { data: CardData }) {
-  const { node, act } = data;
+  const { node } = data;
+  const { act } = data.actions;
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
@@ -690,8 +768,8 @@ function ResizeGrip({ data, minWidth, minHeight }: { data: CardData; minWidth: n
       position="bottom-right"
       minWidth={minWidth}
       minHeight={minHeight}
-      onResize={(_event, { width, height }) => data.onResizing({ width, height })}
-      onResizeEnd={(_event, { width, height }) => data.onResized({ width, height })}
+      onResize={(_event, { width, height }) => data.actions.resizing(data.node.id, { width, height })}
+      onResizeEnd={(_event, { width, height }) => data.actions.resized(data.node.id, { width, height })}
       style={{ background: "transparent", border: "none" }}
     >
       <svg viewBox="0 0 10 10" className="absolute -top-3 -left-3 h-2.5 w-2.5 text-white/25 hover:text-white/60" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
@@ -703,7 +781,8 @@ function ResizeGrip({ data, minWidth, minHeight }: { data: CardData; minWidth: n
 
 // The input row at the bottom of a box being added to; Enter adds and stays open, Escape closes
 function AddRow({ data }: { data: CardData }) {
-  const { node, adding, act, onAdding } = data;
+  const { node, adding } = data;
+  const { act, onAdding } = boundActions(data);
   if (!adding) return null;
 
   return (
@@ -713,9 +792,10 @@ function AddRow({ data }: { data: CardData }) {
   );
 }
 
-// A thread's ⋯ button and its small menu: its colour, the stats it trains, layout, hide, delete
+// A quest's ⋯ button and its small menu: its colour, the stats it trains, layout, hide, delete
 function MenuButton({ data }: { data: CardData }) {
-  const { node, menuOpen, act, onMenu } = data;
+  const { node, menuOpen } = data;
+  const { act, onMenu, subtreeIds } = boundActions(data);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // The menu opens on whichever side of the card has more room in the canvas, so it is never cut off
   const [side, setSide] = useState(Position.Bottom);
@@ -746,17 +826,17 @@ function MenuButton({ data }: { data: CardData }) {
           <button
             type="button"
             onClick={() => {
-              void act("resetLayout", data.subtreeIds());
+              void act("resetLayout", subtreeIds());
               onMenu(false);
             }}
             className="w-full rounded-md border border-white/10 px-2 py-1 text-left hover:border-white/24"
           >
-            Reset layout: place this thread automatically
+            Reset layout: place this quest automatically
           </button>
 
           <div className="flex justify-between gap-2 pt-1">
             <button type="button" onClick={() => void act("updateNode", node.id, { active: false })} className="rounded-md border border-white/10 px-2 py-1 hover:border-white/24">
-              Hide thread
+              Hide quest
             </button>
             <button type="button" onClick={() => void act("updateNode", node.id, { shelved: !node.shelved })} className="rounded-md border border-white/10 px-2 py-1 hover:border-white/24">
               {node.shelved ? "Unshelve" : "Shelve"}
@@ -778,9 +858,10 @@ function MenuButton({ data }: { data: CardData }) {
 // On the phone every box has one ⋯, opening its actions as a sheet from the bottom of the screen,
 // with words: there is no room for the desktop's small buttons, and fingers need bigger targets
 function PhoneMenu({ data }: { data: CardData }) {
-  const { node, depth, hasSteps, collapsed, menuOpen, act, onMenu, onToggleCollapsed, onAdding } = data;
+  const { node, depth, hasSteps, collapsed, menuOpen } = data;
+  const { act, onMenu, onToggleCollapsed, onAdding } = boundActions(data);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const isThread = depth === 0;
+  const isQuest = depth === 0;
   const choose = (action: () => unknown) => () => {
     action();
     onMenu(false);
@@ -827,7 +908,7 @@ function PhoneMenu({ data }: { data: CardData }) {
                   <EyeIcon crossed={!collapsed} /> {collapsed ? "Show steps" : "Hide steps"}
                 </button>
               ) : null}
-              {isThread ? (
+              {isQuest ? (
                 <>
                   <button type="button" onClick={choose(() => act("levelUp", node.id, crypto.randomUUID()))} className={phoneItem}>
                     <span className="text-[10px] font-semibold text-red-200">++</span> Level up
@@ -839,7 +920,7 @@ function PhoneMenu({ data }: { data: CardData }) {
                     <StatWeightsEditor node={node} act={act} />
                   </div>
                   <button type="button" onClick={choose(() => act("updateNode", node.id, { active: false }))} className={phoneItem}>
-                    Hide thread
+                    Hide quest
                   </button>
                 </>
               ) : null}
@@ -875,7 +956,7 @@ function ResetLayoutButton({ onReset }: { onReset: () => void }) {
         setConfirming(!confirming);
       }}
       onBlur={() => setConfirming(false)}
-      className={`rounded-full border bg-night-panel/80 px-3.5 py-1.5 text-[11px] uppercase tracking-[0.18em] backdrop-blur-sm ${
+      className={`rounded-full border bg-night-panel/90 px-3.5 py-1.5 text-[11px] uppercase tracking-[0.18em] ${
         confirming ? "border-red-400/40 text-red-200" : "border-white/10 text-white/70 hover:border-white/25 hover:text-white"
       }`}
     >
@@ -886,7 +967,7 @@ function ResetLayoutButton({ onReset }: { onReset: () => void }) {
 
 // One swatch per colour, plus white for none
 function ColorPicker({ node, act }: { node: GraphNode; act: Act }) {
-  const choices: (ThreadColor | null)[] = [null, ...threadColors];
+  const choices: (QuestColor | null)[] = [null, ...questColors];
   return (
     <div className="flex w-full justify-between" role="radiogroup" aria-label="Colour">
       {choices.map((color) => (
@@ -907,7 +988,7 @@ function ColorPicker({ node, act }: { node: GraphNode; act: Act }) {
   );
 }
 
-// The weight of each stat the thread trains: each XP in the thread adds weight × XP to the stat.
+// The weight of each stat the quest trains: each XP in the quest adds weight × XP to the stat.
 // A weight is saved when its field loses focus or on Enter; empty is 0. Every save sends the map
 // built from all six fields (the API sends changes to one node in order). The fields take the
 // stored weights back only once no save is pending, and never over an edit not yet saved.
@@ -976,19 +1057,23 @@ function parseWeight(draft: string): number | undefined {
 // Lays out every rendered level. Inside a box, steps the user has placed keep their place and
 // the rest are laid out automatically (prerequisites to the left) below them. A box is as big as
 // its content needs, or bigger if the user made it so; a step with nothing inside it takes the
-// size the user gave it. Threads are placed on the canvas the same way.
+// size the user gave it. Quests are placed on the canvas the same way.
 async function layoutTree(
-  threads: GraphNode[],
+  quests: GraphNode[],
   edges: GraphEdge[],
   visibleSteps: (id: string) => GraphNode[],
   addingTo: string | null,
 ) {
   const placements: Record<string, Box> = {};
 
-  // Unlinked steps inside a box pack closer than separate threads
+  // Unlinked steps inside a box pack closer than separate quests
   const layoutLevel = async (nodes: GraphNode[], sizes: Size[], nested: boolean): Promise<ElkNode> => {
     const ids = new Set(nodes.map((node) => node.id));
-    return elk.layout({
+    const links = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
+    const key = JSON.stringify([nested, nodes.map((node, i) => [node.id, sizes[i].width, sizes[i].height]), links.map((edge) => [edge.from, edge.to])]);
+    const known = levelLayouts.get(key);
+    if (known) return known;
+    const result = await elk.layout({
       id: "level",
       layoutOptions: {
         "elk.algorithm": "layered",
@@ -1000,10 +1085,11 @@ async function layoutTree(
         "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
       },
       children: nodes.map((node, i) => ({ id: node.id, ...sizes[i] })),
-      edges: edges
-        .filter((edge) => ids.has(edge.from) && ids.has(edge.to))
-        .map((edge, i) => ({ id: `e${i}`, sources: [edge.from], targets: [edge.to] })),
+      edges: links.map((edge, i) => ({ id: `e${i}`, sources: [edge.from], targets: [edge.to] })),
     });
+    levelLayouts.set(key, result);
+    if (levelLayouts.size > maxLevelLayouts) levelLayouts.delete(levelLayouts.keys().next().value!);
+    return result;
   };
 
   // Places `nodes` in a box whose content starts at `origin`; returns the content's far corner
@@ -1040,7 +1126,7 @@ async function layoutTree(
   };
 
   const measure = async (node: GraphNode, depth: number): Promise<Size> => {
-    const header = depth === 0 ? threadHeader : stepRow;
+    const header = depth === 0 ? questHeader : stepRow;
     const addRow = node.id === addingTo ? addRowHeight : 0;
     const steps = visibleSteps(node.id);
     if (steps.length === 0) {
@@ -1055,8 +1141,8 @@ async function layoutTree(
     };
   };
 
-  const sizes = await Promise.all(threads.map((thread) => measure(thread, 0)));
-  await arrange(threads, sizes, { x: 0, y: 0 }, false);
+  const sizes = await Promise.all(quests.map((quest) => measure(quest, 0)));
+  await arrange(quests, sizes, { x: 0, y: 0 }, false);
 
   return placements;
 }

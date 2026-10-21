@@ -5,7 +5,7 @@ export const statKeys: StatKey[] = ["STR", "DEX", "INT", "WIS", "CHR", "MND"];
 // Everything the dashboard derives from a snapshot
 export type GraphModel = {
   byId: Map<string, GraphNode>;
-  children: Map<string | null, GraphNode[]>; // keyed by parent id; null holds the threads
+  children: Map<string | null, GraphNode[]>; // keyed by parent id; null holds the quests
   totalXp: Map<string, number>; // a node's own XP and its steps', plus that of everything upstream
   ready: Set<string>; // not done, not shelved, with no unfinished prerequisite or step
   shelved: Set<string>; // shelved itself, or inside a shelved box
@@ -67,11 +67,11 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
       .map((node) => node.id),
   );
 
-  // All work in a thread trains each of the thread's stats, scaled by that stat's weight
+  // All work in a quest trains each of the quest's stats, scaled by that stat's weight
   const statXp = Object.fromEntries(statKeys.map((key) => [key, 0])) as Record<StatKey, number>;
   let totalStatXp = 0;
   snapshot.nodes.forEach((node) => {
-    trainedStats(threadOf(byId, node).statWeights).forEach(([key, weight]) => {
+    trainedStats(questOf(byId, node).statWeights).forEach(([key, weight]) => {
       statXp[key] += weight * node.ownXp;
       totalStatXp += weight * node.ownXp;
     });
@@ -80,7 +80,7 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
   return { byId, children, totalXp, ready, shelved, statXp, totalStatXp };
 }
 
-// The stats a thread trains with their weights, in statKeys order
+// The stats a quest trains with their weights, in statKeys order
 export function trainedStats(weights: StatWeights): [StatKey, number][] {
   return statKeys.flatMap((key): [StatKey, number][] => ((weights[key] ?? 0) > 0 ? [[key, weights[key]!]] : []));
 }
@@ -91,8 +91,8 @@ function isShelved(byId: Map<string, GraphNode>, node: GraphNode): boolean {
   return parent ? isShelved(byId, parent) : false;
 }
 
-// The thread a node sits in (a thread is its own)
-export function threadOf(byId: Map<string, GraphNode>, node: GraphNode): GraphNode {
+// The quest a node sits in (a quest is its own)
+export function questOf(byId: Map<string, GraphNode>, node: GraphNode): GraphNode {
   let current = node;
   let parent = current.parentId ? byId.get(current.parentId) : undefined;
   while (parent) {

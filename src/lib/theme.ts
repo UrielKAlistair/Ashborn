@@ -1,9 +1,9 @@
-import type { ThreadColor } from "../shared/types";
+import type { QuestColor } from "../shared/types";
 
-// A thread's colour, chosen in its ⋯ menu, in the style of the trail's chapters: a dot, a border,
-// a tint fading down the panel, and the bar. `rgb` colours its hex territory. Uncoloured threads
+// A quest's colour, chosen in its ⋯ menu, in the style of the trail's chapters: a dot, a border,
+// a tint fading down the panel, and the bar. `rgb` colours its hex territory. Uncoloured quests
 // are white.
-export type Hue = ThreadColor | "none";
+export type Hue = QuestColor | "none";
 export type Palette = { dot: string; border: string; tint: string; bar: string; rgb: [number, number, number] };
 
 export const palettes: Record<Hue, Palette> = {
@@ -18,4 +18,4 @@ export const palettes: Record<Hue, Palette> = {
   none: { dot: "bg-slate-200", border: "border-white/20", tint: "from-white/[0.05]", bar: "bg-slate-200/70", rgb: [226, 232, 240] },
 };
 
-export const paletteOf = (color: ThreadColor | null) => palettes[color ?? "none"];
+export const paletteOf = (color: QuestColor | null) => palettes[color ?? "none"];

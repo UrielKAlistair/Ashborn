@@ -74,12 +74,12 @@ test("agent tools", async () => {
 
   await test.step("complete, level up, stat weights, deadline, move", async () => {
     expect((await call("complete", { ids: [id("pca")] })).ok).toBe(true);
-    expect((await call("update_thread", { id: id("dl"), stat_weights: { INT: 0.2, CHR: 0.1, MND: 0 } })).ok).toBe(true);
+    expect((await call("update_quest", { id: id("dl"), stat_weights: { INT: 0.2, CHR: 0.1, MND: 0 } })).ok).toBe(true);
     expect((await call("level_up", { id: id("dl") })).ok).toBe(true);
     expect((await call("add_deadline", { title: "Submit draft", due_date: "2099-01-01" })).ok).toBe(true);
     expect((await call("move", { id: id("svm"), parent_id: id("kpca") })).ok).toBe(true);
 
-    const { body } = await call("overview", { thread_id: id("dl") });
+    const { body } = await call("overview", { quest_id: id("dl") });
     expect(body).toMatch(/trains INT 0\.2, CHR 0\.1$/m); // a zero weight is not stored
     expect(body).toContain("- [x] PCA from scratch");
     expect(body).toMatch(/^ {2}- \[ \] Support vector machines/m); // now inside Kernel PCA, link dropped
@@ -88,11 +88,11 @@ test("agent tools", async () => {
 
   await test.step("a shelved step is marked, and nothing inside it is up next until it is unshelved", async () => {
     expect((await call("shelve", { ids: [id("kpca")] })).ok).toBe(true);
-    let { body } = await call("overview", { thread_id: id("dl") });
+    let { body } = await call("overview", { quest_id: id("dl") });
     expect(body).toMatch(/Kernel PCA \[[^\]]+\] \(shelved\)/);
     expect(body.split("\n\n")[0]).not.toContain("Kernel trick");
     expect((await call("unshelve", { ids: [id("kpca")] })).ok).toBe(true);
-    ({ body } = await call("overview", { thread_id: id("dl") }));
+    ({ body } = await call("overview", { quest_id: id("dl") }));
     expect(body).not.toContain("(shelved)");
     expect(body.split("\n\n")[0]).toContain("Kernel trick");
   });

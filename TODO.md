@@ -50,7 +50,7 @@ Only open work is listed here. What is built, and why it is built that way, is i
 
 ## Later
 
-- [ ] Stat presets: named weight sets a thread can load. Only once weights have been used for a
+- [ ] Stat presets: named weight sets a quest can load. Only once weights have been used for a
       while.
 - [ ] A record of what was eaten each day, which could feed calorie tracking. The `meals` rows
       already hold the plan and whether each meal was cooked.

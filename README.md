@@ -74,7 +74,7 @@ the lock screen; both are needed for alarms to ring.
 ## Agent access (MCP)
 
 Ashborn includes an MCP server, so an agent such as Claude Code can read and edit your
-threads, steps, links, routines and deadlines ("I'm learning deep learning, roughly these
+quests, steps, links, routines and deadlines ("I'm learning deep learning, roughly these
 ideas, plan it for me"). Changes show up live in the app.
 
 1. `npm run agent:login` once, with your Ashborn email and password. The session is kept in
@@ -84,7 +84,7 @@ ideas, plan it for me"). Changes show up live in the app.
    `claude mcp add --scope user ashborn -- npm --prefix /path/to/Ashborn run -s agent`
 
 Tools: `overview`, `add_plan` (nested, linked steps in one call), `complete`, `reopen`,
-`rename`, `move`, `delete`, `link`, `unlink`, `level_up`, `update_thread` (stat weights, colour,
+`rename`, `move`, `delete`, `link`, `unlink`, `level_up`, `update_quest` (stat weights, colour,
 shown), `add_deadline`, `add_routine`, `add_alarm`.
 
 ## Recommended IDE Setup

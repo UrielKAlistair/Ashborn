@@ -76,7 +76,7 @@ function backupCounts(file: string) {
 }
 
 test("backup", async () => {
-  // The earlier suites leave the test account with threads, a kitchen and level-ups
+  // The earlier suites leave the test account with quests, a kitchen and level-ups
   const inAccount = await counts();
 
   await test.step("on start, with no backup yet, every table is written", async () => {

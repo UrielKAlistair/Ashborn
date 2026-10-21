@@ -93,7 +93,7 @@ test("kitchen", async () => {
     await setStock("Rice", "5");
     await expect(amountLabel("Rice")).toHaveText("5 kg / 2 kg");
     await expect(stock("Rice").getByTitle("More than you usually keep")).toBeVisible();
-    expect(await onHand("Rice")).toBe(5000);
+    await expect.poll(() => onHand("Rice")).toBe(5000);
 
     await setStock("Butter beans", "0.2");
     await expect(stock("Butter beans").locator(".bg-amber-300\\/85")).toHaveCount(1);
@@ -174,8 +174,7 @@ test("kitchen", async () => {
     await page.getByRole("button", { name: "Save" }).click();
     await meal("dinner", tomorrow).getByRole("button", { name: "Cancel" }).click();
     await expect(meal("dinner", tomorrow).getByText("Dal")).toHaveClass(/line-through/);
-    const { data } = await db.from("meals").select("status").eq("date", tomorrow).eq("slot", "dinner").single();
-    expect(data?.status).toBe("cancelled");
+    await expect.poll(async () => (await db.from("meals").select("status").eq("date", tomorrow).eq("slot", "dinner").single()).data?.status).toBe("cancelled");
     await meal("dinner", tomorrow).getByRole("button", { name: "Restore" }).click();
     await expect(meal("dinner", tomorrow).getByText("Dal")).not.toHaveClass(/line-through/);
   });

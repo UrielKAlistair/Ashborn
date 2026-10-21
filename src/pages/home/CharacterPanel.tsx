@@ -1,15 +1,15 @@
 import { palettes } from "../../lib/theme";
 import { statKeys, type GraphModel } from "../../shared/graphModel";
 import { statLevel } from "../../shared/progression";
-import type { StatKey, ThreadColor } from "../../shared/types";
+import type { QuestColor, StatKey } from "../../shared/types";
 import { Portrait, portraitTiers } from "./Portrait";
 
 // The portrait advances one sprite tier every PORTRAIT_TIER_LEVELS overall levels
 const PORTRAIT_TIER_LEVELS = 5;
 // How much larger the portrait is drawn on the phone's character card
 const CARD_PORTRAIT_ZOOM = 2;
-// Each stat's bar has a colour of its own, unrelated to the colours of threads
-const statColors: Record<StatKey, ThreadColor> = { STR: "red", DEX: "orange", INT: "blue", WIS: "green", CHR: "violet", MND: "teal" };
+// Each stat's bar has a colour of its own, unrelated to the colours of quests
+const statColors: Record<StatKey, QuestColor> = { STR: "red", DEX: "orange", INT: "blue", WIS: "green", CHR: "violet", MND: "teal" };
 
 // The character: portrait, overall level and the six stats. On the desktop a row beside the
 // to-do list; on the phone (`card`) a tall card with a larger portrait and the stats beneath it.

@@ -37,6 +37,7 @@ function Figure({ src, cell, scale }: { src: string; cell: number | null; scale:
 
   useEffect(() => {
     let frameRequest = 0;
+    let timer = 0;
     const image = new Image();
     image.onload = () => {
       const { frames, crop, centre } = readSheet(image, cell ?? image.width, cell ?? image.height);
@@ -50,22 +51,26 @@ function Figure({ src, cell, scale }: { src: string; cell: number | null; scale:
       const context = canvas.getContext("2d")!;
       const left = half - (centre - crop.x);
       const start = performance.now();
+      const frameMs = 1000 / FRAMES_PER_SECOND;
       let shown = -1;
       const draw = (now: number) => {
-        const frame = Math.floor(((now - start) / 1000) * FRAMES_PER_SECOND) % frames.length;
+        const elapsed = now - start;
+        const frame = Math.floor(elapsed / frameMs) % frames.length;
         if (frame !== shown) {
           const at = frames[frame];
           context.clearRect(0, 0, canvas.width, canvas.height);
           context.drawImage(image, at.x + crop.x, at.y + crop.y, crop.width, crop.height, left, 0, crop.width, crop.height);
           shown = frame;
         }
-        if (frames.length > 1) frameRequest = requestAnimationFrame(draw);
+        // Sleeps until the next frame is due rather than waking at every display refresh
+        if (frames.length > 1) timer = window.setTimeout(() => (frameRequest = requestAnimationFrame(draw)), frameMs - (elapsed % frameMs));
       };
       frameRequest = requestAnimationFrame(draw);
     };
     image.src = src;
     return () => {
       image.onload = null;
+      window.clearTimeout(timer);
       cancelAnimationFrame(frameRequest);
     };
   }, [src, cell, scale]);
