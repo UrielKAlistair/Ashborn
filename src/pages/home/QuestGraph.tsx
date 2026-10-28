@@ -1,4 +1,5 @@
-import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
+import ELK, { type ElkNode } from "elkjs/lib/elk-api.js";
+import elkWorkerUrl from "elkjs/lib/elk-worker.min.js?url";
 import {
   Controls,
   Handle,
@@ -25,6 +26,7 @@ import { nodeLevel } from "../../shared/progression";
 import { questColors, type GraphEdge, type GraphNode, type QuestColor, type Snapshot, type StatKey, type StatWeights } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
+import { usePhonePanZoom } from "./phonePanZoom";
 import Territories from "./territory/Territories";
 import type { TerritoryQuest } from "./territory/territoryGrid";
 import { Tick } from "./Tick";
@@ -38,6 +40,7 @@ const padding = 16;
 const collapsedStorageKey = "ashborn-collapsed";
 
 const fitOptions = { padding: 0.15, maxZoom: 1.1 };
+const zoomRange = { min: 0.15, max: 2 };
 
 // On the phone the whole graph would fit too small to read. The view opens instead on its
 // top-left corner, so the first quests' headers show, as wide as fits but never smaller than
@@ -56,9 +59,10 @@ function phoneViewport(shown: GraphNode[], placements: Record<string, Box>, pane
   return { x: PHONE_MARGIN - left * zoom, y: PHONE_TOOLBAR_HEIGHT + PHONE_MARGIN - top * zoom, zoom };
 }
 
-const elk = new ELK();
-// ELK runs on the main quest, so each box's layout is kept by its input (its nodes in order,
-// their sizes, its links) and a relayout redoes only the boxes that changed. Oldest dropped first.
+// ELK (1.6 MB) is loaded and runs in a worker, so neither holds the main thread
+const elk = new ELK({ workerUrl: elkWorkerUrl });
+// Each box's layout is kept by its input (its nodes in order, their sizes, its links), so a
+// relayout sends the worker only the boxes that changed. Oldest dropped first.
 const levelLayouts = new Map<string, ElkNode>();
 const maxLevelLayouts = 500;
 
@@ -119,6 +123,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   const fittedFor = useRef<string | null>(null);
   // Hidden until the first layout is fitted: before it, every node sits at the origin
   const [shownYet, setShownYet] = useState(false);
+  const phonePanZoom = usePhonePanZoom(phone, zoomRange.min, zoomRange.max);
 
   // A box shows all its steps, done ones greyed, unless the user collapsed it
   const visibleSteps = (id: string) => (collapsed.has(id) ? [] : (model.children.get(id) ?? []));
@@ -354,7 +359,10 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
 
   return (
     <ReactFlow
-      style={{ opacity: shownYet || shown.length === 0 ? 1 : 0 }}
+      ref={phonePanZoom.ref}
+      // Pointer events can't stop the browser's own touch scrolling; on a card, outside React
+      // Flow's pane, only touch-action can
+      style={{ opacity: shownYet || shown.length === 0 ? 1 : 0, touchAction: phone ? "none" : undefined }}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -369,6 +377,9 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         setSelectedEdge(null);
         setQuestsOpen(false);
       }}
+      // On the phone the fingers pan and pinch through usePhonePanZoom
+      panOnDrag={!phone}
+      zoomOnPinch={!phone}
       nodesDraggable={!phone}
       nodeDragThreshold={4}
       nodesConnectable={!phone}
@@ -379,12 +390,13 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       }}
       zoomOnDoubleClick={false}
       deleteKeyCode={null}
-      minZoom={0.15}
+      minZoom={zoomRange.min}
+      maxZoom={zoomRange.max}
       proOptions={{ hideAttribution: true }}
       colorMode="dark"
       className="!bg-transparent"
     >
-      <Territories quests={territories} />
+      <Territories quests={territories} camera={phone ? phonePanZoom.feed : undefined} />
       <Controls position="bottom-left" showInteractive={false} fitViewOptions={{ ...fitOptions, duration: 300 }} />
 
       {quests.length > 0 ? (

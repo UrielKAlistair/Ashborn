@@ -3,12 +3,14 @@ import { useStoreApi } from "@xyflow/react";
 import { buildGrid, computeOwners, gridExtent } from "./territoryGrid";
 import type { TerritoryQuest } from "./territoryGrid";
 import { TerritoryRenderer } from "./territoryRenderer";
+import type { CameraFeed } from "../phonePanZoom";
 
 // The hex fabric behind the quest graph, and the territories coloured into it (see
 // territoryGrid.ts), drawn on a WebGL canvas (territoryRenderer.ts). Without WebGL the graph
 // simply has no background.
 
-function Territories({ quests }: { quests: TerritoryQuest[] }) {
+// `camera`, on the phone, moves the territory during a gesture, before React Flow's store knows
+function Territories({ quests, camera }: { quests: TerritoryQuest[]; camera?: CameraFeed }) {
   const store = useStoreApi();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<TerritoryRenderer | null>(null);
@@ -36,6 +38,8 @@ function Territories({ quests }: { quests: TerritoryQuest[] }) {
       rendererRef.current = null;
     };
   }, [store]);
+
+  useLayoutEffect(() => camera?.subscribe((next) => rendererRef.current?.setCamera(next)), [camera]);
 
   useLayoutEffect(() => {
     if (grid && looks) rendererRef.current?.paint(grid, looks);

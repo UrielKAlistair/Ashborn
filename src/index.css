@@ -46,3 +46,9 @@ body {
 .panel-scroll::-webkit-scrollbar-thumb:hover {
   background-color: rgb(255 255 255 / 0.24);
 }
+
+/* The quest graph's camera is its own compositor layer, so a pan or zoom moves the cards already
+   drawn instead of repainting them in every frame; Chrome redraws them sharp once a zoom ends */
+.react-flow__viewport {
+  will-change: transform;
+}
