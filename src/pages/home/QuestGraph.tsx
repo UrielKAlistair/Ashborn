@@ -19,6 +19,7 @@ import {
 } from "@xyflow/react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { HEX_POINTS } from "../../components/HexTile";
 import { paletteOf, palettes } from "../../lib/theme";
 import { useToday } from "../../lib/useToday";
 import { isDone, isFinished, statKeys, type GraphModel } from "../../shared/graphModel";
@@ -462,13 +463,13 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       {quests.length > 0 ? (
         <Panel position="top-left" className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
-            <InlineInput placeholder="+ New quest" onSubmit={(title) => act("createNode", title, null)} className="w-48" />
+            <InlineInput placeholder="+ New quest" onSubmit={(title) => act("createNode", title, null)} className="w-52" />
             <button
               type="button"
               onClick={() => setQuestsOpen((open) => !open)}
-              className="rounded-full border border-white/10 bg-night-panel/90 px-3.5 py-1.5 text-[11px] uppercase tracking-[0.18em] text-white/70 hover:border-white/25 hover:text-white"
+              className={`${toolbarPill} ${questsOpen ? "border-white/25 text-white" : ""}`}
             >
-              Quests {shown.length}/{quests.length}
+              Quests <span className="ml-1 font-mono text-white/45 tabular-nums">{shown.length}/{quests.length}</span>
             </button>
             {phone ? null : (
               <ResetLayoutButton
@@ -482,12 +483,12 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
           </div>
 
           {questsOpen ? (
-            <div className="w-72 rounded-xl border border-white/10 bg-night-card/95 p-3">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">Shown on the dashboard</p>
+            <div className="w-72 rounded-xl border border-white/10 bg-night-card p-3 shadow-[var(--card-shadow)]">
+              <p className="font-display text-[12px] font-semibold text-white/60">Shown on the graph</p>
               <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">
                 {quests.filter((quest) => !completed.includes(quest) && !archived.includes(quest)).map((quest) => (
-                  <label key={quest.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-xs text-white/75 hover:bg-white/6">
-                    <input type="checkbox" checked={quest.active} onChange={(event) => void act("updateNode", quest.id, { active: event.target.checked })} />
+                  <label key={quest.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[13px] text-white/80 hover:bg-white/6">
+                    <input type="checkbox" className="accent-[var(--color-ember)]" checked={quest.active} onChange={(event) => void act("updateNode", quest.id, { active: event.target.checked })} />
                     <span className="truncate">{quest.title}</span>
                   </label>
                 ))}
@@ -507,7 +508,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       ) : null}
 
       {selectedEdge ? (
-        <Panel position="bottom-center" className="flex items-center gap-3 rounded-xl border border-white/10 bg-night-card/95 px-3 py-2 text-xs text-white/70">
+        <Panel position="bottom-center" className="flex items-center gap-3 rounded-xl border border-white/10 bg-night-card px-3 py-2 text-[13px] text-white/70 shadow-[var(--card-shadow)]">
           <span className="max-w-72 truncate text-white/60">
             {model.byId.get(selectedEdge.from)?.title} → {model.byId.get(selectedEdge.to)?.title}
           </span>
@@ -517,7 +518,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
               void act("removeEdge", selectedEdge);
               setSelectedEdge(null);
             }}
-            className="rounded-md border border-red-400/30 px-2 py-1 text-red-200 hover:border-red-300/50"
+            className="ml-auto rounded-lg border border-red-400/25 px-2.5 py-1 text-[12px] text-red-300 hover:bg-red-400/10"
           >
             Remove link
           </button>
@@ -528,7 +529,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 text-center">
           {quests.length === 0 ? (
             <>
-              <p className="max-w-sm text-xs leading-relaxed tracking-[0.12em] text-white/45">
+              <HexMark className="h-14 w-16 text-ember/50" />
+              <p className="max-w-sm font-display text-base font-semibold text-white/75">
                 Start a quest: something you are learning or building.
               </p>
               <div className="pointer-events-auto">
@@ -536,9 +538,12 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
               </div>
             </>
           ) : (
-            <p className="text-xs tracking-[0.12em] text-white/45">
+            <>
+              <HexMark className="h-10 w-12 text-white/15" />
+              <p className="text-[13px] text-white/50">
               {completed.length > 0 ? "Every shown quest is done. Reopen one under Quests." : "All quests are hidden. Pick some under Quests."}
-            </p>
+              </p>
+            </>
           )}
         </div>
       ) : null}
@@ -555,20 +560,18 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
   return (
     <div data-priority={data.look} className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
       <Handles height={questHeader.height} hidden={data.phone} />
-      <div className="priority-mark rounded-3xl" />
+      <div className="priority-mark rounded-2xl" />
 
-      {/* A frosted sheet in the quest's colour, as the trail's chapters are */}
-      <div
-        className={`absolute inset-0 overflow-hidden rounded-3xl border bg-night-card/90 shadow-[var(--card-shadow)] ${palette.border}`}
-      >
-        <div className={`pointer-events-none absolute inset-0 bg-linear-to-b to-transparent to-60% ${palette.tint}`} />
+      {/* A sheet tinted in the quest's colour from the top */}
+      <div className={`absolute inset-0 overflow-hidden rounded-2xl border bg-night-card shadow-[var(--card-shadow)] ${palette.border}`}>
+        <div className={`pointer-events-none absolute inset-0 bg-linear-to-b to-transparent to-40% ${palette.tint}`} />
       </div>
 
-      <div className="relative flex flex-col justify-between px-4 py-3" style={{ height: questHeader.height }}>
+      <div className="group relative flex flex-col justify-between px-4 pt-3 pb-3.5" style={{ height: questHeader.height }}>
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-1 items-start gap-2">
-            <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${palette.dot}`} />
-            <Title node={node} act={act} textSize="text-[13px]" className="line-clamp-2 leading-snug font-semibold text-white" />
+            <HexDot className={palette.hexFill} />
+            <Title node={node} act={act} textSize="text-[14px]" className="line-clamp-2 font-display leading-snug font-semibold text-white" />
             {data.phone ? null : (
               <button
                 type="button"
@@ -577,20 +580,20 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
                   void act("levelUp", node.id, crypto.randomUUID());
                 }}
                 title="Level up: log a session of progress"
-                className="nodrag shrink-0 rounded-md border border-red-300/30 bg-red-400/12 px-1.5 py-0.5 text-[10px] leading-none font-semibold text-red-200 hover:border-red-200/60 hover:bg-red-400/25 hover:text-red-100"
+                className="nodrag shrink-0 rounded-md bg-ember/15 px-1.5 py-[3px] font-mono text-[10px] leading-none font-semibold text-ember hover:bg-ember/25"
               >
-                ++
+                +1
               </button>
             )}
           </div>
           <BoxButtons data={data} />
         </div>
         <div>
-          <span className="text-[10px] tracking-[0.14em] text-white/45">
+          <span className="font-mono text-[10.5px] text-white/45">
             Lv {level.level}
-            {node.shelved ? <span className="ml-2 uppercase text-white/60">· Shelved</span> : null}
+            {node.shelved ? <span className="ml-2 font-sans text-white/60">· Shelved</span> : null}
           </span>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full border border-white/8 bg-night/50">
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/8">
             <div className={`h-full rounded-full ${palette.bar}`} style={{ width: `${level.percent}%` }} />
           </div>
         </div>
@@ -611,20 +614,21 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
   return (
     <div
       data-priority={data.look}
-      className={`group relative h-full w-full rounded-xl border ${done ? "border-white/[0.06]" : "border-white/12"} ${
-        holdsSteps ? "bg-white/[0.025]" : done ? "bg-white/[0.015]" : "bg-white/[0.05]"
+      className={`group relative h-full w-full rounded-xl border ${done ? "border-white/[0.05]" : "border-white/10"} ${
+        holdsSteps ? "bg-white/[0.02]" : done ? "bg-white/[0.012]" : "bg-night-panel"
       } ${data.shelved ? shelvedLook : ""}`}
     >
       <Handles height={stepRow.height} hidden={data.phone} />
       <div className="priority-mark rounded-xl" />
-      <div className="flex items-center gap-2 px-3" style={{ height: stepRow.height }}>
+      <div className="relative flex items-center gap-2.5 px-3" style={{ height: stepRow.height }}>
         <Tick done={done} onClick={() => void act("updateNode", node.id, { done: !done })} className="nodrag" />
         <Title
           node={node}
           act={act}
-          textSize="text-xs"
-          className={`flex-1 truncate ${done ? "text-white/35 line-through decoration-white/25" : "text-white/90"}`}
+          textSize="text-[12.5px]"
+          className={`flex-1 truncate ${done ? "text-white/35 line-through decoration-white/25" : holdsSteps ? "font-medium text-white/80" : "text-white/88"}`}
         />
+        {node.priority && !data.phone ? <span className="shrink-0 font-mono text-[10px] text-white/45 group-hover:invisible">P{node.priority}</span> : null}
         <BoxButtons data={data} />
       </div>
       <AddRow data={data} />
@@ -736,8 +740,17 @@ function BoxButtons({ data }: { data: CardData }) {
   const { onToggleCollapsed, onToggleLocked, onAdding } = boundActions(data);
   if (data.phone) return <PhoneMenu data={data} />;
 
+  // A quest's buttons sit in its header; a step's float over the end of its title on hover, so
+  // the title has the card's whole width the rest of the time
+  const steps = depth > 0;
   return (
-    <div className="flex shrink-0 items-center gap-1">
+    <div
+      className={
+        steps
+          ? "absolute inset-y-0 right-0 flex items-center gap-1 rounded-r-xl bg-linear-to-l from-night-panel from-70% to-transparent pr-2 pl-6 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+          : "flex shrink-0 items-center gap-0.5"
+      }
+    >
       {hasSteps ? (
         <button
           type="button"
@@ -746,7 +759,7 @@ function BoxButtons({ data }: { data: CardData }) {
             onToggleCollapsed();
           }}
           title={collapsed ? "Show steps" : "Hide steps"}
-          className="nodrag flex h-6 w-6 items-center justify-center rounded-md text-white/40 hover:bg-white/8 hover:text-white/80"
+          className={`nodrag ${iconButton} text-white/40 hover:bg-white/8 hover:text-white/80`}
         >
           <EyeIcon crossed={collapsed} />
         </button>
@@ -758,7 +771,7 @@ function BoxButtons({ data }: { data: CardData }) {
           onAdding(!adding);
         }}
         title="Add a step inside"
-        className={`nodrag ${boxButton} rounded-[5px] border border-emerald-300/35 bg-emerald-400/12 text-emerald-200 hover:border-emerald-200/60 hover:bg-emerald-400/25 hover:text-emerald-100`}
+        className={`nodrag ${iconButton} text-white/50 hover:bg-white/8 hover:text-white`}
       >
         <PlusIcon />
       </button>
@@ -771,7 +784,7 @@ function BoxButtons({ data }: { data: CardData }) {
               onToggleLocked();
             }}
             title={locked ? "Unlock: let its steps be moved" : "Lock: keep its steps where they are"}
-            className={`nodrag flex h-6 w-6 items-center justify-center rounded-md hover:bg-white/8 ${locked ? "text-white/40 hover:text-white/80" : "text-amber-200/80 hover:text-amber-100"}`}
+            className={`nodrag ${iconButton} hover:bg-white/8 ${locked ? "text-white/40 hover:text-white/80" : "text-ember"}`}
           >
             <LockIcon open={!locked} />
           </button>
@@ -801,12 +814,12 @@ function PriorityButton({ data }: { data: CardData }) {
           onMenu(!menuOpen);
         }}
         title="Priority"
-        className={`nodrag ${boxButton} rounded-[5px] border border-white/15 text-[9px] font-semibold text-white/50 hover:text-white`}
+        className={`nodrag ${iconButton} font-mono text-[10px] font-semibold text-white/50 hover:bg-white/8 hover:text-white`}
       >
         {node.priority ? `P${node.priority}` : "P"}
       </button>
       <NodeToolbar isVisible={menuOpen} position={Position.Bottom} align="end" offset={6}>
-        <div className="nodrag nopan w-48 rounded-xl border border-white/12 bg-night-card/95 p-2 text-xs text-white/75">
+        <div className="nodrag nopan w-52 rounded-xl border border-white/10 bg-night-card p-2 text-xs text-white/75 shadow-[var(--card-shadow)]">
           <PriorityPicker node={node} act={act} />
         </div>
       </NodeToolbar>
@@ -826,7 +839,8 @@ function PriorityPicker({ node, act }: { node: GraphNode; act: Act }) {
           aria-checked={node.priority === priority}
           aria-label={priority ? `Priority ${priority}` : "No priority"}
           onClick={() => void act("updateNode", node.id, { priority })}
-          className={`flex-1 rounded-md border px-1 py-1 text-[10px] ${node.priority === priority ? "border-white/50 text-white" : "border-white/10 text-white/50 hover:border-white/25"}`}
+          data-priority={priority ?? "none"}
+          className={`flex-1 rounded-md border px-1 py-1 font-mono text-[11px] ${node.priority === priority ? "border-[var(--mark,var(--color-white))] bg-[color-mix(in_oklab,var(--mark,var(--color-white))_14%,transparent)] text-white" : "border-white/10 text-white/50 hover:border-white/25"}`}
         >
           {priority ? `P${priority}` : "–"}
         </button>
@@ -847,9 +861,7 @@ function ShelveButton({ data }: { data: CardData }) {
         void act("updateNode", node.id, { shelved: !node.shelved });
       }}
       title={node.shelved ? "Unshelve: pursue it again" : "Shelve: keep it, but not now"}
-      className={`nodrag ${boxButton} rounded-[5px] border border-white/20 text-[9px] leading-none text-white/60 hover:border-white/40 hover:text-white/90 ${
-        node.shelved ? "" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
-      }`}
+      className={`nodrag ${iconButton} text-[9px] leading-none text-white/50 hover:bg-white/8 hover:text-white/90`}
     >
       ❚❚
     </button>
@@ -877,10 +889,8 @@ function DeleteButton({ data }: { data: CardData }) {
         else setConfirming(true);
       }}
       title={confirming ? "Click again to delete" : "Delete"}
-      className={`nodrag ${boxButton} rounded-full border ${
-        confirming
-          ? "border-red-300/60 bg-red-500/25 px-2 text-[10px] leading-none text-red-100"
-          : "border-red-300/45 text-red-300/85 hover:border-red-200/70 hover:bg-red-500/15 hover:text-red-100"
+      className={`nodrag ${iconButton} ${
+        confirming ? "w-auto bg-red-500/20 px-2 text-[11px] leading-none text-red-200" : "text-white/45 hover:bg-red-500/15 hover:text-red-300"
       }`}
     >
       {confirming ? (
@@ -927,8 +937,18 @@ function CrossIcon() {
   );
 }
 
-// The + and × share one bounding box (the × widens only to ask "Delete?")
-const boxButton = "flex h-[18px] min-w-[18px] shrink-0 items-center justify-center";
+// Every small button on a card: one square (the × widens only to ask "Delete?")
+const iconButton = "flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md";
+const toolbarPill = "rounded-lg border border-white/10 bg-night-panel px-3 py-1.5 text-[12.5px] font-medium text-white/75 hover:border-white/25 hover:text-white";
+
+// A quest's colour as a small flat-topped hex
+function HexDot({ className }: { className: string }) {
+  return (
+    <svg viewBox="0 0 56 48" className="mt-[3px] h-3 w-3.5 shrink-0" aria-hidden="true">
+      <polygon points={HEX_POINTS} className={className} />
+    </svg>
+  );
+}
 
 // The input row at the bottom of a box being added to; Enter adds and stays open, Escape closes
 function AddRow({ data }: { data: CardData }) {
@@ -970,9 +990,15 @@ function MenuButton({ data }: { data: CardData }) {
       </button>
 
       <NodeToolbar isVisible={menuOpen} position={side} align="end" offset={6}>
-        <div className="nodrag nopan w-60 space-y-2 rounded-xl border border-white/12 bg-night-card/95 p-3 text-xs text-white/75 shadow-xl">
-          <PriorityPicker node={node} act={act} />
-          <ColorPicker node={node} act={act} />
+        <div className="nodrag nopan w-64 space-y-3 rounded-xl border border-white/10 bg-night-card p-3 text-[12px] text-white/75 shadow-[var(--card-shadow)]">
+          <div>
+            <p className="mb-1 text-[11.5px] text-white/45">Priority</p>
+            <PriorityPicker node={node} act={act} />
+          </div>
+          <div>
+            <p className="mb-1 text-[11.5px] text-white/45">Colour</p>
+            <ColorPicker node={node} act={act} />
+          </div>
           <StatWeightsEditor node={node} act={act} />
 
           <button
@@ -982,22 +1008,22 @@ function MenuButton({ data }: { data: CardData }) {
               void act("resetLayout", subtreeIds().slice(1));
               onMenu(false);
             }}
-            className="w-full rounded-md border border-white/10 px-2 py-1 text-left hover:border-white/24"
+            className="w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-white/70 hover:bg-white/6"
           >
             Reset layout: arrange its steps automatically
           </button>
 
-          <div className="flex justify-between gap-2 pt-1">
-            <button type="button" onClick={() => void act("updateNode", node.id, { active: false })} className="rounded-md border border-white/10 px-2 py-1 hover:border-white/24">
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-white/8 pt-3">
+            <button type="button" onClick={() => void act("updateNode", node.id, { active: false })} className="rounded-lg border border-white/12 px-2.5 py-1 text-[12px] text-white/75 hover:bg-white/6">
               Hide quest
             </button>
-            <button type="button" onClick={() => void act("updateNode", node.id, { shelved: !node.shelved })} className="rounded-md border border-white/10 px-2 py-1 hover:border-white/24">
+            <button type="button" onClick={() => void act("updateNode", node.id, { shelved: !node.shelved })} className="rounded-lg border border-white/12 px-2.5 py-1 text-[12px] text-white/75 hover:bg-white/6">
               {node.shelved ? "Unshelve" : "Shelve"}
             </button>
             <button
               type="button"
               onClick={() => (confirmDelete ? void act("deleteNode", node.id) : setConfirmDelete(true))}
-              className="rounded-md border border-red-400/30 px-2 py-1 text-red-200 hover:border-red-300/50"
+              className="ml-auto rounded-lg border border-red-400/25 px-2.5 py-1 text-[12px] text-red-300 hover:bg-red-400/10"
             >
               {confirmDelete ? "Really delete?" : "Delete"}
             </button>
@@ -1030,7 +1056,7 @@ function PhoneMenu({ data }: { data: CardData }) {
           onMenu(!menuOpen);
         }}
         aria-label="Actions"
-        className="nodrag flex h-6 w-8 shrink-0 items-center justify-center rounded-lg text-base leading-none text-white/55 active:bg-white/10"
+        className="nodrag relative flex h-6 w-8 shrink-0 items-center justify-center rounded-lg text-base leading-none text-white/55 before:absolute before:-inset-x-1.5 before:-inset-y-2.5 before:content-[''] active:bg-white/10"
       >
         ⋯
       </button>
@@ -1040,7 +1066,7 @@ function PhoneMenu({ data }: { data: CardData }) {
           <div className="fixed inset-0 z-[60] flex items-end bg-night/60" onClick={() => onMenu(false)}>
             <div
               onClick={(event) => event.stopPropagation()}
-              className="w-full rounded-t-3xl border-t border-white/12 bg-night-card p-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-white/85 shadow-[var(--sheet-shadow)]"
+              className="panel-scroll max-h-[85vh] w-full overflow-y-auto rounded-t-2xl border-t border-white/10 bg-night-card p-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-[14px] text-white/85 shadow-[var(--sheet-shadow)] transition-transform duration-200 ease-out starting:translate-y-full"
             >
               <input
                 defaultValue={node.title}
@@ -1051,7 +1077,7 @@ function PhoneMenu({ data }: { data: CardData }) {
                   if (!title) event.currentTarget.value = node.title;
                   else if (title !== node.title) void act("updateNode", node.id, { title });
                 }}
-                className="mb-1 w-full rounded-lg border border-white/10 bg-night/70 px-3 py-2 text-sm text-white/90 focus:border-white/30 focus:outline-none"
+                className="mb-1 min-h-11 w-full rounded-lg border border-white/10 bg-night/60 px-3 py-2 font-display text-[15px] font-semibold text-white/90 focus:border-ember/60 focus:outline-none"
               />
               <button type="button" onClick={choose(() => onAdding(true))} className={phoneItem}>
                 <PlusIcon /> Add a step inside
@@ -1061,18 +1087,20 @@ function PhoneMenu({ data }: { data: CardData }) {
                   <EyeIcon crossed={!collapsed} /> {collapsed ? "Show steps" : "Hide steps"}
                 </button>
               ) : null}
-              <div className={phoneItem}>
+              <div className={phoneRow}>
+                <p className="mb-1 text-[11.5px] text-white/45">Priority</p>
                 <PriorityPicker node={node} act={act} />
               </div>
               {isQuest ? (
                 <>
                   <button type="button" onClick={choose(() => act("levelUp", node.id, crypto.randomUUID()))} className={phoneItem}>
-                    <span className="text-[10px] font-semibold text-red-200">++</span> Level up
+                    <span className="text-[11px] font-semibold text-red-300">++</span> Level up
                   </button>
-                  <div className={phoneItem}>
+                  <div className={phoneRow}>
+                    <p className="mb-1 text-[11.5px] text-white/45">Colour</p>
                     <ColorPicker node={node} act={act} />
                   </div>
-                  <div className={phoneItem}>
+                  <div className={phoneRow}>
                     <StatWeightsEditor node={node} act={act} />
                   </div>
                   <button type="button" onClick={choose(() => act("updateNode", node.id, { active: false }))} className={phoneItem}>
@@ -1086,7 +1114,7 @@ function PhoneMenu({ data }: { data: CardData }) {
               <button
                 type="button"
                 onClick={() => (confirmDelete ? void act("deleteNode", node.id) : setConfirmDelete(true))}
-                className={`${phoneItem} text-red-200`}
+                className={`${phoneItem} text-red-300`}
               >
                 <CrossIcon /> {confirmDelete ? "Tap again to delete" : "Delete"}
               </button>
@@ -1099,13 +1127,14 @@ function PhoneMenu({ data }: { data: CardData }) {
   );
 }
 
-const phoneItem = "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left active:bg-white/10";
+const phoneItem = "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left active:bg-white/8";
+const phoneRow = "w-full px-3 py-2";
 
 // Puts every node back to automatic placement; the first click asks
 // The first click offers the two resets; moving focus away takes them back
 function ResetLayoutButton({ onReset }: { onReset: (alsoSteps: boolean) => void }) {
   const [confirming, setConfirming] = useState(false);
-  const look = "rounded-full border bg-night-panel/90 px-3.5 py-1.5 text-[11px] uppercase tracking-[0.18em]";
+  const look = "rounded-lg border bg-night-panel px-3 py-1.5 text-[12.5px] font-medium";
   const reset = (alsoSteps: boolean) => {
     onReset(alsoSteps);
     setConfirming(false);
@@ -1144,23 +1173,23 @@ function FinishedQuests({ title, quests, buttons }: { title: string; quests: Gra
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="mt-3 flex w-full items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-white/40 hover:text-white/70"
+        className="mt-3 flex w-full items-center gap-1.5 font-display text-[12px] font-semibold text-white/60 hover:text-white/85"
       >
         <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>›</span>
-        {title} ({quests.length})
+        {title} <span className="font-mono font-normal text-white/40 tabular-nums">{quests.length}</span>
       </button>
       {open ? (
         <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
           {quests.map((quest) => (
-            <div key={quest.id} className="flex items-center gap-2 px-1 py-1 text-xs text-white/50">
-              <span className="text-emerald-300/70">✓</span>
+            <div key={quest.id} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-[13px] text-white/60">
+              <span className="text-emerald-300">✓</span>
               <span className="flex-1 truncate">{quest.title}</span>
               {buttons.map(({ label, onClick }) => (
                 <button
                   key={label}
                   type="button"
                   onClick={() => onClick(quest.id)}
-                  className="rounded-md border border-white/10 px-2 py-0.5 text-[11px] text-white/65 hover:border-white/25 hover:text-white"
+                  className="rounded-md border border-white/12 px-2 py-0.5 text-[11.5px] text-white/70 hover:bg-white/6 max-sm:min-h-11"
                 >
                   {label}
                 </button>
@@ -1187,7 +1216,7 @@ function ColorPicker({ node, act }: { node: GraphNode; act: Act }) {
           aria-label={color ?? "white"}
           title={color ?? "white"}
           onClick={() => void act("updateNode", node.id, { color })}
-          className={`flex h-6 w-6 items-center justify-center rounded-full border ${node.color === color ? "border-white/70" : "border-transparent hover:border-white/25"}`}
+          className={`flex h-6 w-6 items-center justify-center rounded-full border max-sm:h-10 max-sm:w-9 ${node.color === color ? "border-white/70" : "border-transparent hover:border-white/25"}`}
         >
           <span className={`h-3.5 w-3.5 rounded-full ${palettes[color ?? "none"].dot}`} />
         </button>
@@ -1224,11 +1253,11 @@ function StatWeightsEditor({ node, act }: { node: GraphNode; act: Act }) {
 
   return (
     <div className="w-full">
-      <span className="text-white/45">Trains (XP × weight)</span>
+      <span className="text-[11.5px] text-white/45">Trains (XP × weight)</span>
       <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
         {statKeys.map((key) => (
           <label key={key} className="flex items-center justify-between gap-1.5">
-            <span className="text-[11px] tracking-[0.12em] text-white/55">{key}</span>
+            <span className="font-mono text-[11px] text-white/55">{key}</span>
             <input
               type="number"
               min={0}
@@ -1245,7 +1274,7 @@ function StatWeightsEditor({ node, act }: { node: GraphNode; act: Act }) {
               onKeyDown={(event) => {
                 if (event.key === "Enter") event.currentTarget.blur();
               }}
-              className="w-12 rounded-md border border-white/10 bg-night/70 px-1.5 py-0.5 text-right text-xs text-white/85 [appearance:textfield] focus:border-white/30 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="w-14 rounded-md border border-white/10 bg-night/60 px-1.5 py-0.5 text-right font-mono text-[12px] tabular-nums text-white/85 [appearance:textfield] focus:border-ember/60 focus:outline-none max-sm:min-h-11 max-sm:w-16 [&::-webkit-inner-spin-button]:appearance-none"
             />
           </label>
         ))}

@@ -274,11 +274,12 @@ function App() {
         <div className="relative flex h-full min-h-0 flex-col">
           {/* On the desktop's phone view, the content starts below the window's title strip */}
           <div className={`flex min-h-0 flex-1 overflow-hidden p-3 ${window.ashborn ? "pt-7" : "pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>{renderPage()}</div>
-          <PhoneTabs currentPath={currentPath} onNavigate={navigate} />
+          {userId ? <PhoneTabs currentPath={currentPath} onNavigate={navigate} /> : null}
         </div>
       ) : (
         <div className="relative flex h-full min-h-0">
-          <Navbar currentPath={currentPath} onNavigate={navigate} />
+          {/* The sections need a signed-in user, so the rail waits for one */}
+          {userId ? <Navbar currentPath={currentPath} onNavigate={navigate} /> : null}
 
           <div className="flex min-h-0 flex-1 justify-between gap-6 overflow-hidden p-6">{renderPage()}</div>
         </div>

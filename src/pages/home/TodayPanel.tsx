@@ -6,6 +6,7 @@ import { derivePriorities, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
 import type { AlarmKind, Snapshot, Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
+import { paletteOf } from "../../lib/theme";
 import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
@@ -38,20 +39,20 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const deadlines = snapshot.deadlines.filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS);
 
   return (
-    <section className="panel-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-3xl border border-white/10 bg-night-panel p-4">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-[11px] uppercase tracking-[0.26em] text-white/55">Today</h2>
+    <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-white/8 bg-night-panel px-4 py-4">
+      <div className="flex items-baseline justify-between px-1">
+        <h2 className="font-display text-lg font-semibold text-white/90">Today</h2>
         <button
           type="button"
           onClick={() => setDayStartOpen((open) => !open)}
           title="When the day starts"
-          className="text-[11px] tracking-[0.14em] text-white/40 hover:text-white/70"
+          className="font-mono text-[11px] text-white/40 tabular-nums hover:text-white/70"
         >
           {weekday} {date}
         </button>
       </div>
       {dayStartOpen ? (
-        <label className="-mt-3 flex items-center justify-end gap-2 text-[10px] tracking-[0.12em] text-white/45">
+        <label className="-mt-4 flex items-center justify-end gap-2 px-1 text-[11.5px] text-white/45">
           The day starts at
           <select
             value={dayStartHour}
@@ -67,7 +68,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         </label>
       ) : null}
       {progressToday > 0 ? (
-        <p className="-mt-3 text-[10px] tracking-[0.14em] text-emerald-200/60">
+        <p className="-mt-5 flex items-center gap-1.5 px-1 text-[12px] text-white/50">
+          <span className="h-1.5 w-1.5 rounded-full bg-ember" />
           {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
         </p>
       ) : null}
@@ -75,18 +77,23 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       <Section title="Up next">
         {todo.length === 0 ? <Empty>Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here.</Empty> : null}
         {todo.map(({ priority, steps }) => (
-          <div key={priority} className="space-y-2">
-            <p className="text-[10px] tracking-[0.14em] text-white/45">P{priority}</p>
+          <div key={priority} data-priority={priority} className="space-y-0.5">
+            <p className="flex items-center gap-2 px-1 pb-1 font-mono text-[11px] font-semibold text-[var(--mark)]">
+              P{priority}
+              <span className="h-px flex-1 bg-[color-mix(in_oklab,var(--mark)_25%,transparent)]" />
+            </p>
             {steps.map((step) => {
               const quest = questOf(model.byId, step);
+              const parent = model.byId.get(step.parentId!);
               return (
-                <div key={step.id} className="flex items-start gap-3 rounded-xl border border-white/8 bg-night/50 px-3 py-2">
+                <div key={step.id} className={rowClass}>
                   <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs leading-snug text-white/85">{step.title}</p>
-                    <p className="mt-1 truncate text-[10px] tracking-[0.12em] text-white/40">
-                      {model.byId.get(step.parentId!)?.title}
-                      {quest.id !== step.parentId ? ` · ${quest.title}` : ""}
+                    <p className="text-[13px] leading-snug text-white/90">{step.title}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-white/42">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+                      {quest.title}
+                      {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
                     </p>
                   </div>
                 </div>
@@ -101,13 +108,14 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           <Empty>No routines on {weekday}.</Empty>
         ) : (
           routines.map((routine) => (
-            <div key={routine.id} className="group flex items-start gap-3 rounded-xl border border-white/8 bg-night/50 px-3 py-2">
+            <div key={routine.id} className={`group ${rowClass}`}>
               <Tick done={checked.has(routine.id)} onClick={() => void act("setRoutineCheck", routine.id, date, !checked.has(routine.id))} className="mt-0.5" />
+              <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-white/45 tabular-nums">{routine.time ?? "·"}</span>
               <div className="min-w-0 flex-1">
-                <p className={`text-xs ${checked.has(routine.id) ? "text-white/45 line-through" : "text-white/85"}`}>{routine.title}</p>
-                {routine.time || routine.cue ? (
-                  <p className="mt-0.5 text-[10px] tracking-[0.1em] text-white/40">
-                    {[routine.time, routine.alarm !== "none" ? alarmLabels[routine.alarm].toLowerCase() : null, routine.cue ? `if ${routine.cue}` : null]
+                <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-white/40 line-through decoration-white/25" : "text-white/90"}`}>{routine.title}</p>
+                {routine.alarm !== "none" || routine.cue ? (
+                  <p className="mt-0.5 text-[11.5px] text-white/42">
+                    {[routine.alarm !== "none" ? alarmLabels[routine.alarm] : null, routine.cue ? `if ${routine.cue}` : null]
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
@@ -126,15 +134,24 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           deadlines.map((deadline) => {
             const days = daysBetween(date, deadline.dueDate);
             return (
-              <div key={deadline.id} className="group flex items-start gap-3 rounded-xl border border-white/8 bg-night/50 px-3 py-2">
+              <div key={deadline.id} className={`group ${rowClass}`}>
                 <Tick done={false} onClick={() => void act("completeDeadline", deadline.id)} className="mt-0.5" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-white/85">{deadline.title}</p>
-                  <p className={`mt-0.5 text-[10px] tracking-[0.1em] ${days < 0 ? "text-red-300/80" : days <= 2 ? "text-amber-200/80" : "text-white/40"}`}>
-                    {days < 0 ? `${-days}d overdue` : days === 0 ? "today" : `in ${days}d`} · {deadline.dueDate}
+                  <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 text-[13px] leading-snug text-white/90">{deadline.title}</p>
+                    <span
+                      className={`shrink-0 rounded-md px-1.5 py-px font-mono text-[11px] tabular-nums ${
+                        days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-white/6 text-white/55"
+                      }`}
+                    >
+                      {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 font-mono text-[11px] text-white/40 tabular-nums">
+                    {deadline.dueDate}
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
-                  <NodePicker model={model} value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="mt-1 w-full truncate bg-transparent text-[10px] tracking-[0.1em] text-white/40" />
+                  <NodePicker model={model} value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-white/45 hover:bg-white/6" />
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
@@ -167,7 +184,7 @@ function RoutineForm({ act }: { act: Act }) {
   if (!open) return <AddButton onClick={() => setOpen(true)} />;
 
   return (
-    <div onKeyDown={closeOnEscape(() => setOpen(false))} className="absolute right-0 top-6 z-10 w-64 space-y-2 rounded-xl border border-white/12 bg-night-card/95 p-3">
+    <div onKeyDown={closeOnEscape(() => setOpen(false))} className={popoverClass}>
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Routine, e.g. meal prep" className={fieldClass} />
       <input value={cue} onChange={(e) => setCue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="If… (cue), e.g. it's 7pm Sunday" className={fieldClass} />
       <div className="flex gap-1">
@@ -176,14 +193,14 @@ function RoutineForm({ act }: { act: Act }) {
             key={day}
             type="button"
             onClick={() => setDays((current) => (current.includes(day) ? current.filter((d) => d !== day) : [...current, day]))}
-            className={`flex-1 rounded-md border py-1 text-[9px] uppercase ${days.includes(day) ? "border-white/30 bg-white/12 text-white/85" : "border-white/10 text-white/40"}`}
+            className={`flex-1 rounded-md border py-1 text-[10.5px] ${days.includes(day) ? "border-ember/50 bg-ember/12 text-white/90" : "border-white/10 text-white/40"}`}
           >
             {day.slice(0, 2)}
           </button>
         ))}
       </div>
       <div className="flex gap-2">
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} title="Time (optional)" className={`${fieldClass} w-24 [color-scheme:dark]`} />
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} title="Time (optional)" className={`${fieldClass} w-24 `} />
         <select value={alarm} disabled={!time} onChange={(e) => setAlarm(e.target.value as AlarmKind)} className={`${fieldClass} disabled:opacity-40`}>
           {(Object.keys(alarmLabels) as AlarmKind[]).map((kind) => (
             <option key={kind} value={kind}>
@@ -236,11 +253,11 @@ function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
   if (!open) return <AddButton onClick={() => setOpen(true)} />;
 
   return (
-    <div onKeyDown={closeOnEscape(() => setOpen(false))} className="absolute right-0 top-6 z-10 w-64 space-y-2 rounded-xl border border-white/12 bg-night-card/95 p-3">
+    <div onKeyDown={closeOnEscape(() => setOpen(false))} className={popoverClass}>
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="Deadline" className={fieldClass} />
       <div className="flex gap-2">
-        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
-        <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} title="Alarm on the day (optional)" className={`${fieldClass} w-24 [color-scheme:dark]`} />
+        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${fieldClass} `} />
+        <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} title="Alarm on the day (optional)" className={`${fieldClass} w-24 `} />
       </div>
       <NodePicker model={model} value={nodeId} onChange={setNodeId} className={fieldClass} />
       <FormButtons onCancel={() => setOpen(false)} onSubmit={submit} />
@@ -249,13 +266,16 @@ function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
 }
 
 const fieldClass =
-  "w-full rounded-lg border border-white/10 bg-night/70 px-2.5 py-1.5 text-xs text-white/85 placeholder:text-white/35 focus:border-white/28 focus:outline-none";
+  "w-full rounded-lg border border-white/10 bg-night/60 px-2.5 py-1.5 text-[13px] text-white/85 placeholder:text-white/35 focus:border-ember/50 focus:outline-none";
+const popoverClass = "absolute right-0 top-8 z-10 w-72 space-y-2 rounded-xl border border-white/10 bg-night-card p-3 shadow-[var(--card-shadow)]";
+// A list row: quiet until hovered
+const rowClass = "flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white/[0.04]";
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <div>
-      <div className="relative mb-2 flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">{title}</p>
+      <div className="relative mb-2 flex items-center justify-between px-1">
+        <p className="font-display text-[13px] font-semibold text-white/70">{title}</p>
         {action}
       </div>
       <div className="space-y-2">{children}</div>
@@ -264,7 +284,7 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
 }
 
 function Empty({ children }: { children: ReactNode }) {
-  return <p className="rounded-xl border border-dashed border-white/10 px-3 py-2 text-[11px] text-white/35">{children}</p>;
+  return <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-[12px] leading-relaxed text-white/40">{children}</p>;
 }
 
 // Escape closes a popover form; preventDefault keeps the navbar from also hiding the window
@@ -279,7 +299,7 @@ function closeOnEscape(close: () => void) {
 
 function AddButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="rounded-md border border-white/10 px-1.5 text-xs leading-5 text-white/55 hover:border-white/24 hover:text-white/85">
+    <button type="button" onClick={onClick} title="Add" className="flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-white/45 hover:bg-white/8 hover:text-white/85">
       +
     </button>
   );
@@ -297,7 +317,7 @@ function DeleteButton({ warning, onDelete }: { warning: string; onDelete: () => 
   }, [confirming]);
 
   return confirming ? (
-    <button type="button" onClick={onDelete} className="shrink-0 rounded-md border border-red-300/60 bg-red-500/25 px-2 py-0.5 text-[10px] leading-snug text-red-100">
+    <button type="button" onClick={onDelete} className="shrink-0 rounded-md bg-red-500/20 px-2 py-0.5 text-[11px] leading-snug text-red-200">
       {warning}
     </button>
   ) : (
@@ -314,11 +334,11 @@ function DeleteButton({ warning, onDelete }: { warning: string; onDelete: () => 
 
 function FormButtons({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: () => void }) {
   return (
-    <div className="flex justify-end gap-2 text-[10px] uppercase tracking-[0.16em]">
-      <button type="button" onClick={onCancel} className="rounded-md border border-white/10 px-2 py-1 text-white/55">
+    <div className="flex justify-end gap-2 pt-1 text-[12.5px]">
+      <button type="button" onClick={onCancel} className="rounded-lg border border-white/12 px-3 py-1 text-white/70 hover:bg-white/6">
         Cancel
       </button>
-      <button type="button" onClick={onSubmit} className="rounded-md border border-emerald-300/30 bg-emerald-400/12 px-2 py-1 text-emerald-100">
+      <button type="button" onClick={onSubmit} className="rounded-lg bg-ember px-3 py-1 font-medium text-night hover:brightness-110">
         Add
       </button>
     </div>

@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { setTheme, useTheme } from "../lib/useTheme";
+import { HexTile } from "./HexTile";
 import { MoonIcon, SunIcon } from "./icons";
 import { desktopSections, screenAt, sectionAt, type Section } from "./sections";
 
@@ -70,7 +71,7 @@ export function Navbar({
                 aria-expanded={section.desktop.length > 1 ? openSection === section : undefined}
                 className={`group flex flex-col items-center gap-1.5 bg-transparent ${isActive ? "text-white" : "text-white/50 hover:text-white/80"}`}
               >
-                <HexTile active={isActive}>
+                <HexTile active={isActive} className="h-12 w-14">
                   <Icon className={isActive ? "text-ember" : ""} />
                 </HexTile>
                 <span className={`text-[10.5px] font-medium tracking-[0.06em] ${isActive ? "text-white/90" : ""}`}>{section.label}</span>
@@ -101,27 +102,6 @@ export function Navbar({
         {theme === "dark" ? <SunIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
       </button>
     </aside>
-  );
-}
-
-// A flat-topped hexagon, the canvas's cell shape, behind a section's icon
-function HexTile({ active, children }: { active: boolean; children: ReactNode }) {
-  return (
-    <span className="relative flex h-12 w-14 items-center justify-center">
-      <svg viewBox="0 0 56 48" className="absolute inset-0 h-full w-full" aria-hidden="true">
-        <polygon
-          points="14,1.5 42,1.5 55,24 42,46.5 14,46.5 1,24"
-          strokeLinejoin="round"
-          className={
-            active
-              ? "fill-ember/15 stroke-ember/60"
-              : "fill-white/[0.04] stroke-white/12 transition-colors group-hover:fill-white/[0.07] group-hover:stroke-white/25"
-          }
-          strokeWidth="1.2"
-        />
-      </svg>
-      <span className="relative">{children}</span>
-    </span>
   );
 }
 

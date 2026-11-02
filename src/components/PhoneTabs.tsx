@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { HexTile } from "./HexTile";
 import { phoneSections, screenAt, sectionAt, type Section } from "./sections";
 
 // The phone's navigation: one tab per section, grouped towards the middle of the bottom edge. A section with several screens
@@ -17,7 +18,7 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
   };
 
   return (
-    <nav className="relative z-10 flex shrink-0 justify-center gap-4 border-t border-white/10 bg-night-panel px-6 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <nav className="relative z-10 flex shrink-0 justify-center gap-4 border-t border-white/8 bg-night-panel px-6 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {openSection ? <div className="fixed inset-0 z-40" onClick={() => setOpenSection(null)} /> : null}
 
       {phoneSections.map((section) => {
@@ -29,12 +30,12 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
               type="button"
               onClick={() => choose(section)}
               aria-expanded={section.phone.length > 1 ? openSection === section : undefined}
-              className={`flex flex-col items-center gap-1 px-3 py-1 ${isActive ? "text-white/85" : "text-white/40"}`}
+              className={`group flex min-h-11 flex-col items-center gap-0.5 px-3 py-0.5 ${isActive ? "text-ember" : "text-white/50"}`}
             >
-              <span className="flex h-7 items-center">
+              <HexTile active={isActive} className="h-9 w-[42px]">
                 <Icon />
-              </span>
-              <span className="text-[9px] uppercase tracking-[0.2em]">{section.label}</span>
+              </HexTile>
+              <span className="text-[10.5px] font-medium">{section.label}</span>
             </button>
 
             {openSection === section ? (
@@ -71,7 +72,7 @@ function ScreenMenu({
     <div
       role="menu"
       aria-label={section.label}
-      className={`absolute bottom-full z-50 mb-3 flex left-1/2 -translate-x-1/2 flex-col-reverse gap-0.5 rounded-2xl border border-white/12 bg-night-card/95 p-1 shadow-xl shadow-black/30`}
+      className={`absolute bottom-full z-50 mb-3 flex left-1/2 -translate-x-1/2 flex-col-reverse gap-0.5 rounded-xl border border-white/10 bg-night-card p-1 shadow-[var(--card-shadow)]`}
     >
       {section.phone.map((screen) => {
         const Icon = screen.icon;
@@ -82,12 +83,12 @@ function ScreenMenu({
             type="button"
             role="menuitem"
             onClick={() => onChoose(screen.path)}
-            className={`flex items-center gap-2 rounded-xl px-2.5 py-2 whitespace-nowrap ${
-              active ? "bg-white/10 text-white/85" : "text-white/55"
+            className={`flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 whitespace-nowrap ${
+              active ? "bg-ember/10 text-ember" : "text-white/65 active:bg-white/6"
             }`}
           >
             <Icon className="h-5 w-5" />
-            <span className="text-[10px] uppercase tracking-[0.2em]">{screen.label}</span>
+            <span className="text-[13px]">{screen.label}</span>
           </button>
         );
       })}

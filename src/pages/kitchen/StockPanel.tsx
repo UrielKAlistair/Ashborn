@@ -14,9 +14,9 @@ export function StockPanel({ kitchen, act }: { kitchen: Kitchen; act: Act }) {
   const items = [...kitchen.items].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <section className="panel-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-3xl border border-white/10 bg-night-panel p-4">
-      <h2 className="text-[11px] uppercase tracking-[0.26em] text-white/55">Stocks</h2>
-      {items.length === 0 ? <p className="text-[11px] tracking-[0.1em] text-white/35">Track a staple below and its bar shows here.</p> : null}
+    <section className="panel-lift rounded-2xl border border-white/8 bg-night-panel panel-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+      <h2 className="font-display text-sm font-semibold text-white/85">Stocks</h2>
+      {items.length === 0 ? <p className="text-[12px] text-white/40">Track a staple below and its bar shows here.</p> : null}
       {items.map((item) => (
         <StockBar key={item.id} item={item} act={act} />
       ))}
@@ -34,21 +34,21 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
   return (
     <div role="group" aria-label={item.name} className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="truncate text-xs text-white/85">{item.name}</p>
-        <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-white/40 hover:text-white/75">
+        <p className="truncate text-[13px] text-white/85">{item.name}</p>
+        <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 text-[11.5px] text-white/40 hover:text-white/85 max-sm:min-h-11 max-sm:px-2">
           {editing ? "Done" : "Edit"}
         </button>
       </div>
 
       {/* The track leaves room at its end for the overflow tip */}
-      <div className="relative h-2.5" style={{ width: `${100 / (1 + OVERFLOW_TIP_MAX)}%` }} role="meter" aria-label={`${item.name} stock`} aria-valuenow={item.onHand} aria-valuemin={0} aria-valuemax={item.target}>
-        <div className="absolute inset-0 overflow-hidden rounded-full border border-white/8 bg-night/50">
+      <div className="relative h-2" style={{ width: `${100 / (1 + OVERFLOW_TIP_MAX)}%` }} role="meter" aria-label={`${item.name} stock`} aria-valuenow={item.onHand} aria-valuemin={0} aria-valuemax={item.target}>
+        <div className="absolute inset-0 overflow-hidden rounded-full bg-white/[0.07]">
           <div className={`h-full rounded-full ${fill}`} style={{ width: `${Math.min(share, 1) * 100}%` }} />
         </div>
         {tip > 0 ? <div className="absolute top-0 left-full h-full rounded-r-full bg-red-400/85" style={{ width: `${tip * 100}%` }} title="More than you usually keep" /> : null}
       </div>
 
-      <p className="text-right text-[10px] tracking-[0.12em] text-white/45">
+      <p className="text-right font-mono text-[11px] tabular-nums text-white/45">
         {shown(item.onHand, item.unit)} / {shown(item.target, item.unit)}
       </p>
 
@@ -73,7 +73,7 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
   };
 
   return (
-    <div className="space-y-2 rounded-xl border border-white/8 bg-night/50 p-2.5">
+    <div className="space-y-2 rounded-xl bg-white/[0.03] p-2.5">
       <div className="flex items-center gap-2">
         <input
           type="range"
@@ -88,7 +88,7 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
           }}
           onPointerUp={save}
           onKeyUp={save}
-          className="min-w-0 flex-1 accent-emerald-300"
+          className="min-w-0 flex-1 accent-ember"
         />
         <input
           type="number"
@@ -105,12 +105,12 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
             setTyped(null);
           }}
           onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-          className="w-16 rounded-md border border-white/10 bg-night/70 px-1.5 py-0.5 text-right text-xs text-white/85"
+          className="w-16 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-0.5 text-right font-mono tabular-nums"
         />
-        <span className="text-[10px] text-white/45">{item.unit}</span>
+        <span className="text-[11.5px] text-white/45">{item.unit}</span>
       </div>
 
-      <div className="flex items-center justify-between gap-2 text-[10px] tracking-[0.1em] text-white/45">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-white/45">
         <label className="flex items-center gap-1.5">
           Keep
           <input
@@ -123,14 +123,14 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
               const target = toBase(Number(event.target.value), item.unit);
               if (target > 0 && target !== item.target) void act("updateStockItem", item.id, { target });
             }}
-            className="w-14 rounded-md border border-white/10 bg-night/70 px-1.5 py-0.5 text-right text-xs text-white/85"
+            className="w-14 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-0.5 text-right font-mono tabular-nums"
           />
           {item.unit}
         </label>
         <button
           type="button"
           onClick={() => (confirmDelete ? void act("deleteStockItem", item.id) : setConfirmDelete(true))}
-          className="rounded-md border border-red-400/30 px-2 py-0.5 text-red-200 hover:border-red-300/50"
+          className="rounded-lg border border-red-400/25 px-2.5 py-1 text-[12px] text-red-300 hover:bg-red-400/10 max-sm:min-h-11"
         >
           {confirmDelete ? "Stop tracking?" : "Stop tracking"}
         </button>
@@ -147,7 +147,7 @@ function NewItemForm({ act }: { act: Act }) {
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="self-start text-[10px] uppercase tracking-[0.18em] text-emerald-200/70 hover:text-emerald-100">
+      <button type="button" onClick={() => setOpen(true)} className="self-start rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 max-sm:min-h-11">
         + Track a staple
       </button>
     );
@@ -164,25 +164,25 @@ function NewItemForm({ act }: { act: Act }) {
 
   return (
     <form
-      className="flex flex-wrap items-center gap-2 rounded-xl border border-white/8 bg-night/50 p-2.5 text-xs"
+      className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.03] p-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
     >
-      <input autoFocus placeholder="Rice" value={name} onChange={(event) => setName(event.target.value)} aria-label="Staple" className="min-w-0 flex-1 rounded-md border border-white/10 bg-night/70 px-2 py-1 text-white/85" />
-      <input type="number" min={0} step="any" placeholder="Keep" value={target} onChange={(event) => setTarget(event.target.value)} aria-label="Amount to keep" className="w-16 rounded-md border border-white/10 bg-night/70 px-2 py-1 text-right text-white/85" />
-      <select value={unit} onChange={(event) => setUnit(event.target.value as StockUnit)} aria-label="Unit" className="rounded-md border border-white/10 bg-night/70 px-1.5 py-1 text-white/85">
+      <input autoFocus placeholder="Rice" value={name} onChange={(event) => setName(event.target.value)} aria-label="Staple" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-2 py-1" />
+      <input type="number" min={0} step="any" placeholder="Keep" value={target} onChange={(event) => setTarget(event.target.value)} aria-label="Amount to keep" className="w-16 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-2 py-1 text-right font-mono tabular-nums" />
+      <select value={unit} onChange={(event) => setUnit(event.target.value as StockUnit)} aria-label="Unit" className="rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-1">
         {stockUnits.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
         ))}
       </select>
-      <button type="submit" disabled={!valid} className="rounded-md border border-white/10 px-2 py-1 text-white/75 hover:border-white/24 disabled:opacity-40">
+      <button type="submit" disabled={!valid} className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-night hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
         Add
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="px-1 text-white/40 hover:text-white/70">
+      <button type="button" onClick={() => setOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-white/45 hover:bg-white/8 hover:text-white/85 max-sm:h-11 max-sm:w-11">
         ×
       </button>
     </form>

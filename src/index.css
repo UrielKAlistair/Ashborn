@@ -130,14 +130,20 @@ body {
 
 /* A chain's priority on the graph. Three looks to choose between, on <html data-priority-look>. */
 :root {
-  --priority-1: #f87171;
-  --priority-2: #fbbf24;
-  --priority-3: #38bdf8;
-  --priority-4: #a78bfa;
-  --priority-edge-1: #f87171;
-  --priority-edge-2: #fbbf24;
-  --priority-edge-3: #38bdf8;
-  --priority-edge-4: #a78bfa;
+  --priority-1: #f4715a;
+  --priority-2: #eab04d;
+  --priority-3: #5cb8e4;
+  --priority-4: #a68cf2;
+  --priority-edge-1: var(--priority-1);
+  --priority-edge-2: var(--priority-2);
+  --priority-edge-3: var(--priority-3);
+  --priority-edge-4: var(--priority-4);
+}
+:root[data-theme="light"] {
+  --priority-1: #cf3f24;
+  --priority-2: #b9770e;
+  --priority-3: #1f7fb3;
+  --priority-4: #6e4fd1;
 }
 .priority-mark {
   position: absolute;
@@ -172,3 +178,9 @@ body {
 
 /* C: a coloured rail down the card's left edge, nothing dimmed */
 :root[data-priority-look="c"] [data-priority]:not([data-priority="none"]) > .priority-mark { border-left-width: 5px; border-left-color: var(--mark); }
+
+/* A quest box takes its chain's colour on its border only; the steps carry the tint */
+:root:not([data-priority-look]) .react-flow__node-quest .priority-mark,
+:root[data-priority-look="a"] .react-flow__node-quest .priority-mark {
+  background: transparent !important;
+}

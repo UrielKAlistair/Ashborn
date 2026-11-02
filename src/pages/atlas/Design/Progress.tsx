@@ -9,10 +9,10 @@ export function ProgressPage({
 }: ProgressPageProps) {
   return (
     <AtlasEntryLayout eyebrow={eyebrow} title="Progress">
-        <div className="space-y-5 text-sm tracking-[0.12em] text-white/55">  
+        <div className="space-y-5 text-sm leading-relaxed text-white/70">  
 
         <div>
-          <h3 className="text-base font-semibold tracking-[0.18em] text-white/80">
+          <h3 className="font-display text-base font-semibold text-white/85">
             Progress over points
           </h3> 
         </div>

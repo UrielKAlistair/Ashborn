@@ -8,14 +8,14 @@ export function FpPage({ eyebrow = "Attributes" }: FpPageProps) {
 
   return (
     <AtlasEntryLayout eyebrow={eyebrow} title="FP">
-      <div className="space-y-5 text-sm tracking-[0.12em] text-white/55">
+      <div className="space-y-5 text-sm leading-relaxed text-white/70">
         <p>
           Focus Points are expended in performing any cognitively active tasks
           through the day, and are meant to roughly approximate energy levels.
         </p>
 
         <div>
-          <h3 className="text-base font-semibold tracking-[0.18em] text-white/80">
+          <h3 className="font-display text-base font-semibold text-white/85">
             Dopamine depletion results in unwillingness to take strenuous action
           </h3>
         </div>
@@ -50,7 +50,7 @@ export function FpPage({ eyebrow = "Attributes" }: FpPageProps) {
         </p>
 
         <div>
-          <h3 className="text-base font-semibold tracking-[0.18em] text-white/80">
+          <h3 className="font-display text-base font-semibold text-white/85">
             Emotional Regulation diminishes Self Control
           </h3>
         </div>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AtlasSidebarSection } from "../components/atlas/AtlasSidebar";
+import { HexMark } from "../components/HexTile";
 import { CognitiveOffloadingPage } from "./atlas/Design/CognitveOffloading";
 import { ProgressPage } from "./atlas/Design/Progress";
 
@@ -17,19 +18,25 @@ export function AtlasPage({
   currentPath,
   onNavigate,
 }: AtlasPageProps) {
-  const [designOpen, setDesignOpen] = useState(false);
+  const [designOpen, setDesignOpen] = useState(true);
 
   const renderAtlasEntry = () => {
     if (currentPath === "/atlas/cognitive-offloading") {
       return <CognitiveOffloadingPage eyebrow="Design" />;
     }
     if (currentPath === "/atlas/progress") return <ProgressPage eyebrow="Design" />;
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-[13px] text-white/40">
+        <HexMark className="h-10 w-12 text-white/15" />
+        Choose an entry.
+      </div>
+    );
   };
 
   return (
     <section className="flex min-h-0 flex-1 gap-6 overflow-hidden">
-      <aside className="flex min-h-0 w-full max-w-sm self-stretch flex-col overflow-hidden rounded-3xl border border-white/10 bg-night-panel">
-        <div className="panel-scroll min-h-0 flex-1 overflow-y-auto px-5 py-6">
+      <aside className="panel-lift rounded-2xl border border-white/8 bg-night-panel flex min-h-0 w-full max-w-72 self-stretch flex-col overflow-hidden">
+        <div className="panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
 
           <AtlasSidebarSection
             entries={designEntries}
@@ -42,8 +49,8 @@ export function AtlasPage({
         </div>
       </aside>
 
-      <div className="flex min-h-0 flex-1 self-stretch overflow-hidden rounded-3xl border border-white/10 bg-night-panel">
-        <div className="panel-scroll min-h-0 flex-1 overflow-y-auto p-5 pr-3">
+      <div className="panel-lift rounded-2xl border border-white/8 bg-night-panel flex min-h-0 flex-1 self-stretch overflow-hidden">
+        <div className="panel-scroll min-h-0 flex-1 overflow-y-auto p-6">
           {renderAtlasEntry()}
         </div>
       </div>

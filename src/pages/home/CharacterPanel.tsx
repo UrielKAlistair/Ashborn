@@ -1,3 +1,4 @@
+import { HEX_POINTS } from "../../components/HexTile";
 import { palettes } from "../../lib/theme";
 import { statKeys, type GraphModel } from "../../shared/graphModel";
 import { statLevel } from "../../shared/progression";
@@ -22,7 +23,7 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
     <div className={`flex shrink-0 flex-col items-center ${card ? "w-48" : "w-28"}`}>
       <div className={`relative flex items-end justify-center ${card ? "w-48" : "w-28"}`}>
         <svg viewBox="0 0 56 48" className="absolute inset-x-0 bottom-0 mx-auto w-full" aria-hidden="true">
-          <polygon points="14,1.5 42,1.5 55,24 42,46.5 14,46.5 1,24" strokeLinejoin="round" strokeWidth="0.8" className="fill-ember/[0.07] stroke-ember/30" />
+          <polygon points={HEX_POINTS} strokeLinejoin="round" strokeWidth="0.8" className="fill-ember/[0.07] stroke-ember/30" />
         </svg>
         <div className="relative">
           <Portrait tier={tier} zoom={card ? CARD_PORTRAIT_ZOOM : 1} />

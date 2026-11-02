@@ -19,15 +19,15 @@ export function MealPlan({ kitchen, dayStartHour, act, phone, onOpenRecipe }: Me
   const date = useToday(dayStartHour);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 rounded-3xl border border-white/10 bg-night-panel p-4">
+    <section className="panel-lift rounded-2xl border border-white/8 bg-night-panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[11px] uppercase tracking-[0.26em] text-white/55">{defaults ? "Default week" : "Meal plan"}</h2>
+        <h2 className="font-display text-sm font-semibold text-white/85">{defaults ? "Default week" : "Meal plan"}</h2>
         <button
           type="button"
           role="switch"
           aria-checked={defaults}
           onClick={() => setDefaults(!defaults)}
-          className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.18em] ${defaults ? "border-white/30 bg-white/10 text-white/85" : "border-white/10 text-white/45 hover:border-white/24"}`}
+          className={`rounded-lg border px-2.5 py-1 text-[12px] font-medium max-sm:min-h-11 max-sm:px-3.5 ${defaults ? "border-ember/40 bg-ember/10 text-ember" : "border-white/12 text-white/60 hover:bg-white/6"}`}
         >
           Default week
         </button>
@@ -80,7 +80,7 @@ function PhoneDays({ kitchen, act, date, onOpenRecipe }: DaysProps) {
   }, []);
 
   return (
-    <div ref={strip} className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
+    <div ref={strip} className="flex min-h-0 flex-1 snap-x py-px snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
       {days.map((day) => (
         <div key={day} className="flex w-full shrink-0 snap-center px-0.5">
           <Day kitchen={kitchen} act={act} day={day} today={date} onOpenRecipe={onOpenRecipe} />
@@ -97,11 +97,11 @@ function Day({ kitchen, act, day, today: date, onOpenRecipe }: { kitchen: Kitche
   return (
     <div
       aria-label={`Meals on ${day}`}
-      className={`panel-scroll flex min-h-0 w-full flex-col gap-2 overflow-y-auto rounded-2xl border p-2.5 ${offset === 0 ? "border-white/24 bg-white/[0.04]" : "border-white/8"} ${offset < 0 ? "opacity-70" : ""}`}
+      className={`panel-scroll flex min-h-0 w-full flex-col gap-1.5 overflow-y-auto rounded-xl p-2 ${offset === 0 ? "bg-ember/[0.06] ring-1 ring-ember/30" : "bg-white/[0.015]"} ${offset < 0 ? "opacity-60" : ""}`}
     >
-      <p className="flex items-baseline justify-between text-[10px] uppercase tracking-[0.2em] text-white/55">
-        <span>{name}</span>
-        <span className="tracking-[0.1em] text-white/35">{day.slice(5)}</span>
+      <p className="flex items-baseline justify-between px-1 pb-0.5">
+        <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-white/85"}`}>{name}</span>
+        <span className="font-mono text-[11px] tabular-nums text-white/40">{day.slice(5)}</span>
       </p>
       {mealSlots.map((slot) => (
         <MealCell key={slot} kitchen={kitchen} act={act} meal={shownMeal(kitchen, day, slot)} onOpenRecipe={onOpenRecipe} />
@@ -143,30 +143,33 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
   }
 
   return (
-    <div role="group" aria-label={`${meal.slot} on ${meal.date}`} className={`rounded-xl border border-white/8 bg-night/50 px-2.5 py-2 ${cooked ? "opacity-55" : ""}`}>
+    <div role="group" aria-label={`${meal.slot} on ${meal.date}`} className={`group relative rounded-lg px-2.5 py-2 ${empty ? "border border-dashed border-white/8" : "bg-white/[0.035] hover:bg-white/[0.055]"} ${cooked ? "opacity-55" : ""}`}>
       <div className="flex items-center gap-2">
-        {empty || cancelled ? <span className="h-4 w-4 shrink-0" /> : <Tick done={cooked} onClick={tick} />}
-        <p className="min-w-0 flex-1 text-[10px] uppercase tracking-[0.18em] text-white/45">
-          {meal.slot} <span className="tracking-[0.08em] text-white/30">{mealTimes[meal.slot]}</span>
+        {empty || cancelled ? null : <Tick done={cooked} onClick={tick} />}
+        <p className="min-w-0 flex-1 truncate text-[11.5px] capitalize text-white/50">
+          {meal.slot} <span className="font-mono text-[10.5px] tabular-nums text-white/35">{mealTimes[meal.slot]}</span>
         </p>
+        {/* Over the slot's name until hovered on the desktop, where a day's column has no room for both */}
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-2 rounded-md bg-night-card px-1.5 py-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-sm:static max-sm:gap-0 max-sm:bg-transparent max-sm:p-0 max-sm:opacity-100">
         {!cooked && !empty ? (
           <button
             type="button"
             onClick={() => void act("setMeal", { id: id(), date: meal.date, slot: meal.slot, description: meal.description, recipeIds: meal.recipeIds, status: cancelled ? "planned" : "cancelled" })}
-            className="text-[10px] text-white/35 hover:text-white/75"
+            className="text-[11.5px] text-white/40 hover:text-white/85 max-sm:min-h-11 max-sm:px-2"
             title={cancelled ? "Bring this meal back" : "Cancel this meal and its alarms"}
           >
             {cancelled ? "Restore" : "Cancel"}
           </button>
         ) : null}
         {!cooked ? (
-          <button type="button" onClick={() => setEditing(true)} className="text-[10px] text-white/35 hover:text-white/75" title="Change this meal">
+          <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-white/40 hover:text-white/85 max-sm:min-h-11 max-sm:px-2" title="Change this meal">
             Edit
           </button>
         ) : null}
+        </div>
       </div>
 
-      <p className={`mt-1 text-xs leading-snug ${cancelled ? "text-white/35 line-through" : "text-white/85"} ${meal.fromDefault ? "italic" : ""}`}>
+      <p className={`mt-1 text-[13px] leading-snug ${cancelled ? "text-white/35 line-through" : "text-white/85"} ${meal.fromDefault ? "italic" : ""}`}>
         {meal.description || (empty ? <span className="text-white/30 not-italic">Nothing planned</span> : null)}
       </p>
       <RecipeLinks kitchen={kitchen} recipeIds={meal.recipeIds} onOpenRecipe={onOpenRecipe} />
@@ -175,7 +178,7 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
         <button
           type="button"
           onClick={() => setUntracked([])}
-          className="mt-2 w-full rounded-lg border border-amber-300/30 bg-amber-300/[0.06] px-2 py-1 text-left text-[10px] leading-snug text-amber-100/85"
+          className="mt-2 w-full rounded-lg bg-amber-300/10 px-2 py-1.5 text-left text-[11.5px] leading-snug text-amber-200"
         >
           Not in your stocks, so not deducted: {untracked.join(", ")} ×
         </button>
@@ -195,7 +198,7 @@ function RecipeLinks({ kitchen, recipeIds, onOpenRecipe }: { kitchen: Kitchen; r
           key={recipe.id}
           type="button"
           onClick={() => onOpenRecipe(recipe.id)}
-          className="rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-sky-200/80 hover:border-white/24"
+          className="rounded-md bg-white/8 px-1.5 py-0.5 text-[11px] text-white/75 hover:bg-white/12 max-sm:px-2 max-sm:py-1"
         >
           {recipe.title}
         </button>
@@ -225,13 +228,13 @@ function MealEditor({
 
   return (
     <form
-      className="space-y-2 rounded-xl border border-white/16 bg-night/70 p-2.5"
+      className="space-y-2 rounded-xl border border-white/10 bg-night-card p-2.5 shadow-[var(--card-shadow)]"
       onSubmit={(event) => {
         event.preventDefault();
         onSave(text.trim(), chosen);
       }}
     >
-      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">{slot}</p>
+      <p className="text-[11.5px] capitalize text-white/50">{slot}</p>
       <input
         autoFocus
         value={text}
@@ -239,7 +242,7 @@ function MealEditor({
         onKeyDown={(event) => event.key === "Escape" && onCancel()}
         placeholder="Rice with butter beans"
         aria-label={`${slot} description`}
-        className="w-full rounded-md border border-white/10 bg-night/70 px-2 py-1 text-xs text-white/85"
+        className="w-full rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-2 py-1"
       />
       {recipes.length > 0 ? (
         <div className="flex flex-wrap gap-1">
@@ -251,7 +254,7 @@ function MealEditor({
                 type="button"
                 aria-pressed={on}
                 onClick={() => setChosen(on ? chosen.filter((other) => other !== recipe.id) : [...chosen, recipe.id])}
-                className={`rounded-md border px-1.5 py-0.5 text-[10px] ${on ? "border-sky-300/40 bg-sky-300/10 text-sky-100" : "border-white/10 text-white/50"}`}
+                className={`rounded-md border px-1.5 py-0.5 text-[11px] max-sm:px-2 max-sm:py-1 ${on ? "border-ember/50 bg-ember/15 text-ember" : "border-white/10 text-white/55 hover:bg-white/6"}`}
               >
                 {recipe.title}
               </button>
@@ -259,11 +262,11 @@ function MealEditor({
           })}
         </div>
       ) : null}
-      <div className="flex justify-end gap-2 text-[10px] uppercase tracking-[0.16em]">
-        <button type="button" onClick={onCancel} className="text-white/40 hover:text-white/70">
+      <div className="flex items-center justify-end gap-2">
+        <button type="button" onClick={onCancel} className="text-[12px] text-white/50 hover:text-white/85 max-sm:min-h-11 max-sm:px-2">
           Cancel
         </button>
-        <button type="submit" className="rounded-md border border-white/10 px-2 py-0.5 text-white/75 hover:border-white/24">
+        <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-night hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
           Save
         </button>
       </div>
@@ -277,8 +280,8 @@ function DefaultWeek({ kitchen, act, phone, onOpenRecipe }: { kitchen: Kitchen; 
     <div className={phone ? "flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto [scrollbar-width:none]" : "grid min-h-0 flex-1 grid-cols-7 gap-2"}>
       {week.map((weekday) => (
         <div key={weekday} className={phone ? "flex w-full shrink-0 snap-center px-0.5" : "flex min-h-0"}>
-          <div aria-label={`Default meals on ${weekday}`} className="panel-scroll flex min-h-0 w-full flex-col gap-2 overflow-y-auto rounded-2xl border border-white/8 p-2.5">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-white/55">{weekday}</p>
+          <div aria-label={`Default meals on ${weekday}`} className="panel-scroll flex min-h-0 w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-white/[0.015] p-2">
+            <p className="px-1 pb-0.5 font-display text-[13px] font-semibold text-white/85">{weekday}</p>
             {mealSlots.map((slot) => (
               <DefaultCell key={slot} kitchen={kitchen} act={act} weekday={weekday} slot={slot} onOpenRecipe={onOpenRecipe} />
             ))}
@@ -310,14 +313,14 @@ function DefaultCell({ kitchen, act, weekday, slot, onOpenRecipe }: { kitchen: K
   }
 
   return (
-    <div role="group" aria-label={`Default ${slot} on ${weekday}`} className="rounded-xl border border-white/8 bg-night/50 px-2.5 py-2">
+    <div role="group" aria-label={`Default ${slot} on ${weekday}`} className="rounded-lg bg-white/[0.035] px-2.5 py-2 hover:bg-white/[0.055]">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">{slot}</p>
-        <button type="button" onClick={() => setEditing(true)} className="text-[10px] text-white/35 hover:text-white/75">
+        <p className="text-[11.5px] capitalize text-white/50">{slot}</p>
+        <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-white/40 hover:text-white/85 max-sm:min-h-11 max-sm:px-2">
           Edit
         </button>
       </div>
-      <p className="mt-1 text-xs leading-snug text-white/85">{meal?.description || <span className="text-white/30">Nothing</span>}</p>
+      <p className="mt-1 text-[13px] leading-snug text-white/85">{meal?.description || <span className="text-white/30">Nothing</span>}</p>
       <RecipeLinks kitchen={kitchen} recipeIds={meal?.recipeIds ?? []} onOpenRecipe={onOpenRecipe} />
     </div>
   );
@@ -330,7 +333,7 @@ function Arrow({ label, disabled, onClick, children }: { label: string; disabled
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex w-6 shrink-0 items-center justify-center rounded-xl text-lg text-white/45 hover:bg-white/6 hover:text-white/80 disabled:opacity-20"
+      className="flex w-7 shrink-0 items-center justify-center rounded-lg text-lg text-white/45 hover:bg-white/6 hover:text-white/85 disabled:opacity-20"
     >
       {children}
     </button>

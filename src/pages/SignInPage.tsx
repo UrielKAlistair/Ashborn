@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { HexMark } from "../components/HexTile";
 import { alarmsAvailable, connectBackgroundRefresh } from "../lib/alarms";
 import { db } from "../lib/client";
 
@@ -20,20 +21,21 @@ export function SignInPage() {
   };
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-3xl border border-white/10 bg-night-panel">
+    <section className="panel-lift rounded-2xl border border-white/8 bg-night-panel flex min-h-0 min-w-0 flex-1 items-center justify-center">
       <form onSubmit={(event) => void submit(event)} className="flex w-72 flex-col gap-3">
-        <h1 className="mb-2 text-center text-sm uppercase tracking-[0.3em] text-white/75">Sign in</h1>
+        <HexMark className="mx-auto h-12 w-14 text-ember/60" />
+        <h1 className="mb-2 text-center font-display text-lg font-semibold text-white/90">Sign in</h1>
         <input type="email" required autoFocus placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} className={field} />
         <input type="password" required placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className={field} />
-        <button type="submit" disabled={busy} className="rounded-lg border border-emerald-300/35 bg-emerald-400/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-emerald-100 hover:bg-emerald-400/25 disabled:opacity-50">
+        <button type="submit" disabled={busy} className="rounded-lg bg-ember px-3 py-2 text-[13px] font-medium text-night hover:brightness-110 disabled:opacity-50 max-sm:min-h-11">
           Sign in
         </button>
-        <p className="text-center text-[11px] tracking-[0.12em] text-white/45">No account? Ashborn is invite-only right now.</p>
-        {message ? <p className="text-center text-xs leading-relaxed text-white/60">{message}</p> : null}
+        <p className="text-center text-[11.5px] text-white/45">No account? Ashborn is invite-only right now.</p>
+        {message ? <p className="text-center text-[12px] leading-relaxed text-red-300">{message}</p> : null}
       </form>
     </section>
   );
 }
 
 const field =
-  "rounded-lg border border-white/10 bg-night/70 px-3 py-2 text-xs text-white/90 placeholder:text-white/40 focus:border-white/30 focus:outline-none";
+  "rounded-lg border border-white/10 bg-night/60 px-3 py-2 text-[13px] text-white/90 placeholder:text-white/35 focus:border-ember/60 focus:outline-none max-sm:min-h-11";

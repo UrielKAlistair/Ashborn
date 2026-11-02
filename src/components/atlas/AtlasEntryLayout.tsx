@@ -12,14 +12,14 @@ export function AtlasEntryLayout({
   title,
 }: AtlasEntryLayoutProps) {
   return (
-    <section className="min-h-full w-full">
-      <p className="text-xs uppercase tracking-[0.32em] text-white/40">
+    <section className="mx-auto min-h-full w-full max-w-3xl">
+      <p className="text-[11.5px] text-white/45">
         {eyebrow}
       </p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">
+      <h1 className="mt-1 font-display text-3xl font-semibold text-white/90">
         {title}
       </h1>
-      <div className="mt-6 rounded-2xl border border-white/10 bg-night/50 p-5">
+      <div className="mt-6">
         {children}
       </div>
     </section>

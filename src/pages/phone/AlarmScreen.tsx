@@ -26,29 +26,29 @@ export function AlarmScreen({ alarm, onStop, onSnooze }: { alarm: RingingAlarm; 
   const time = new Date(alarm.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-8 bg-black px-6 text-center text-white">
-      <p className="text-5xl font-light tracking-[0.1em]">{time}</p>
-      <p className="text-lg text-white/85">{alarm.title}</p>
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-8 bg-night px-6 text-center text-white">
+      <p className="font-mono text-6xl tabular-nums text-white/95">{time}</p>
+      <p className="font-display text-lg font-semibold text-white/85">{alarm.title}</p>
 
       {alarm.kind === "plain" ? (
         <div className="flex flex-col items-center gap-4">
-          <button type="button" onClick={onStop} className="rounded-full border border-white/30 bg-white/10 px-10 py-4 text-sm uppercase tracking-[0.3em]">
+          <button type="button" onClick={onStop} className="min-w-48 rounded-xl bg-ember px-10 py-4 text-base font-semibold text-night active:brightness-110">
             Stop
           </button>
-          <button type="button" onClick={onSnooze} className="rounded-full px-8 py-3 text-xs uppercase tracking-[0.3em] text-white/60">
+          <button type="button" onClick={onSnooze} className="min-h-11 rounded-lg px-8 py-3 text-[13px] text-white/65 active:bg-white/8">
             Snooze 10 min
           </button>
         </div>
       ) : (
         <div className="w-full max-w-xs">
-          <p className="text-sm tracking-[0.14em] text-white/60">
+          <p className="text-sm leading-relaxed text-white/65">
             {alarm.kind === "walk" ? "Walk to stop the alarm" : "Hold the phone flat on your chest and do sit-ups"}
           </p>
-          <p className="mt-4 text-4xl tabular-nums">
+          <p className="mt-4 font-mono text-4xl tabular-nums text-white/90">
             {Math.min(count, target)} / {target}
           </p>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-emerald-300/80 transition-[width]" style={{ width: `${(Math.min(count, target) / target) * 100}%` }} />
+            <div className="h-full rounded-full bg-ember transition-[width]" style={{ width: `${(Math.min(count, target) / target) * 100}%` }} />
           </div>
         </div>
       )}
