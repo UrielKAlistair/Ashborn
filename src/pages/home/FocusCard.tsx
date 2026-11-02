@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { requestCapture } from "./Capture";
 import { paletteOf } from "../../lib/theme";
 import { daysBetween } from "../../shared/dates";
 import { questOf, type GraphModel } from "../../shared/graphModel";
@@ -19,7 +20,27 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
 }) {
   const [passed, setPassed] = useState<string[]>([]);
   const [splitting, setSplitting] = useState(false);
-  if (steps.length === 0) return null;
+  // The keys act on the step shown now, whichever render set them up
+  const keys = useRef<Record<string, () => void>>({});
+
+  // On the desktop: D done, N not now, S split, / the capture field; never while typing in a field
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable]")) return;
+      const action = keys.current[event.key.toLowerCase()];
+      if (!action) return;
+      event.preventDefault();
+      action();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  if (steps.length === 0) {
+    keys.current = { "/": requestCapture };
+    return null;
+  }
 
   // Passing every step starts the round again
   const waiting = steps.filter((step) => !passed.includes(step.id));
@@ -29,8 +50,21 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
   const quest = questOf(model.byId, step);
   const parent = step.parentId && step.parentId !== quest.id ? model.byId.get(step.parentId) : null;
   const leadsTo = origin && origin.nodeId !== step.id ? model.byId.get(origin.nodeId) : null;
-  const deadline = origin?.deadlineId ? snapshot.deadlines.find(({ id }) => id === origin.deadlineId) : null;
+  // The deadline that raised it, else the nearest one linked to the step or to what it leads to:
+  // a deadline can tie with the user's own priority and lose the walk, but still matters here
+  const deadline =
+    snapshot.deadlines.find(({ id }) => id === origin?.deadlineId) ??
+    snapshot.deadlines
+      .filter(({ nodeId }) => nodeId && (nodeId === step.id || nodeId === origin?.nodeId))
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] ??
+    null;
   const daysLeft = deadline ? daysBetween(date, deadline.dueDate) : null;
+
+  const done = () => void act("updateNode", step.id, { done: true });
+  const notNow = () => setPassed(waiting.length > 1 ? [...passed, step.id] : []);
+  keys.current = splitting
+    ? { "/": requestCapture }
+    : { d: done, n: steps.length > 1 ? notNow : () => {}, s: () => setSplitting(true), "/": requestCapture };
 
   return (
     <section data-priority={priority} aria-label="Now" className="rounded-xl border border-[color-mix(in_oklab,var(--mark)_40%,transparent)] bg-card p-4">
@@ -53,7 +87,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
       </p>
 
       <ul className="mt-3 space-y-1 text-[12.5px] text-ink/75">
-        {leadsTo ? <li>→ Leads to {leadsTo.title}</li> : <li>→ You gave it this priority</li>}
+        {leadsTo ? <li>→ Leads to {leadsTo.title}</li> : step.priority ? <li>→ You gave it this priority</li> : null}
         {deadline && daysLeft !== null ? (
           <li className={daysLeft <= 2 ? "text-amber-200" : ""}>
             ◷ {deadline.title}, {daysLeft < 0 ? `${-daysLeft}d late` : daysLeft === 0 ? "due today" : `due in ${daysLeft}d`}
@@ -62,22 +96,23 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
       </ul>
 
       {splitting ? (
-        <SplitSteps act={act} parentId={step.id} onDone={() => setSplitting(false)} className="mt-3 w-full" />
+        <SplitSteps act={act} parentId={step.id} onDone={() => setSplitting(false)} graph={{ model, snapshot }} className="mt-3 w-full" />
       ) : (
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
-          <button type="button" onClick={() => void act("updateNode", step.id, { done: true })} className="rounded-lg bg-ember px-3.5 py-1.5 font-medium text-canvas hover:brightness-110">
+          <button type="button" onClick={done} title="Done (D)" className="rounded-lg bg-ember px-3.5 py-1.5 font-medium text-canvas hover:brightness-110">
             Done
           </button>
           {steps.length > 1 ? (
             <button
               type="button"
-              onClick={() => setPassed(waiting.length > 1 ? [...passed, step.id] : [])}
+              onClick={notNow}
+              title="Not now (N)"
               className="rounded-lg border border-ink/12 px-3 py-1.5 text-ink/75 hover:bg-ink/6"
             >
               Not now
             </button>
           ) : null}
-          <button type="button" onClick={() => setSplitting(true)} className="rounded-lg px-2 py-1.5 text-muted hover:bg-ink/6 hover:text-ink/85">
+          <button type="button" onClick={() => setSplitting(true)} title="Split it (S)" className="rounded-lg px-2 py-1.5 text-muted hover:bg-ink/6 hover:text-ink/85">
             Too big? Split it
           </button>
         </div>

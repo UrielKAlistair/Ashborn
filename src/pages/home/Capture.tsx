@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { isDone, type GraphModel } from "../../shared/graphModel";
 import { INBOX_TITLE } from "../../shared/inbox";
 import type { GraphNode, Snapshot } from "../../shared/types";
@@ -7,8 +7,30 @@ import type { Act } from "./HomePage";
 // A field that saves a thought into the Inbox, without asking where it goes. The first capture
 // makes the Inbox; one made while the Inbox is done, hidden or shelved brings it back, so the
 // thought never lands out of sight.
+// A capture asked for from outside the field (the desktop-wide shortcut): the field takes focus as
+// soon as it is on screen, which may be after the app has come back to Home
+let captureWanted = false;
+const captureEvent = "ashborn:capture";
+
+export function requestCapture() {
+  captureWanted = true;
+  window.dispatchEvent(new Event(captureEvent));
+}
+
 export function Capture({ snapshot, model, act }: { snapshot: Snapshot; model: GraphModel; act: Act }) {
   const [draft, setDraft] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const focus = () => {
+      if (!captureWanted || !field.current) return;
+      captureWanted = false;
+      field.current.focus();
+    };
+    focus();
+    window.addEventListener(captureEvent, focus);
+    return () => window.removeEventListener(captureEvent, focus);
+  }, []);
   const { inboxId } = snapshot;
   const waiting = (model.children.get(inboxId) ?? []).filter((item) => !isDone(item)).length;
 
@@ -25,6 +47,7 @@ export function Capture({ snapshot, model, act }: { snapshot: Snapshot; model: G
   return (
     <div className="flex items-center gap-2 rounded-lg border border-ink/10 bg-canvas/60 px-3 focus-within:border-ember/60">
       <input
+        ref={field}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => event.key === "Enter" && void save()}

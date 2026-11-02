@@ -58,7 +58,8 @@ test.afterAll(async () => {
   rmSync(profile, { recursive: true, force: true });
 });
 
-const upNext = () => page.locator("section", { hasText: "Up next" }).last();
+// The to-do list itself, not Focus above it, which names what a step leads to
+const upNext = () => page.getByRole("group", { name: "Up next" });
 const quest = (title: string) => page.locator(".react-flow__node-quest", { hasText: title });
 const canvasXY = async (title: string) => {
   const [, x, y] = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec((await quest(title).evaluate((el) => (el as HTMLElement).style.transform)))!;
@@ -80,6 +81,7 @@ test("priorities", async () => {
     await row.hover();
     await row.getByTitle("Priority").click();
     await page.getByRole("radio", { name: "Priority 2" }).click();
+    await page.getByRole("button", { name: /Show all \d+ ready/ }).click(); // the whole to-do, not only Now
     await expect(upNext()).toContainText("Review the survey");
     await expect(upNext()).not.toContainText("Presentation part 2");
     await expect(upNext()).not.toContainText("Presentation part 1");

@@ -141,6 +141,7 @@ test("home graph", async () => {
     await card("Deep Learning").getByTitle("Options").click();
     await page.getByRole("radio", { name: "Priority 1" }).click();
     await card("Deep Learning").getByTitle("Options").click();
+    await page.getByRole("button", { name: /Show all \d+ ready/ }).click(); // the whole to-do, not only Now
     await expect(upNext()).toContainText("Backprop by hand");
     await expect(upNext()).toContainText("CNN basics");
     await expect(upNext()).not.toContainText("Implement an MLP");

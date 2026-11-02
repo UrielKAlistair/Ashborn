@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -211,6 +211,12 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     createWindow();
     createTray();
+    // From anywhere on the desktop: the window, with its capture field ready for a thought. A key
+    // another app already holds is left to it.
+    globalShortcut.register("CommandOrControl+Alt+Space", () => {
+      showMainWindow();
+      mainWindow?.webContents.send("app:capture");
+    });
   });
 }
 
@@ -226,6 +232,8 @@ app.on("activate", () => {
 app.on("before-quit", () => {
   quitting = true;
 });
+
+app.on("will-quit", () => globalShortcut.unregisterAll());
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

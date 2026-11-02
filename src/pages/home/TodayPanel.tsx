@@ -4,11 +4,12 @@ import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
-import type { AlarmKind, Snapshot, Weekday } from "../../shared/types";
+import type { AlarmKind, GraphNode, Snapshot, Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
 import { Capture, NodePicker } from "./Capture";
 import { FocusCard } from "./FocusCard";
+import { inInbox } from "../../shared/inbox";
 import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
@@ -26,11 +27,28 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const { dayStartHour } = snapshot.settings;
   const date = useToday(dayStartHour);
   const [dayStartOpen, setDayStartOpen] = useState(false);
+  // With one step in Focus, the rest of the to-do waits behind a line, so the screen holds one thing
+  const [showAll, setShowAllState] = useState(() => loadShowAll());
+  const setShowAll = (show: boolean) => {
+    setShowAllState(show);
+    saveShowAll(show);
+  };
   const weekday = weekdayOf(date);
 
   // Steps you can do now, of the chains that have a priority
   const priorities = derivePriorities(model, snapshot, date);
   const todo = prioritisedSteps(model, snapshot, priorities);
+  const todoCount = todo.reduce((count, { steps }) => count + steps.length, 0);
+  // Ready steps nothing covers yet, so a priority can be given here without the graph; untriaged
+  // Inbox items are left to the Inbox
+  const unprioritised = snapshot.nodes.filter(
+    (node) =>
+      node.parentId &&
+      model.ready.has(node.id) &&
+      !priorities.effective.has(node.id) &&
+      questOf(model.byId, node).active &&
+      !inInbox(model, node, snapshot.inboxId),
+  );
 
   // The count is from the last change; once the next day starts it belongs to yesterday until the next one
   const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
@@ -90,32 +108,46 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
               : "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."}
           </Empty>
         ) : null}
-        {todo.map(({ priority, steps }) => (
-          <div key={priority} data-priority={priority} className="space-y-0.5">
-            <p className="flex items-center gap-2 px-1 pb-1 font-mono text-[11px] font-semibold text-[var(--mark)]">
-              P{priority}
-              <span className="h-px flex-1 bg-[color-mix(in_oklab,var(--mark)_25%,transparent)]" />
-            </p>
-            {steps.map((step) => {
-              const quest = questOf(model.byId, step);
-              const parent = model.byId.get(step.parentId!);
-              return (
-                <div key={step.id} className={rowClass}>
-                  <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] leading-snug text-ink/90">{step.title}</p>
-                    <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
-                      {quest.title}
-                      {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ))}
+        {todo.length > 0 && !showAll ? (
+          <button type="button" onClick={() => setShowAll(true)} className="px-1 text-[12.5px] text-muted hover:text-ink/85">
+            › Show all {todoCount} ready
+          </button>
+        ) : null}
+        {showAll ? (
+          <>
+            {todo.map(({ priority, steps }) => (
+              <div key={priority} data-priority={priority} className="space-y-0.5">
+                <p className="flex items-center gap-2 px-1 pb-1 font-mono text-[11px] font-semibold text-[var(--mark)]">
+                  P{priority}
+                  <span className="h-px flex-1 bg-[color-mix(in_oklab,var(--mark)_25%,transparent)]" />
+                </p>
+                {steps.map((step) => {
+                  const quest = questOf(model.byId, step);
+                  const parent = model.byId.get(step.parentId!);
+                  return (
+                    <div key={step.id} className={rowClass}>
+                      <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] leading-snug text-ink/90">{step.title}</p>
+                        <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
+                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+                          {quest.title}
+                          {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            <button type="button" onClick={() => setShowAll(false)} className="px-1 text-[12.5px] text-muted hover:text-ink/85">
+              ‹ Show only Now
+            </button>
+          </>
+        ) : null}
       </Section>
+
+      {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} /> : null}
 
       <Section title="Routines" action={<RoutineForm act={act} />}>
         {routines.length === 0 ? (
@@ -175,6 +207,76 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       </Section>
     </section>
   );
+}
+
+// Ready steps without a priority, folded away by default; a P chip gives one its priority, which
+// moves it into Up next
+function Unprioritised({ steps, model, act }: { steps: GraphNode[]; model: GraphModel; act: Act }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="-mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 px-1 text-[12.5px] text-muted hover:text-ink/85"
+      >
+        <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>›</span>
+        Ready, no priority <span className="font-mono tabular-nums">{steps.length}</span>
+      </button>
+      {open ? (
+        <div className="mt-2 space-y-0.5">
+          {steps.map((step) => {
+            const quest = questOf(model.byId, step);
+            return (
+              <div key={step.id} className={`group ${rowClass}`}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] leading-snug text-ink/80">{step.title}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+                    {quest.title}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1" role="group" aria-label={`Priority for ${step.title}`}>
+                  {([1, 2, 3, 4] as const).map((priority) => (
+                    <button
+                      key={priority}
+                      type="button"
+                      data-priority={priority}
+                      onClick={() => void act("updateNode", step.id, { priority })}
+                      title={`Priority ${priority}`}
+                      className="rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 py-0.5 font-mono text-[10.5px] text-[var(--mark)] hover:bg-[color-mix(in_oklab,var(--mark)_14%,transparent)]"
+                    >
+                      P{priority}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Whether the whole to-do shows under Focus, kept on this device
+const showAllStorageKey = "ashborn-show-all-todo";
+
+function loadShowAll() {
+  try {
+    return window.localStorage.getItem(showAllStorageKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveShowAll(show: boolean) {
+  try {
+    window.localStorage.setItem(showAllStorageKey, show ? "1" : "0");
+  } catch {
+    // Storage blocked: the list folds again next time
+  }
 }
 
 function RoutineForm({ act }: { act: Act }) {
@@ -272,7 +374,9 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
         <p className="font-display text-[13px] font-semibold text-ink/70">{title}</p>
         {action}
       </div>
-      <div className="space-y-2">{children}</div>
+      <div role="group" aria-label={title} className="space-y-2">
+        {children}
+      </div>
     </div>
   );
 }

@@ -10,10 +10,12 @@ import { watchChanges } from "./lib/live";
 import { isConnectionError, previewChange, QueueHeld, queueChange, queuedCount, queueUnsent, sendQueue, withIds, type QueuedChange } from "./lib/offline";
 import { usePhone } from "./lib/usePhone";
 import { AtlasPage } from "./pages/AtlasPage";
+import { requestCapture } from "./pages/home/Capture";
 import { HomePage, type Act } from "./pages/home/HomePage";
 import { KitchenPage } from "./pages/kitchen/KitchenPage";
 import { AlarmsPage } from "./pages/AlarmsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
+import { useUndoableTicks, UndoToast } from "./pages/home/UndoToast";
 import { PhoneHome } from "./pages/phone/PhoneHome";
 import { SignInPage } from "./pages/SignInPage";
 import { DEFAULT_DAY_START_HOUR, setDayStartHour } from "./shared/dates";
@@ -213,6 +215,8 @@ function App() {
     [],
   );
 
+  const { act: acting, ticked, dismiss } = useUndoableTicks(act, snapshot);
+
   // The device tells the hosted agent server, which runs in UTC, which time zone the user is in
   const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const storedZone = snapshot?.settings.timeZone;
@@ -226,6 +230,17 @@ function App() {
     if (routesInAddress) window.history.pushState({}, "", path);
     setCurrentPath(path);
   };
+
+  // The desktop-wide capture shortcut: Home, with the capture field focused
+  useEffect(
+    () =>
+      window.ashborn?.onCapture(() => {
+        if (routesInAddress && window.location.pathname !== "/") window.history.pushState({}, "", "/");
+        setCurrentPath("/");
+        requestCapture();
+      }),
+    [],
+  );
 
   const renderPage = () => {
     if (currentPath === "/atlas" || currentPath.startsWith("/atlas/")) {
@@ -243,14 +258,14 @@ function App() {
       );
     }
 
-    if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={act} permissions={permissions} />;
+    if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={acting} permissions={permissions} />;
 
     if (currentPath === "/kitchen" || currentPath.startsWith("/kitchen/")) {
       const [, , screen, recipeId] = currentPath.split("/");
       return (
         <KitchenPage
           snapshot={snapshot}
-          act={act}
+          act={acting}
           phone={phone}
           screen={screen === "recipes" ? "recipes" : screen === "stocks" ? "stocks" : "plan"}
           recipeId={recipeId ?? null}
@@ -259,9 +274,9 @@ function App() {
       );
     }
 
-    if (!phone) return <HomePage snapshot={snapshot} act={act} />;
+    if (!phone) return <HomePage snapshot={snapshot} act={acting} />;
     const screen = currentPath === "/graph" ? "graph" : currentPath === "/character" ? "character" : "todo";
-    return <PhoneHome snapshot={snapshot} act={act} screen={screen} />;
+    return <PhoneHome snapshot={snapshot} act={acting} screen={screen} />;
   };
 
   return (
@@ -286,6 +301,8 @@ function App() {
       )}
 
       {window.ashborn ? <WindowControls /> : null}
+
+      {ticked ? <UndoToast ticked={ticked} act={acting} onDismiss={dismiss} phone={phone} /> : null}
 
       {ringing ? <AlarmScreen alarm={ringing} onStop={stopRinging} onSnooze={snoozeRinging} /> : null}
 

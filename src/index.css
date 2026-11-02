@@ -66,7 +66,7 @@
   --color-panel: #f7f3ec;
   --color-card: #fffcf7;
   --color-ink: #231e18;
-  --color-ember: #c2621f;
+  --color-ember: #a24f17;
   --color-muted: #6b635a;
   --glow: rgb(255 255 255 / 0.5);
   --panel-shadow: 0 1px 2px rgb(60 40 20 / 0.06), 0 10px 28px rgb(60 40 20 / 0.08);
@@ -259,6 +259,11 @@ body {
 :root[data-theme="meadow"] .panel-lift {
   border-width: 2px;
   border-color: rgb(110 84 40 / 0.22);
+}
+
+/* On the light themes an ember button takes light text, for contrast */
+:root[data-theme="light"] .bg-ember {
+  color: var(--color-card);
 }
 
 :root[data-theme="meadow"] .bg-ember {

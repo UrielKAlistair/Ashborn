@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { phoneWindow } from "../phoneWindow";
 
 // Split into steps: a list typed in the panel, or pasted into the add-step row, becomes steps
 // inside the box, chained in order unless that is unticked.
@@ -51,6 +52,43 @@ test("split into steps", async () => {
     await page.getByRole("button", { name: "Add steps" }).click();
     await expect(steps).toHaveCount(5);
     await expect(page.locator(".react-flow__edge")).toHaveCount(2);
+  });
+
+  await test.step("a pasted list opens the panel prefilled; a pasted line stays in the field", async () => {
+    const paste = (text: string) =>
+      page.getByPlaceholder("Step name, Enter to add").evaluate((input, pasted) => {
+        const clipboardData = new DataTransfer();
+        clipboardData.setData("text", pasted);
+        return input.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }));
+      }, text);
+
+    await box.getByTitle("Add a step inside").click();
+    expect(await paste("Just one line\n")).toBe(true); // not cancelled: the browser fills the field
+    await expect(page.getByLabel("Steps, one per line")).toHaveCount(0);
+
+    await page.getByPlaceholder("Step name, Enter to add").fill("Typed first ");
+    expect(await paste("pasted\n2. Second\n3. Third")).toBe(false);
+    await expect(page.getByLabel("Steps, one per line")).toHaveValue("Typed first pasted\n2. Second\n3. Third");
+    await expect(page.getByText("3 steps")).toBeVisible();
+    await page.getByRole("button", { name: "Add steps" }).click();
+    await expect(steps).toHaveCount(8);
+    await expect(page.getByLabel("Steps, one per line")).toHaveCount(0);
+    await expect.poll(async () => (await stepRows()).map((row) => row.title)).toEqual(expect.arrayContaining(["Typed first pasted", "Second", "Third"]));
+  });
+
+  await test.step("on the phone, the sheet opens the panel whole on the screen", async () => {
+    await phoneWindow(app, page);
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "Graph" }).click();
+    await box.getByRole("button", { name: "Actions" }).first().click();
+    await page.getByRole("button", { name: "Split into steps" }).click();
+    await page.getByLabel("Steps, one per line").fill("On the phone one\nOn the phone two");
+    const add = await page.getByRole("button", { name: "Add steps" }).boundingBox();
+    expect(add!.x + add!.width).toBeLessThanOrEqual(400);
+    expect(add!.y + add!.height).toBeLessThanOrEqual(860);
+    await page.getByRole("button", { name: "Add steps" }).click();
+    await expect(page.getByLabel("Steps, one per line")).toHaveCount(0);
+    await expect.poll(async () => (await stepRows()).map((row) => row.title)).toEqual(expect.arrayContaining(["On the phone one", "On the phone two"]));
   });
 
   await app.close();

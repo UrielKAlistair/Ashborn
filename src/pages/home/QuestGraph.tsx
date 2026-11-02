@@ -31,7 +31,7 @@ import { questColors, type GraphEdge, type GraphNode, type ISODate, type Priorit
 import { MoveTargets, MoveToPicker } from "./Capture";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
-import { SplitSteps } from "./SplitSteps";
+import { SplitContext, SplitSteps } from "./SplitSteps";
 import { usePhonePanZoom } from "./phonePanZoom";
 import Territories from "./territory/Territories";
 import type { TerritoryQuest } from "./territory/territoryGrid";
@@ -127,12 +127,16 @@ type QuestGraphProps = {
 };
 
 export function QuestGraph(props: QuestGraphProps) {
-  const { model, snapshot: { inboxId } } = props;
+  const { model, snapshot } = props;
+  const { inboxId } = snapshot;
   const moveTargets = useMemo(() => ({ model, inboxId }), [model, inboxId]);
+  const splitContext = useMemo(() => ({ model, snapshot }), [model, snapshot]);
   return (
     <ReactFlowProvider>
       <MoveTargets.Provider value={moveTargets}>
-        <GraphCanvas {...props} />
+        <SplitContext.Provider value={splitContext}>
+          <GraphCanvas {...props} />
+        </SplitContext.Provider>
       </MoveTargets.Provider>
     </ReactFlowProvider>
   );
@@ -313,7 +317,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         locked: !unlocked.has(questId),
         adding: addingTo === node.id,
         menuOpen: menuFor === node.id,
-        look: lookOf(node.id),
+        // The Inbox is unsorted, not unimportant: never dimmed for having no priority
+        look: questId === snapshot.inboxId ? priorities.best.get(node.id) : lookOf(node.id),
         phone,
         sortable: depth > 0 && questId === snapshot.inboxId,
         actions,
@@ -1121,6 +1126,7 @@ function PhoneMenu({ data }: { data: CardData }) {
   const { node, depth, hasSteps, collapsed, menuOpen } = data;
   const { act, onMenu, onToggleCollapsed, onAdding } = boundActions(data);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [splitting, setSplitting] = useState(false);
   const isQuest = depth === 0;
   const choose = (action: () => unknown) => () => {
     action();
@@ -1134,6 +1140,7 @@ function PhoneMenu({ data }: { data: CardData }) {
         onClick={(event) => {
           event.stopPropagation();
           setConfirmDelete(false);
+          setSplitting(false);
           onMenu(!menuOpen);
         }}
         aria-label="Actions"
@@ -1149,61 +1156,77 @@ function PhoneMenu({ data }: { data: CardData }) {
               onClick={(event) => event.stopPropagation()}
               className="panel-scroll max-h-[85vh] w-full overflow-y-auto rounded-t-2xl border-t border-ink/10 bg-card p-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-[14px] text-ink/85 shadow-[var(--sheet-shadow)] transition-transform duration-200 ease-out starting:translate-y-full"
             >
-              <input
-                defaultValue={node.title}
-                aria-label="Rename"
-                onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-                onBlur={(event) => {
-                  const title = event.currentTarget.value.trim();
-                  if (!title) event.currentTarget.value = node.title;
-                  else if (title !== node.title) void act("updateNode", node.id, { title });
-                }}
-                className="mb-1 min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 font-display text-[15px] font-semibold text-ink/90 focus:border-ember/60 focus:outline-none"
-              />
-              {data.sortable ? (
-                <div className={phoneRow}>
-                  <MoveToPicker step={node} act={act} onMoved={() => onMenu(false)} className="min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 text-[14px] text-ink/85" />
-                </div>
-              ) : null}
-              <button type="button" onClick={choose(() => onAdding(true))} className={phoneItem}>
-                <PlusIcon /> Add a step inside
-              </button>
-              {hasSteps ? (
-                <button type="button" onClick={choose(onToggleCollapsed)} className={phoneItem}>
-                  <EyeIcon crossed={!collapsed} /> {collapsed ? "Show steps" : "Hide steps"}
-                </button>
-              ) : null}
-              <div className={phoneRow}>
-                <p className="mb-1 text-[11.5px] text-muted">Priority</p>
-                <PriorityPicker node={node} act={act} />
-              </div>
-              {isQuest ? (
+              {splitting ? (
+                <SplitSteps act={act} parentId={node.id} onDone={() => onMenu(false)} className="w-full" />
+              ) : (
                 <>
-                  <button type="button" onClick={choose(() => act("levelUp", node.id, crypto.randomUUID()))} className={phoneItem}>
-                    <span className="text-[11px] font-semibold text-red-300">++</span> Level up
+                  <input
+                    defaultValue={node.title}
+                    aria-label="Rename"
+                    onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                    onBlur={(event) => {
+                      const title = event.currentTarget.value.trim();
+                      if (!title) event.currentTarget.value = node.title;
+                      else if (title !== node.title) void act("updateNode", node.id, { title });
+                    }}
+                    className="mb-1 min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 font-display text-[15px] font-semibold text-ink/90 focus:border-ember/60 focus:outline-none"
+                  />
+                  {data.sortable ? (
+                    <div className={phoneRow}>
+                      <MoveToPicker step={node} act={act} onMoved={() => onMenu(false)} className="min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 text-[14px] text-ink/85" />
+                    </div>
+                  ) : null}
+                  <button type="button" onClick={choose(() => onAdding(true))} className={phoneItem}>
+                    <PlusIcon /> Add a step inside
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (collapsed) onToggleCollapsed();
+                      setSplitting(true);
+                    }}
+                    className={phoneItem}
+                  >
+                    <ListIcon /> Split into steps
+                  </button>
+                  {hasSteps ? (
+                    <button type="button" onClick={choose(onToggleCollapsed)} className={phoneItem}>
+                      <EyeIcon crossed={!collapsed} /> {collapsed ? "Show steps" : "Hide steps"}
+                    </button>
+                  ) : null}
                   <div className={phoneRow}>
-                    <p className="mb-1 text-[11.5px] text-muted">Colour</p>
-                    <ColorPicker node={node} act={act} />
+                    <p className="mb-1 text-[11.5px] text-muted">Priority</p>
+                    <PriorityPicker node={node} act={act} />
                   </div>
-                  <div className={phoneRow}>
-                    <StatWeightsEditor node={node} act={act} />
-                  </div>
-                  <button type="button" onClick={choose(() => act("updateNode", node.id, { active: false }))} className={phoneItem}>
-                    Hide quest
+                  {isQuest ? (
+                    <>
+                      <button type="button" onClick={choose(() => act("levelUp", node.id, crypto.randomUUID()))} className={phoneItem}>
+                        <span className="text-[11px] font-semibold text-red-300">++</span> Level up
+                      </button>
+                      <div className={phoneRow}>
+                        <p className="mb-1 text-[11.5px] text-muted">Colour</p>
+                        <ColorPicker node={node} act={act} />
+                      </div>
+                      <div className={phoneRow}>
+                        <StatWeightsEditor node={node} act={act} />
+                      </div>
+                      <button type="button" onClick={choose(() => act("updateNode", node.id, { active: false }))} className={phoneItem}>
+                        Hide quest
+                      </button>
+                    </>
+                  ) : null}
+                  <button type="button" onClick={choose(() => act("updateNode", node.id, { shelved: !node.shelved }))} className={phoneItem}>
+                    <span className="text-[11px] text-ink/60">❚❚</span> {node.shelved ? "Unshelve: pursue it again" : "Shelve: keep it, but not now"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => (confirmDelete ? void act("deleteNode", node.id) : setConfirmDelete(true))}
+                    className={`${phoneItem} text-red-300`}
+                  >
+                    <CrossIcon /> {confirmDelete ? "Tap again to delete" : "Delete"}
                   </button>
                 </>
-              ) : null}
-              <button type="button" onClick={choose(() => act("updateNode", node.id, { shelved: !node.shelved }))} className={phoneItem}>
-                <span className="text-[11px] text-ink/60">❚❚</span> {node.shelved ? "Unshelve: pursue it again" : "Shelve: keep it, but not now"}
-              </button>
-              <button
-                type="button"
-                onClick={() => (confirmDelete ? void act("deleteNode", node.id) : setConfirmDelete(true))}
-                className={`${phoneItem} text-red-300`}
-              >
-                <CrossIcon /> {confirmDelete ? "Tap again to delete" : "Delete"}
-              </button>
+              )}
             </div>
           </div>,
           document.body,

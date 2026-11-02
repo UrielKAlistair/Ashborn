@@ -10,6 +10,11 @@ contextBridge.exposeInMainWorld("ashborn", {
     return () => ipcRenderer.removeListener("app:maximised", handle);
   },
   quit: () => ipcRenderer.send("app:quit"),
+  onCapture: (listener: () => void) => {
+    const handle = () => listener();
+    ipcRenderer.on("app:capture", handle);
+    return () => ipcRenderer.removeListener("app:capture", handle);
+  },
   newestBackup: () => ipcRenderer.invoke("backup:newest"),
   writeBackup: (json: string) => ipcRenderer.invoke("backup:write", json),
 });
