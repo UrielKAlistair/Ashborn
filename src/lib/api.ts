@@ -114,7 +114,8 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     },
 
     async createNode(title, parentId, id = crypto.randomUUID()) {
-      must(await db.from("graph_nodes").upsert({ id, title, parent_id: parentId }, { onConflict: "id", ignoreDuplicates: true }));
+      // Stamped when made, as on screen until now, so the order doesn't shift when the row comes back
+      must(await db.from("graph_nodes").upsert({ id, title, parent_id: parentId, created_at: clock().toISOString() }, { onConflict: "id", ignoreDuplicates: true }));
       return { nodes: [await readNode(id)] };
     },
 

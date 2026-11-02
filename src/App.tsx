@@ -16,7 +16,7 @@ import { HomePage, type Act } from "./pages/home/HomePage";
 import { KitchenPage } from "./pages/kitchen/KitchenPage";
 import { AlarmsPage } from "./pages/AlarmsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
-import { useUndoableTicks, UndoToast } from "./pages/home/UndoToast";
+import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
 import { PhoneHome } from "./pages/phone/PhoneHome";
 import { SignInPage } from "./pages/SignInPage";
 import { DEFAULT_DAY_START_HOUR, setDayStartHour } from "./shared/dates";
@@ -216,7 +216,7 @@ function App() {
     [],
   );
 
-  const { act: acting, ticked, dismiss } = useUndoableTicks(act, snapshot);
+  const { act: acting, undoable, dismiss } = useUndoableChanges(act, snapshot);
 
   // The device tells the hosted agent server, which runs in UTC, which time zone the user is in
   const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -304,7 +304,7 @@ function App() {
       {window.ashborn ? <WindowControls /> : null}
       {!phone && userId ? <KeyHelp /> : null}
 
-      {ticked ? <UndoToast ticked={ticked} act={acting} onDismiss={dismiss} phone={phone} /> : null}
+      {undoable ? <UndoToast undoable={undoable} act={act} onDismiss={dismiss} phone={phone} /> : null}
 
       {ringing ? <AlarmScreen alarm={ringing} onStop={stopRinging} onSnooze={snoozeRinging} /> : null}
 

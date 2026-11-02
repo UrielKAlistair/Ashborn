@@ -47,7 +47,7 @@ test.afterAll(async () => {
 });
 
 const field = () => page.getByLabel("Capture a thought");
-const upNext = () => page.locator("section", { hasText: "Up next" }).last();
+const upNext = () => page.getByRole("group", { name: "Up next" });
 const quest = (title: string) => page.locator(".react-flow__node-quest", { hasText: title });
 const step = (title: string) => page.locator(".react-flow__node-step", { hasText: title });
 const capture = async (thought: string) => {

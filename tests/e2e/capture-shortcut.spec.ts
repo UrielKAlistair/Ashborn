@@ -29,6 +29,7 @@ test("capture shortcut and the keys list", async () => {
     await page.getByLabel("Capture a thought").blur();
     await page.keyboard.press("?");
     await expect(page.getByRole("dialog", { name: "Keys" })).toContainText("Capture from anywhere on the desktop");
+    await expect(page.getByRole("dialog", { name: "Keys" })).toContainText("Sorting the Inbox");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Keys" })).toHaveCount(0);
     expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible())).toBe(true);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { requestCapture } from "./Capture";
 import { paletteOf } from "../../lib/theme";
 import { daysBetween } from "../../shared/dates";
-import { questOf, type GraphModel } from "../../shared/graphModel";
+import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import type { Priorities } from "../../shared/priority";
 import type { GraphNode, ISODate, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
@@ -63,6 +63,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] ??
     null;
   const daysLeft = deadline ? daysBetween(date, deadline.dueDate) : null;
+  // The open step this one leads to, so a chain just split still shows its plan
+  const then = snapshot.edges
+    .filter(({ from }) => from === step.id)
+    .map(({ to }) => model.byId.get(to))
+    .find((next) => next && !isDone(next));
 
   const done = () => void act("updateNode", step.id, { done: true });
   const notNow = () => setPassed(waiting.length > 1 ? [...passed, step.id] : []);
@@ -110,6 +115,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
             ◷ {deadline.title}, {daysLeft < 0 ? `${-daysLeft}d late` : daysLeft === 0 ? "due today" : `due in ${daysLeft}d`}
           </li>
         ) : null}
+        {then ? <li className="text-muted">Then: {then.title}</li> : null}
       </ul>
 
       {splitting ? (

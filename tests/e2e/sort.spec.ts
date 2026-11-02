@@ -69,6 +69,27 @@ test("brain dump and sort", async () => {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(focus()).toContainText("Write report", { timeout: 20_000 });
 
+  await test.step("thoughts keep their order while a slow connection is still making the Inbox", async () => {
+    let held = false;
+    await page.route("**/rest/v1/graph_nodes*", async (route) => {
+      if (!held && route.request().method() === "POST") {
+        held = true;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      await route.continue();
+    });
+    for (const thought of ["Thought one", "Thought two"]) {
+      await field().fill(thought);
+      await field().press("Enter");
+    }
+    await expect(sortButton(2)).toBeVisible();
+    const order = async () => (await db.from("graph_nodes").select("title").eq("parent_id", userId).order("created_at")).data?.map(({ title }) => title);
+    await expect.poll(order, { timeout: 8000 }).toEqual(["Thought one", "Thought two"]);
+    await page.unroute("**/rest/v1/graph_nodes*");
+    await db.from("graph_nodes").delete().eq("parent_id", userId);
+    await expect(sortButton(2)).toHaveCount(0);
+  });
+
   await test.step("a pasted list makes one item per line, marks dropped; one line stays in the field", async () => {
     expect(await paste("Only one line\n")).toBe(true); // not cancelled: the browser fills the field
     await expect(sortButton(1)).toHaveCount(0);
@@ -84,6 +105,7 @@ test("brain dump and sort", async () => {
     await sortButton(6).click();
     await expect(card()).toContainText("Call the bank");
     await expect(card()).toContainText("1 of 6");
+    await expect(card().getByLabel("Move to…").getByRole("option", { name: "Its own quest" })).toHaveCount(0); // the button says it
     await expect(card().getByRole("button", { name: "Delete" })).toHaveCSS("opacity", "1");
     await page.screenshot({ path: `${shots}/sort-ember.png` });
 
@@ -91,9 +113,28 @@ test("brain dump and sort", async () => {
     await expect(card()).toContainText("Book a dentist");
   });
 
+  await test.step("a priority is optional: it stays on the item, by click or key, and goes with it when moved", async () => {
+    const priorityOf = async (title: string) => (await db.from("graph_nodes").select("priority").eq("title", title).single()).data?.priority;
+    const chips = card().getByRole("group", { name: "Priority for Book a dentist" });
+    await chips.getByRole("button", { name: "P2" }).click();
+    await expect.poll(() => priorityOf("Book a dentist")).toBe(2);
+    await expect(chips.getByRole("button", { name: "P2" })).toHaveAttribute("aria-pressed", "true");
+    await expect(card()).toContainText("Book a dentist"); // doesn't move on
+    await expect(page.getByRole("status").filter({ hasText: "P2: Book a dentist" })).toBeVisible();
+    await page.screenshot({ path: `${shots}/sort-priority.png` });
+
+    await chips.getByRole("button", { name: "P2" }).click(); // pressed again, it comes off
+    await expect.poll(() => priorityOf("Book a dentist")).toBeNull();
+    await noFocus();
+    await page.keyboard.press("3");
+    await expect.poll(() => priorityOf("Book a dentist")).toBe(3);
+    await expect(chips.getByRole("button", { name: "P3" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   await test.step("Move to… sorts it and the next comes up; Its own quest; Delete asks first", async () => {
     await card().getByLabel("Move to…").selectOption({ label: "Work" });
     await expect.poll(() => parentOf("Book a dentist")).toBe(work);
+    expect((await db.from("graph_nodes").select("priority").eq("title", "Book a dentist").single()).data?.priority).toBe(3);
     await expect(card()).toContainText("Plan the holiday");
     await expect(card()).toContainText("of 5");
 

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { isDone, type GraphModel } from "../../shared/graphModel";
 import { INBOX_TITLE } from "../../shared/inbox";
 import { parseStepList } from "../../shared/splitList";
-import type { GraphNode, Snapshot } from "../../shared/types";
+import type { GraphNode, Priority, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { SplitSteps } from "./SplitSteps";
 
@@ -37,7 +37,7 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
     return () => window.removeEventListener(captureEvent, focus);
   }, []);
   const { inboxId } = snapshot;
-  const waiting = (model.children.get(inboxId) ?? []).filter((item) => !isDone(item)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const waiting = (model.children.get(inboxId) ?? []).filter((item) => !isDone(item)).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   const moveTargets = useMemo(() => ({ model, inboxId }), [model, inboxId]);
 
   // Sorting the last item away ends it; the next capture does not reopen the card
@@ -48,12 +48,14 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
   const sortShown = sorting && waiting.length > 0;
   useEffect(() => onSorting?.(sortShown), [sortShown, onSorting]);
 
-  const capture = async (titles: string[]) => {
+  // Not awaited: each change takes its place in line as it is made, so a capture made while the
+  // Inbox is still being made can't overtake one made before it
+  const capture = (titles: string[]) => {
     setDraft("");
     const inbox = model.byId.get(inboxId);
-    if (!inbox) await act("createNode", INBOX_TITLE, null, inboxId);
-    else if (isDone(inbox) || !inbox.active || inbox.shelved) await act("updateNode", inboxId, { done: false, active: true, shelved: false });
-    for (const title of titles) await act("createNode", title, inboxId);
+    if (!inbox) void act("createNode", INBOX_TITLE, null, inboxId);
+    else if (isDone(inbox) || !inbox.active || inbox.shelved) void act("updateNode", inboxId, { done: false, active: true, shelved: false });
+    titles.forEach((title) => void act("createNode", title, inboxId));
   };
 
   return (
@@ -63,12 +65,12 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
           ref={field}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => event.key === "Enter" && draft.trim() && void capture([draft.trim()])}
+          onKeyDown={(event) => event.key === "Enter" && draft.trim() && capture([draft.trim()])}
           onPaste={(event) => {
             const titles = parseStepList(draft + event.clipboardData.getData("text"));
             if (titles.length < 2) return;
             event.preventDefault();
-            void capture(titles);
+            capture(titles);
           }}
           aria-label="Capture a thought"
           placeholder="Capture a thought"
@@ -95,9 +97,10 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
   );
 }
 
+const PRIORITIES: Priority[] = [1, 2, 3, 4];
+
 // The Inbox one item at a time, oldest first. Skipping every item starts the round again. The item
-// on show stays until it is dealt with: a capture being saved has the device's time, then the
-// server's, so the order can shift for a moment.
+// on show stays until it is dealt with, whatever is captured or arrives meanwhile.
 function SortInbox({ items, snapshot, model, act, onClose }: { items: GraphNode[]; snapshot: Snapshot; model: GraphModel; act: Act; onClose: () => void }) {
   const [skipped, setSkipped] = useState<string[]>([]);
   const shown = useRef<string | null>(null);
@@ -123,11 +126,12 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
   };
   const ownQuest = () => void act("moveNode", item.id, null);
   const remove = () => (confirmDelete ? void act("deleteNode", item.id) : setConfirmDelete(true));
+  const prioritise = (priority: Priority) => void act("updateNode", item.id, { priority: priority === item.priority ? null : priority });
 
-  // On the desktop: M move, Q its own quest, S split, X delete, N skip, Escape closes; never while
+  // On the desktop: M move, Q its own quest, S split, X delete, N skip, 1 to 4 priority, Escape closes; never while
   // typing in a field. Heard before Focus's keys and kept from them while this card is open.
   const keys = useRef<Record<string, () => void>>({});
-  keys.current = splitting ? { "/": requestCapture } : { m: moveTo, q: ownQuest, s: () => setSplitting(true), x: remove, n: onSkip, "/": requestCapture };
+  keys.current = splitting ? { "/": requestCapture } : { m: moveTo, q: ownQuest, s: () => setSplitting(true), x: remove, n: onSkip, "/": requestCapture, ...Object.fromEntries(PRIORITIES.map((priority) => [`${priority}`, () => prioritise(priority)])) };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -170,7 +174,23 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
         <SplitSteps act={act} parentId={item.id} onAdded={onSkip} onDone={() => setSplitting(false)} graph={{ model, snapshot }} className="mt-3 w-full" />
       ) : (
         <>
-          <MoveToPicker step={item} act={act} selectRef={picker} className="mt-3 min-h-9 w-full rounded-lg border border-ink/10 bg-canvas/60 px-2.5 py-1.5 text-[13px] text-ink/85" />
+          <MoveToPicker step={item} act={act} selectRef={picker} offerOwnQuest={false} className="mt-3 min-h-9 w-full rounded-lg border border-ink/10 bg-canvas/60 px-2.5 py-1.5 text-[13px] text-ink/85" />
+          <div role="group" aria-label={`Priority for ${item.title}`} className="mt-2 flex items-center gap-1">
+            <span className="mr-1 text-[12px] text-muted">When, if you know</span>
+            {PRIORITIES.map((priority) => (
+              <button
+                key={priority}
+                type="button"
+                data-priority={priority}
+                aria-pressed={item.priority === priority}
+                onClick={() => prioritise(priority)}
+                title={`Priority ${priority} (${priority})`}
+                className={`rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 py-0.5 font-mono text-[10.5px] text-[var(--mark)] ${item.priority === priority ? "bg-[color-mix(in_oklab,var(--mark)_22%,transparent)] font-semibold" : "hover:bg-[color-mix(in_oklab,var(--mark)_12%,transparent)]"}`}
+              >
+                P{priority}
+              </button>
+            ))}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
             <button type="button" onClick={ownQuest} title="Its own quest (Q)" className="rounded-lg border border-ink/12 px-3 py-1.5 text-ink/75 hover:bg-ink/6">
               Its own quest
@@ -226,7 +246,7 @@ const OWN_QUEST = "own-quest";
 export const MoveTargets = createContext<{ model: GraphModel; inboxId: string }>(null!);
 
 // Sorts a step out of the Inbox: into any open quest or step, or into a quest of its own
-export function MoveToPicker({ step, act, onMoved, selectRef, className }: { step: GraphNode; act: Act; onMoved?: () => void; selectRef?: Ref<HTMLSelectElement>; className: string }) {
+export function MoveToPicker({ step, act, onMoved, selectRef, offerOwnQuest = true, className }: { step: GraphNode; act: Act; onMoved?: () => void; selectRef?: Ref<HTMLSelectElement>; offerOwnQuest?: boolean; className: string }) {
   const { model, inboxId } = useContext(MoveTargets);
   return (
     <select
@@ -244,7 +264,7 @@ export function MoveToPicker({ step, act, onMoved, selectRef, className }: { ste
       <option value="" disabled>
         Move to…
       </option>
-      <option value={OWN_QUEST}>Its own quest</option>
+      {offerOwnQuest ? <option value={OWN_QUEST}>Its own quest</option> : null}
       {nodeOptions(model, inboxId)}
     </select>
   );

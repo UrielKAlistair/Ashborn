@@ -97,32 +97,31 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           </select>
         </label>
       ) : null}
-      {progressToday > 0 ? (
-        <div className="-mt-5 px-1">
-          <button
-            type="button"
-            onClick={() => setDoneOpen(!doneOpen)}
-            aria-expanded={doneOpen}
-            disabled={doneToday.length === 0}
-            className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-ember" />
-            {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
-            {doneToday.length > 0 ? <span className={`inline-block transition-transform ${doneOpen ? "rotate-90" : ""}`}>›</span> : null}
-          </button>
-          {doneOpen ? (
-            <ul aria-label="Done today" className="mt-2 space-y-1 border-l border-ember/30 pl-3 text-[12.5px] text-ink/75">
-              {doneToday.map((step) => (
-                <li key={step.id} className="flex items-baseline gap-2">
-                  <span className="text-emerald-300">✓</span>
-                  <span className="min-w-0 flex-1">{step.title}</span>
-                  <span className="shrink-0 truncate text-[11px] text-muted">{questOf(model.byId, step).title}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
+      {/* Held in place before the first tick too, so the cards below don't shift under the finger */}
+      <div className={`-mt-5 px-1 ${progressToday > 0 ? "" : "invisible"}`} aria-hidden={progressToday === 0}>
+        <button
+          type="button"
+          onClick={() => setDoneOpen(!doneOpen)}
+          aria-expanded={doneOpen}
+          disabled={doneToday.length === 0}
+          className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-ember" />
+          {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
+          {doneToday.length > 0 ? <span className={`inline-block transition-transform ${doneOpen ? "rotate-90" : ""}`}>›</span> : null}
+        </button>
+        {doneOpen ? (
+          <ul aria-label="Done today" className="mt-2 space-y-1 border-l border-ember/30 pl-3 text-[12.5px] text-ink/75">
+            {doneToday.map((step) => (
+              <li key={step.id} className="flex items-baseline gap-2">
+                <Tick done onClick={() => void act("updateNode", step.id, { done: false })} className="translate-y-0.5" />
+                <span className="min-w-0 flex-1">{step.title}</span>
+                <span className="shrink-0 truncate text-[11px] text-muted">{questOf(model.byId, step).title}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
 
       <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
       {sorting ? null : <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} />}

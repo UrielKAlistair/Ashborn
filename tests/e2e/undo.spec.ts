@@ -50,11 +50,11 @@ test.afterAll(async () => {
   rmSync(profile, { recursive: true, force: true });
 });
 
-const toast = () => page.getByRole("status").filter({ hasText: "Done:" });
+const toast = () => page.getByRole("status").filter({ hasText: /Done:|P\d:/ });
 const undo = () => toast().getByRole("button", { name: "Undo" });
 const stepCard = (title: string) => page.locator(".react-flow__node-step", { hasText: title });
 const graphTick = (title: string) => stepCard(title).getByRole("button", { name: /^Mark/ });
-const upNext = () => page.locator("section", { hasText: "Up next" }).last();
+const upNext = () => page.getByRole("group", { name: "Up next" });
 const isDone = async (id: string) => {
   const { data, error } = await db.from("graph_nodes").select("completed_at").eq("id", id).single();
   if (error) throw error;
@@ -124,6 +124,20 @@ test("undo a tick", async () => {
     await undo().click();
     await expect(page.locator(".react-flow__node-quest", { hasText: "Errand" })).toBeVisible();
     await expect(stepCard("The only step")).toBeVisible();
+  });
+
+  await test.step("giving a step a priority from the list offers Undo, which takes it back", async () => {
+    const priorityOf = async (id: string) => (await db.from("graph_nodes").select("priority").eq("id", id).single()).data?.priority;
+    await page.getByRole("button", { name: /Ready, no priority/ }).click();
+    const chips = page.getByRole("group", { name: "Priority for The only step" });
+    await chips.getByRole("button", { name: "P3" }).click();
+    await expect(toast()).toContainText("P3: The only step");
+    await expect(chips).toHaveCount(0);
+    await expect.poll(() => priorityOf(ids.only)).toBe(3);
+    await undo().click();
+    await expect(toast()).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Ready, no priority/ })).toContainText("1"); // back, the list closed since it had emptied
+    await expect.poll(() => priorityOf(ids.only)).toBeNull();
   });
 
   await test.step("it reads in every theme, and on the phone it sits above the tabs", async () => {

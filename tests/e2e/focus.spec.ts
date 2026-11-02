@@ -86,14 +86,22 @@ test("focus", async () => {
     await now.getByRole("button", { name: "Add steps" }).click();
     await expect(now).toContainText("Skim the abstract");
     await expect(now).toContainText("Work · Read the survey");
+    await expect(now).toContainText("Then: Read section 2");
   });
 
-  await test.step("Done ticks it", async () => {
+  await test.step("Done ticks it, without moving the card; Done today can untick it", async () => {
+    const before = (await now.boundingBox())!.y;
     await now.getByRole("button", { name: "Done" }).click();
     await expect(now).toContainText("Read section 2");
+    expect((await now.boundingBox())!.y).toBe(before);
     await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("title", "Skim the abstract").single()).data?.completed_at).toBeTruthy();
     await page.getByRole("button", { name: /of progress today/ }).click();
     await expect(page.getByRole("list", { name: "Done today" })).toContainText("Skim the abstract");
+    await page.getByRole("list", { name: "Done today" }).getByTitle("Mark not done").click();
+    await expect(now).toContainText("Skim the abstract");
+    await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("title", "Skim the abstract").single()).data?.completed_at).toBeNull();
+    await now.getByRole("button", { name: "Done" }).click();
+    await expect(now).toContainText("Read section 2");
   });
 
   await test.step("a priority on a quest reads as the quest's, not as a step it leads to", async () => {

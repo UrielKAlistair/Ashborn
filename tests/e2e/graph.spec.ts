@@ -49,7 +49,7 @@ test.afterAll(async () => {
 const nodes = () => page.locator(".react-flow__node");
 const card = (title: string) => nodes().filter({ hasText: title }).last();
 const edges = () => page.locator(".react-flow__edge");
-const upNext = () => page.locator("section", { hasText: "Up next" }).last();
+const upNext = () => page.getByRole("group", { name: "Up next" });
 const addInput = () => page.getByPlaceholder("Step name, Enter to add");
 const windowVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible());
 
