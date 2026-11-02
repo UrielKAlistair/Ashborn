@@ -198,8 +198,10 @@ body {
 :root:not([data-priority-look]) [data-priority="none"] { opacity: 0.45; }
 /* Fading towards a pale ground loses more contrast than towards a dark one */
 :root[data-theme="light"][data-priority-look="a"] [data-priority="none"],
-:root[data-theme="meadow"][data-priority-look="a"] [data-priority="none"],
 :root[data-theme="light"]:not([data-priority-look]) [data-priority="none"] { opacity: 0.6; }
+/* On Meadow's tiles a see-through card lets the ground through its text: wash it out, solid, instead */
+:root[data-theme="meadow"][data-priority-look="a"] [data-priority="none"],
+:root[data-theme="meadow"]:not([data-priority-look]) [data-priority="none"] { opacity: 1; filter: grayscale(0.7) contrast(0.7) brightness(1.1); }
 :root[data-priority-look="a"] [data-priority]:not([data-priority="none"]) > .priority-mark,
 :root:not([data-priority-look]) [data-priority]:not([data-priority="none"]) > .priority-mark {
   border-width: 1.5px;

@@ -23,6 +23,7 @@ export function SplitSteps({
   onDone,
   onAdded,
   graph,
+  first = false,
   className = "w-80 shadow-[var(--card-shadow)]",
 }: {
   act: Act;
@@ -31,6 +32,7 @@ export function SplitSteps({
   onDone: () => void;
   onAdded?: () => void; // before onDone, only when steps were added
   graph?: { model: GraphModel; snapshot: Snapshot }; // outside the graph's context
+  first?: boolean; // the first steps of an empty quest, so nothing is being split
   className?: string;
 }) {
   const fromGraph = useContext(SplitContext);
@@ -58,7 +60,7 @@ export function SplitSteps({
         }
       }}
     >
-      <p className="font-display font-semibold">Split into steps</p>
+      <p className="font-display font-semibold">{first ? "First steps" : "Split into steps"}</p>
       <textarea
         autoFocus
         rows={5}
@@ -107,7 +109,7 @@ export function SplitSteps({
             disabled={steps.length === 0}
             className="rounded-lg bg-ember px-3 py-1 font-medium text-canvas hover:brightness-110 disabled:opacity-40"
           >
-            Add {steps.length === 1 ? "step" : "steps"}
+            {first ? "Add" : `Add ${steps.length === 1 ? "step" : "steps"}`}
           </button>
         </div>
       </div>

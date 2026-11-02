@@ -63,7 +63,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] ??
     null;
   const daysLeft = deadline ? daysBetween(date, deadline.dueDate) : null;
-  // The open step this one leads to, so a chain just split still shows its plan
+  // The open step this one leads to, so a chain just split still shows its plan; unless "Leads to" names it
   const then = snapshot.edges
     .filter(({ from }) => from === step.id)
     .map(({ to }) => model.byId.get(to))
@@ -120,11 +120,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
             ◷ {deadline.title}, {daysLeft < 0 ? `${-daysLeft}d late` : daysLeft === 0 ? "due today" : `due in ${daysLeft}d`}
           </li>
         ) : null}
-        {then ? <li className="text-muted">Then: {then.title}</li> : null}
+        {then && then.id !== from?.id ? <li className="text-muted">Then: {then.title}</li> : null}
       </ul>
 
       {splitting ? (
-        <SplitSteps act={act} parentId={step.id} onDone={() => setSplitting(false)} graph={{ model, snapshot }} className="mt-3 w-full" />
+        <SplitSteps act={act} parentId={step.id} onDone={() => setSplitting(false)} graph={{ model, snapshot }} first={firstStep} className="mt-3 w-full" />
       ) : (
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
           {firstStep ? (

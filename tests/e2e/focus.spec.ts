@@ -45,6 +45,7 @@ test("focus", async () => {
     await expect(now).toContainText("Read the survey", { timeout: 15_000 });
     await expect(now).toContainText("P1");
     await expect(now).toContainText("Leads to Give the talk");
+    await expect(now).not.toContainText("Then:");
     await expect(now).toContainText("1 of 2");
   });
 

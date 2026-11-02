@@ -417,7 +417,7 @@ function FirstStepRow({ quest, snapshot, model, act }: { quest: GraphNode; snaps
           </p>
         </div>
       </div>
-      {open ? <SplitSteps act={act} parentId={quest.id} onDone={() => setOpen(false)} graph={{ model, snapshot }} className="mt-1 w-full" /> : null}
+      {open ? <SplitSteps act={act} parentId={quest.id} onDone={() => setOpen(false)} graph={{ model, snapshot }} first className="mt-1 w-full" /> : null}
     </div>
   );
 }

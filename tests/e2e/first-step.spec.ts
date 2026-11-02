@@ -71,7 +71,9 @@ test("a quest with a priority and no steps", async () => {
   await test.step("the first steps replace it with the first of them", async () => {
     await now.getByRole("button", { name: "Add a first step" }).click();
     await page.getByLabel("Steps, one per line").fill("Read the papers\nDraft an outline");
-    await page.getByRole("button", { name: "Add steps" }).click();
+    await expect(now.getByText("First steps", { exact: true })).toBeVisible();
+    await expect(now.getByText("Split into steps")).toHaveCount(0);
+    await now.getByRole("button", { name: "Add", exact: true }).click();
     await expect(now).toContainText("Read the papers");
     await expect(now.getByRole("button", { name: "Done", exact: true })).toBeVisible();
     await expect.poll(() => stepsOf(idea)).toEqual(expect.arrayContaining(["Read the papers", "Draft an outline"]));
@@ -85,7 +87,8 @@ test("a quest with a priority and no steps", async () => {
     await row.getByTitle("Add a first step").click();
     await list.getByLabel("Steps, one per line").fill("Find a course");
     await page.screenshot({ path: `${shots}/first-step-row.png` });
-    await list.getByRole("button", { name: "Add step", exact: true }).click();
+    await expect(list.getByText("First steps", { exact: true })).toBeVisible();
+    await list.getByRole("button", { name: "Add", exact: true }).click();
     await expect.poll(() => stepsOf(other)).toEqual(["Find a course"]);
     await expect(list).toContainText("Find a course");
   });
