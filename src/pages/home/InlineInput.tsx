@@ -28,7 +28,7 @@ export function InlineInput({ placeholder, onSubmit, onEscape, autoFocus = false
           onEscape();
         }
       }}
-      className={`nodrag nopan rounded-lg border border-white/10 bg-night/70 px-3 py-1.5 text-xs tracking-[0.06em] text-white/85 placeholder:text-white/40 focus:border-white/30 focus:outline-none ${className}`}
+      className={`nodrag nopan rounded-lg border border-ink/10 bg-canvas/60 px-3 py-1.5 text-[13px] text-ink/85 placeholder:text-ink/40 focus:border-ember/50 focus:outline-none ${className}`}
     />
   );
 }

@@ -41,7 +41,7 @@ export function useTheme(): Theme {
 
 // The theme's ink as RGB (0-255), for drawing outside CSS
 export function inkRgb(): [number, number, number] {
-  const hex = getComputedStyle(document.documentElement).getPropertyValue("--color-white").trim();
+  const hex = getComputedStyle(document.documentElement).getPropertyValue("--color-ink").trim();
   const value = Number.parseInt(hex.slice(1), 16);
   return Number.isNaN(value) ? [255, 255, 255] : [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }

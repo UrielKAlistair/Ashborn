@@ -95,7 +95,7 @@ test("home graph", async () => {
     await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
     await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page.getByText("Start a quest")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Start a quest: something")).toBeVisible({ timeout: 15_000 });
   });
 
   await test.step("the empty-state box creates a quest", async () => {
@@ -173,7 +173,7 @@ test("home graph", async () => {
     await page.getByLabel("CHR weight").press("Enter");
     await page.getByRole("radio", { name: "violet" }).click();
     await expect(page.getByRole("radio", { name: "violet" })).toHaveAttribute("aria-checked", "true");
-    await expect(card("Deep Learning").locator(".bg-violet-400")).toHaveCount(1);
+    await expect(card("Deep Learning").locator(".fill-violet-400")).toHaveCount(1);
     await card("Deep Learning").getByTitle("Level up: log a session of progress").click();
     // 20 xp in the quest: one tick and one level-up
     await expect(page.locator("dl div[title='30 xp']", { hasText: "INT" })).toHaveCount(1);

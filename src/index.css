@@ -5,14 +5,14 @@
 @import "@fontsource/jetbrains-mono/400.css";
 
 /* Two themes, Ember (dark, the default) and Parchment (light), set by data-theme on <html>.
-   Components colour themselves with `white` (the ink: text, lines and tints, at an opacity) and
-   `night` (the canvas), `night-panel` and `night-card` (surfaces on it); each theme sets those.
+   Components colour themselves with `ink` (text, lines and tints, at an opacity), `canvas`, and
+   `panel` and `card` (surfaces on it); each theme sets those.
    Parchment also darkens the pale accent shades that are written for a dark ground. */
 @theme {
-  --color-night: #0c0e13;
-  --color-night-panel: #12151c;
-  --color-night-card: #191d26;
-  --color-white: #ece7df;
+  --color-canvas: #0c0e13;
+  --color-panel: #12151c;
+  --color-card: #191d26;
+  --color-ink: #ece7df;
   --color-ember: #f0a35e;
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", "Inter Variable", ui-sans-serif, sans-serif;
@@ -28,10 +28,10 @@
 }
 
 :root[data-theme="light"] {
-  --color-night: #ebe5da;
-  --color-night-panel: #f7f3ec;
-  --color-night-card: #fffcf7;
-  --color-white: #231e18;
+  --color-canvas: #ebe5da;
+  --color-panel: #f7f3ec;
+  --color-card: #fffcf7;
+  --color-ink: #231e18;
   --color-ember: #c2621f;
   --glow: rgb(255 255 255 / 0.5);
   --panel-shadow: 0 1px 2px rgb(60 40 20 / 0.06), 0 10px 28px rgb(60 40 20 / 0.08);
@@ -60,7 +60,7 @@ body,
 #root {
   height: 100%;
   margin: 0;
-  background: var(--color-night);
+  background: var(--color-canvas);
   overflow: hidden;
 }
 
@@ -78,7 +78,7 @@ body {
 
 .panel-scroll {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--color-white) 18%, transparent) transparent;
+  scrollbar-color: color-mix(in oklab, var(--color-ink) 18%, transparent) transparent;
 }
 
 .panel-scroll::-webkit-scrollbar {
@@ -93,11 +93,11 @@ body {
   border: 2px solid transparent;
   border-radius: 9999px;
   background-clip: padding-box;
-  background-color: color-mix(in oklab, var(--color-white) 16%, transparent);
+  background-color: color-mix(in oklab, var(--color-ink) 16%, transparent);
 }
 
 .panel-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: color-mix(in oklab, var(--color-white) 24%, transparent);
+  background-color: color-mix(in oklab, var(--color-ink) 24%, transparent);
 }
 
 /* The quest graph's camera is its own compositor layer, so a pan or zoom moves the cards already
@@ -109,19 +109,19 @@ body {
 /* React Flow's zoom buttons, in the theme */
 .react-flow__controls {
   overflow: hidden;
-  border: 1px solid color-mix(in oklab, var(--color-white) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-ink) 10%, transparent);
   border-radius: 10px;
   box-shadow: none;
 }
 
 .react-flow__controls-button {
-  border-bottom: 1px solid color-mix(in oklab, var(--color-white) 8%, transparent);
-  background: var(--color-night-card);
-  color: color-mix(in oklab, var(--color-white) 65%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
+  background: var(--color-card);
+  color: color-mix(in oklab, var(--color-ink) 65%, transparent);
 }
 
 .react-flow__controls-button:hover {
-  background: color-mix(in oklab, var(--color-white) 8%, var(--color-night-card));
+  background: color-mix(in oklab, var(--color-ink) 8%, var(--color-card));
 }
 
 .react-flow__controls-button svg {
@@ -160,6 +160,9 @@ body {
 /* A: the chain in its colour, everything else dimmed */
 :root[data-priority-look="a"] [data-priority="none"],
 :root:not([data-priority-look]) [data-priority="none"] { opacity: 0.45; }
+/* Fading towards a pale ground loses more contrast than towards a dark one */
+:root[data-theme="light"][data-priority-look="a"] [data-priority="none"],
+:root[data-theme="light"]:not([data-priority-look]) [data-priority="none"] { opacity: 0.6; }
 :root[data-priority-look="a"] [data-priority]:not([data-priority="none"]) > .priority-mark,
 :root:not([data-priority-look]) [data-priority]:not([data-priority="none"]) > .priority-mark {
   border-width: 1.5px;

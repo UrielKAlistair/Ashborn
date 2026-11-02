@@ -26,8 +26,8 @@ export function AtlasPage({
     }
     if (currentPath === "/atlas/progress") return <ProgressPage eyebrow="Design" />;
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-[13px] text-white/40">
-        <HexMark className="h-10 w-12 text-white/15" />
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-[13px] text-ink/40">
+        <HexMark className="h-10 w-12 text-ink/15" />
         Choose an entry.
       </div>
     );
@@ -35,7 +35,7 @@ export function AtlasPage({
 
   return (
     <section className="flex min-h-0 flex-1 gap-6 overflow-hidden">
-      <aside className="panel-lift rounded-2xl border border-white/8 bg-night-panel flex min-h-0 w-full max-w-72 self-stretch flex-col overflow-hidden">
+      <aside className="panel-lift rounded-2xl border border-ink/8 bg-panel flex min-h-0 w-full max-w-72 self-stretch flex-col overflow-hidden">
         <div className="panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
 
           <AtlasSidebarSection
@@ -49,7 +49,7 @@ export function AtlasPage({
         </div>
       </aside>
 
-      <div className="panel-lift rounded-2xl border border-white/8 bg-night-panel flex min-h-0 flex-1 self-stretch overflow-hidden">
+      <div className="panel-lift rounded-2xl border border-ink/8 bg-panel flex min-h-0 flex-1 self-stretch overflow-hidden">
         <div className="panel-scroll min-h-0 flex-1 overflow-y-auto p-6">
           {renderAtlasEntry()}
         </div>

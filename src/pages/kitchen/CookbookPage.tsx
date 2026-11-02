@@ -50,14 +50,14 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
   ) : null;
 
   const list = (
-    <section className="panel-lift rounded-2xl border border-white/8 bg-night-panel panel-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-4">
+    <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-4">
       <div className="mb-1 flex items-center justify-between">
-        <h2 className="font-display text-sm font-semibold text-white/85">Recipes</h2>
+        <h2 className="font-display text-sm font-semibold text-ink/85">Recipes</h2>
         <button type="button" onClick={startNew} className="rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 max-sm:min-h-11">
           + New recipe
         </button>
       </div>
-      {recipes.length === 0 ? <p className="text-[12px] text-white/40">No recipes yet.</p> : null}
+      {recipes.length === 0 ? <p className="text-[12px] text-ink/40">No recipes yet.</p> : null}
       {recipes.map((recipe) => (
         <button
           key={recipe.id}
@@ -66,7 +66,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
             setDraft(null);
             onOpenRecipe(recipe.id);
           }}
-          className={`rounded-lg px-3 py-2 text-left text-[13px] max-sm:min-h-11 ${recipe.id === open?.id && !draft ? "bg-ember/10 text-ember" : "bg-white/[0.03] text-white/80 hover:bg-white/[0.055]"}`}
+          className={`rounded-lg px-3 py-2 text-left text-[13px] max-sm:min-h-11 ${recipe.id === open?.id && !draft ? "bg-ember/10 text-ember" : "bg-ink/[0.03] text-ink/80 hover:bg-ink/[0.055]"}`}
         >
           {recipe.title}
         </button>
@@ -83,7 +83,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
             setDraft(null);
             onOpenRecipe(null);
           }}
-          className="self-start text-[13px] text-white/55 max-sm:min-h-11 max-sm:pr-3"
+          className="self-start text-[13px] text-ink/55 max-sm:min-h-11 max-sm:pr-3"
         >
           ‹ Recipes
         </button>
@@ -99,8 +99,8 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
       <div className="flex min-h-0 w-[30%] min-w-[16rem] max-w-[22rem] flex-col">{list}</div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {detail ?? (
-          <section className="panel-lift rounded-2xl border border-white/8 bg-night-panel flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-white/40">
-            <HexMark className="h-10 w-12 text-white/15" />
+          <section className="panel-lift rounded-2xl border border-ink/8 bg-panel flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-ink/40">
+            <HexMark className="h-10 w-12 text-ink/15" />
             Choose a recipe, or write a new one.
           </section>
         )}
@@ -113,11 +113,11 @@ function RecipeView({ kitchen, recipe, onEdit, onDelete }: { kitchen: Kitchen; r
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <section className="panel-lift rounded-2xl border border-white/8 bg-night-panel panel-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5">
+    <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5">
       <div className="flex items-start justify-between gap-3">
-        <h1 className="font-display text-lg font-semibold text-white/90">{recipe.title}</h1>
+        <h1 className="font-display text-lg font-semibold text-ink/90">{recipe.title}</h1>
         <div className="flex shrink-0 gap-2">
-          <button type="button" onClick={onEdit} className="rounded-lg border border-white/12 px-2.5 py-1 text-[12px] text-white/75 hover:bg-white/6 max-sm:min-h-11 max-sm:px-3.5">
+          <button type="button" onClick={onEdit} className="rounded-lg border border-ink/12 px-2.5 py-1 text-[12px] text-ink/75 hover:bg-ink/6 max-sm:min-h-11 max-sm:px-3.5">
             Edit
           </button>
           <button
@@ -130,17 +130,17 @@ function RecipeView({ kitchen, recipe, onEdit, onDelete }: { kitchen: Kitchen; r
         </div>
       </div>
 
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/80">{recipe.body || <span className="text-white/30">No method written yet.</span>}</p>
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink/80">{recipe.body || <span className="text-ink/30">No method written yet.</span>}</p>
 
       <Part title="Tracked ingredients">
-        {recipe.ingredients.length === 0 ? <p className="text-[12px] text-white/40">None: cooking it deducts nothing.</p> : null}
+        {recipe.ingredients.length === 0 ? <p className="text-[12px] text-ink/40">None: cooking it deducts nothing.</p> : null}
         {recipe.ingredients.map((ingredient) => (
-          <p key={ingredient.id} className="flex justify-between gap-3 text-[13px] text-white/75">
+          <p key={ingredient.id} className="flex justify-between gap-3 text-[13px] text-ink/75">
             <span>
               {ingredient.name}
               {ingredient.itemId && kitchen.items.some((item) => item.id === ingredient.itemId) ? null : <span className="ml-2 text-[11px] text-amber-200">not in stocks</span>}
             </span>
-            <span className="font-mono tabular-nums text-white/55">
+            <span className="font-mono tabular-nums text-ink/55">
               {round(fromBase(ingredient.amount, ingredient.unit))} {ingredient.unit}
             </span>
           </p>
@@ -148,11 +148,11 @@ function RecipeView({ kitchen, recipe, onEdit, onDelete }: { kitchen: Kitchen; r
       </Part>
 
       <Part title="Reminders">
-        {recipe.reminders.length === 0 ? <p className="text-[12px] text-white/40">None.</p> : null}
+        {recipe.reminders.length === 0 ? <p className="text-[12px] text-ink/40">None.</p> : null}
         {recipe.reminders.map((reminder) => (
-          <p key={reminder.id} className="flex justify-between gap-3 text-[13px] text-white/75">
+          <p key={reminder.id} className="flex justify-between gap-3 text-[13px] text-ink/75">
             <span>{reminder.label}</span>
-            <span className="text-right text-[12px] text-white/50">{timing(reminder, recipe.reminders)}</span>
+            <span className="text-right text-[12px] text-ink/50">{timing(reminder, recipe.reminders)}</span>
           </p>
         ))}
       </Part>
@@ -191,7 +191,7 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
 
   return (
     <form
-      className="panel-lift rounded-2xl border border-white/8 bg-night-panel panel-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5"
+      className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5"
       onSubmit={(event) => {
         event.preventDefault();
         const recipe = withAmounts();
@@ -206,7 +206,7 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
         onChange={(event) => setDraft({ ...draft, title: event.target.value })}
         placeholder="Recipe name"
         aria-label="Recipe name"
-        className="rounded-lg border border-white/10 bg-night/60 px-2.5 py-1.5 font-display text-base font-semibold text-white/90 placeholder:text-white/30 focus:border-ember/60 focus:outline-none"
+        className="rounded-lg border border-ink/10 bg-canvas/60 px-2.5 py-1.5 font-display text-base font-semibold text-ink/90 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none"
       />
       <textarea
         value={draft.body}
@@ -214,7 +214,7 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
         placeholder="The method, step by step, as you want to read it"
         aria-label="Method"
         rows={10}
-        className="min-h-40 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-2.5 py-2 leading-relaxed"
+        className="min-h-40 rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-2.5 py-2 leading-relaxed"
       />
 
       <Part title="Tracked ingredients" hint="Only these come off your stocks when a meal using the recipe is ticked.">
@@ -229,7 +229,7 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
                   const chosen = items.find((candidate) => candidate.id === event.target.value)!;
                   setIngredient(ingredient.id, { itemId: chosen.id, name: chosen.name, unit: sameKind(chosen.unit, ingredient.unit) ? ingredient.unit : chosen.unit });
                 }}
-                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
+                className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
               >
                 {item ? null : <option value="">{ingredient.name} (not in stocks)</option>}
                 {items.map((candidate) => (
@@ -245,13 +245,13 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
                 value={amounts[ingredient.id] ?? ""}
                 aria-label={`${ingredient.name} amount`}
                 onChange={(event) => setAmounts({ ...amounts, [ingredient.id]: event.target.value })}
-                className="w-20 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-1 text-right font-mono tabular-nums"
+                className="w-20 rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1 text-right font-mono tabular-nums"
               />
               <select
                 value={ingredient.unit}
                 aria-label={`${ingredient.name} unit`}
                 onChange={(event) => setIngredient(ingredient.id, { unit: event.target.value as StockUnit })}
-                className="rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
+                className="rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
               >
                 {stockUnits.filter((unit) => !item || sameKind(unit, item.unit)).map((unit) => (
                   <option key={unit} value={unit}>
@@ -266,7 +266,7 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
         {items.length > 0 ? (
           <AddButton onClick={addIngredient}>+ Ingredient</AddButton>
         ) : (
-          <p className="text-[12px] text-white/40">Track a staple under Stocks to deduct it here.</p>
+          <p className="text-[12px] text-ink/40">Track a staple under Stocks to deduct it here.</p>
         )}
       </Part>
 
@@ -299,10 +299,10 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
       ) : null}
 
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-lg px-2.5 py-1 text-[12px] text-white/55 hover:text-white/85 max-sm:min-h-11">
+        <button type="button" onClick={onCancel} className="rounded-lg px-2.5 py-1 text-[12px] text-ink/55 hover:text-ink/85 max-sm:min-h-11">
           Cancel
         </button>
-        <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-night hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
+        <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
           Save
         </button>
       </div>
@@ -317,13 +317,13 @@ function ReminderRow({ reminder, others, onChange, onRemove }: { reminder: Recip
   const minutes = Math.abs(reminder.offsetMinutes);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/60">
+    <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink/60">
       <input
         value={reminder.label}
         onChange={(event) => onChange({ label: event.target.value })}
         placeholder="Soak the beans"
         aria-label="Reminder"
-        className="min-w-0 flex-1 basis-40 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
+        className="min-w-0 flex-1 basis-40 rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
       />
       <input
         type="number"
@@ -332,7 +332,7 @@ function ReminderRow({ reminder, others, onChange, onRemove }: { reminder: Recip
         step="any"
         aria-label={`${reminder.label || "Reminder"} hours`}
         onChange={(event) => onChange({ offsetMinutes: Math.round(Number(event.target.value) * 60) * (before ? -1 : 1) })}
-        className="w-14 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-1 text-right font-mono tabular-nums"
+        className="w-14 rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1 text-right font-mono tabular-nums"
       />
       h
       <select
@@ -343,7 +343,7 @@ function ReminderRow({ reminder, others, onChange, onRemove }: { reminder: Recip
           setBefore(nowBefore);
           onChange({ offsetMinutes: minutes * (nowBefore ? -1 : 1) });
         }}
-        className="rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
+        className="rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
       >
         <option value="before">before</option>
         <option value="after">after</option>
@@ -352,7 +352,7 @@ function ReminderRow({ reminder, others, onChange, onRemove }: { reminder: Recip
         value={reminder.anchorId ?? ""}
         aria-label={`${reminder.label || "Reminder"} timed from`}
         onChange={(event) => onChange({ anchorId: event.target.value || null })}
-        className="max-w-40 rounded-lg border border-white/10 bg-night/60 text-[13px] text-white/85 placeholder:text-white/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
+        className="max-w-40 rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
       >
         <option value="">the meal</option>
         {others.map((other) => (
@@ -369,8 +369,8 @@ function ReminderRow({ reminder, others, onChange, onRemove }: { reminder: Recip
 function Part({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
     <div className="space-y-2">
-      <h3 className="font-display text-[13px] font-semibold text-white/80">{title}</h3>
-      {hint ? <p className="-mt-1 text-[11.5px] text-white/40">{hint}</p> : null}
+      <h3 className="font-display text-[13px] font-semibold text-ink/80">{title}</h3>
+      {hint ? <p className="-mt-1 text-[11.5px] text-ink/40">{hint}</p> : null}
       {children}
     </div>
   );
@@ -386,7 +386,7 @@ function AddButton({ onClick, children }: { onClick: () => void; children: strin
 
 function Remove({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} title="Remove" className="flex h-7 w-7 items-center justify-center rounded-md text-white/40 hover:bg-white/8 hover:text-red-300 max-sm:h-11 max-sm:w-11">
+    <button type="button" onClick={onClick} title="Remove" className="flex h-7 w-7 items-center justify-center rounded-md text-ink/40 hover:bg-ink/8 hover:text-red-300 max-sm:h-11 max-sm:w-11">
       ×
     </button>
   );

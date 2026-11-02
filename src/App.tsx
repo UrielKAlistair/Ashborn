@@ -237,7 +237,7 @@ function App() {
 
     if (!snapshot) {
       return (
-        <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-3xl border border-white/10 bg-night-panel text-sm tracking-[0.16em] text-white/50">
+        <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-3xl border border-ink/10 bg-panel text-sm tracking-[0.16em] text-ink/50">
           {error ?? "Loading..."}
         </section>
       );
@@ -265,9 +265,9 @@ function App() {
   };
 
   return (
-    <main className="relative h-screen overflow-hidden bg-transparent text-white">
+    <main className="relative h-screen overflow-hidden bg-transparent text-ink">
       {/* The canvas, glowing faintly at the centre in the theme's light */}
-      <div className="absolute inset-0 bg-night" />
+      <div className="absolute inset-0 bg-canvas" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_45%,var(--glow),transparent_70%)]" />
 
       {phone ? (
@@ -294,14 +294,14 @@ function App() {
           <button
             type="button"
             onClick={fixPermission[missingPermission]}
-            className="rounded-lg border border-amber-300/30 bg-night-card/95 px-3 py-1.5 text-[11px] tracking-[0.1em] text-amber-100"
+            className="rounded-lg border border-amber-300/30 bg-card/95 px-3 py-1.5 text-[11px] tracking-[0.1em] text-amber-100"
           >
             {missingPermission === "notifications" ? "Allow notifications so alarms can ring" : "Allow alarms over the lock screen"} →
           </button>
         ) : null}
 
         {offline ? (
-          <p className="rounded-lg border border-amber-300/30 bg-night-card/95 px-3 py-1 text-[11px] tracking-[0.12em] text-amber-100">
+          <p className="rounded-lg border border-amber-300/30 bg-card/95 px-3 py-1 text-[11px] tracking-[0.12em] text-amber-100">
             Offline: {queued > 0 ? `${queued} ${queued === 1 ? "change" : "changes"} will sync when you're back online` : "showing your last data"}
           </p>
         ) : null}
@@ -311,7 +311,7 @@ function App() {
         <button
           type="button"
           onClick={() => setError(null)}
-          className="absolute bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-red-400/30 bg-night-card/95 px-4 py-2 text-xs text-red-200"
+          className="absolute bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-red-400/30 bg-card/95 px-4 py-2 text-xs text-red-200"
         >
           {error} ×
         </button>

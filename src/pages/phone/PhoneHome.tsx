@@ -42,7 +42,7 @@ export function PhoneHome({ snapshot, act, screen }: { snapshot: Snapshot; act: 
       {graphOpened || screen === "graph" ? (
         <section
           inert={screen !== "graph"}
-          className={`min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/8 bg-night-panel ${screen === "graph" ? "relative" : "absolute inset-0 opacity-0"}`}
+          className={`min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-ink/8 bg-panel ${screen === "graph" ? "relative" : "absolute inset-0 opacity-0"}`}
         >
           {questGraph}
         </section>

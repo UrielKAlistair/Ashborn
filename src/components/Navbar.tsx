@@ -57,7 +57,7 @@ export function Navbar({
   const theme = useTheme();
 
   return (
-    <aside className="relative z-10 flex h-full min-h-0 w-[5.5rem] shrink-0 flex-col items-center border-r border-white/8 bg-night-panel/80 px-2 pt-10 pb-5">
+    <aside className="relative z-10 flex h-full min-h-0 w-[5.5rem] shrink-0 flex-col items-center border-r border-ink/8 bg-panel/80 px-2 pt-10 pb-5">
       <div className="flex flex-1 flex-col items-center gap-3">
         {desktopSections.map((section) => {
           const isActive = section === currentSection;
@@ -69,12 +69,12 @@ export function Navbar({
                 type="button"
                 onClick={() => choose(section)}
                 aria-expanded={section.desktop.length > 1 ? openSection === section : undefined}
-                className={`group flex flex-col items-center gap-1.5 bg-transparent ${isActive ? "text-white" : "text-white/50 hover:text-white/80"}`}
+                className={`group flex flex-col items-center gap-1.5 bg-transparent ${isActive ? "text-ink" : "text-ink/50 hover:text-ink/80"}`}
               >
                 <HexTile active={isActive} className="h-12 w-14">
                   <Icon className={isActive ? "text-ember" : ""} />
                 </HexTile>
-                <span className={`text-[10.5px] font-medium tracking-[0.06em] ${isActive ? "text-white/90" : ""}`}>{section.label}</span>
+                <span className={`text-[10.5px] font-medium tracking-[0.06em] ${isActive ? "text-ink/90" : ""}`}>{section.label}</span>
               </button>
 
               {section.desktop.length > 1 ? (
@@ -97,7 +97,7 @@ export function Navbar({
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         title={theme === "dark" ? "Parchment: the light theme" : "Ember: the dark theme"}
-        className="flex h-9 w-9 items-center justify-center rounded-full text-white/45 hover:bg-white/8 hover:text-white/85"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-ink/45 hover:bg-ink/8 hover:text-ink/85"
       >
         {theme === "dark" ? <SunIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
       </button>
@@ -134,7 +134,7 @@ function ScreenMenu({
               tabIndex={open ? 0 : -1}
               onClick={() => onChoose(screen.path)}
               className={`flex w-full flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-colors ${index === 0 ? "mt-3" : ""} ${
-                active ? "bg-ember/12 text-white" : "text-white/50 hover:bg-white/6 hover:text-white/80"
+                active ? "bg-ember/12 text-ink" : "text-ink/50 hover:bg-ink/6 hover:text-ink/80"
               }`}
             >
               <Icon className="h-5 w-5" />

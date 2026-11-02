@@ -15,7 +15,7 @@ export const palettes: Record<Hue, Palette> = {
   blue: { dot: "bg-blue-500", hexFill: "fill-blue-500", border: "border-blue-400/30", tint: "from-blue-600/[0.12]", bar: "bg-blue-500/85", rgb: [59, 110, 240] },
   violet: { dot: "bg-violet-400", hexFill: "fill-violet-400", border: "border-violet-300/25", tint: "from-violet-400/[0.09]", bar: "bg-violet-300/80", rgb: [167, 139, 250] },
   pink: { dot: "bg-pink-400", hexFill: "fill-pink-400", border: "border-pink-300/25", tint: "from-pink-400/[0.09]", bar: "bg-pink-300/80", rgb: [244, 114, 182] },
-  none: { dot: "bg-slate-200", hexFill: "fill-slate-200", border: "border-white/20", tint: "from-white/[0.05]", bar: "bg-slate-200/70", rgb: [226, 232, 240] },
+  none: { dot: "bg-slate-200", hexFill: "fill-slate-200", border: "border-ink/20", tint: "from-ink/[0.05]", bar: "bg-slate-200/70", rgb: [226, 232, 240] },
 };
 
 export const paletteOf = (color: QuestColor | null) => palettes[color ?? "none"];

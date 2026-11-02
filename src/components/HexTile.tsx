@@ -12,7 +12,7 @@ export function HexTile({ active, className, children }: { active: boolean; clas
           points={HEX_POINTS}
           strokeLinejoin="round"
           strokeWidth="1.2"
-          className={active ? "fill-ember/15 stroke-ember/60" : "fill-white/[0.04] stroke-white/12 transition-colors group-hover:fill-white/[0.07] group-hover:stroke-white/25"}
+          className={active ? "fill-ember/15 stroke-ember/60" : "fill-ink/[0.04] stroke-ink/12 transition-colors group-hover:fill-ink/[0.07] group-hover:stroke-ink/25"}
         />
       </svg>
       <span className="relative">{children}</span>

@@ -9,10 +9,10 @@ export function CognitiveOffloadingPage({
 }: CognitiveOffloadingPageProps) {
   return (
     <AtlasEntryLayout eyebrow={eyebrow} title="Cognitive Offloading"> 
-        <div className="space-y-5 text-sm leading-relaxed text-white/70">  
+        <div className="space-y-5 text-sm leading-relaxed text-ink/70">  
 
         <div>
-          <h3 className="font-display text-base font-semibold text-white/85">
+          <h3 className="font-display text-base font-semibold text-ink/85">
             Getting things done
           </h3>
         </div>

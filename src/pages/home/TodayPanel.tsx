@@ -39,25 +39,25 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const deadlines = snapshot.deadlines.filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS);
 
   return (
-    <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-white/8 bg-night-panel px-4 py-4">
+    <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-ink/8 bg-panel px-4 py-4">
       <div className="flex items-baseline justify-between px-1">
-        <h2 className="font-display text-lg font-semibold text-white/90">Today</h2>
+        <h2 className="font-display text-lg font-semibold text-ink/90">Today</h2>
         <button
           type="button"
           onClick={() => setDayStartOpen((open) => !open)}
           title="When the day starts"
-          className="font-mono text-[11px] text-white/40 tabular-nums hover:text-white/70"
+          className="font-mono text-[11px] text-ink/40 tabular-nums hover:text-ink/70"
         >
           {weekday} {date}
         </button>
       </div>
       {dayStartOpen ? (
-        <label className="-mt-4 flex items-center justify-end gap-2 px-1 text-[11.5px] text-white/45">
+        <label className="-mt-4 flex items-center justify-end gap-2 px-1 text-[11.5px] text-ink/45">
           The day starts at
           <select
             value={dayStartHour}
             onChange={(event) => void act("updateSettings", { dayStartHour: Number(event.target.value) })}
-            className="rounded-md border border-white/10 bg-night/70 px-1.5 py-0.5 text-white/80"
+            className="rounded-md border border-ink/10 bg-canvas/70 px-1.5 py-0.5 text-ink/80"
           >
             {Array.from({ length: 24 }, (_, hour) => (
               <option key={hour} value={hour}>
@@ -68,14 +68,20 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         </label>
       ) : null}
       {progressToday > 0 ? (
-        <p className="-mt-5 flex items-center gap-1.5 px-1 text-[12px] text-white/50">
+        <p className="-mt-5 flex items-center gap-1.5 px-1 text-[12px] text-ink/50">
           <span className="h-1.5 w-1.5 rounded-full bg-ember" />
           {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
         </p>
       ) : null}
 
       <Section title="Up next">
-        {todo.length === 0 ? <Empty>Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here.</Empty> : null}
+        {todo.length === 0 ? (
+          <Empty>
+            {model.children.get(null)?.length
+              ? "Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here."
+              : "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."}
+          </Empty>
+        ) : null}
         {todo.map(({ priority, steps }) => (
           <div key={priority} data-priority={priority} className="space-y-0.5">
             <p className="flex items-center gap-2 px-1 pb-1 font-mono text-[11px] font-semibold text-[var(--mark)]">
@@ -89,8 +95,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                 <div key={step.id} className={rowClass}>
                   <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] leading-snug text-white/90">{step.title}</p>
-                    <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-white/42">
+                    <p className="text-[13px] leading-snug text-ink/90">{step.title}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-ink/42">
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
                       {quest.title}
                       {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
@@ -110,11 +116,11 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           routines.map((routine) => (
             <div key={routine.id} className={`group ${rowClass}`}>
               <Tick done={checked.has(routine.id)} onClick={() => void act("setRoutineCheck", routine.id, date, !checked.has(routine.id))} className="mt-0.5" />
-              <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-white/45 tabular-nums">{routine.time ?? "·"}</span>
+              <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-ink/45 tabular-nums">{routine.time}</span>
               <div className="min-w-0 flex-1">
-                <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-white/40 line-through decoration-white/25" : "text-white/90"}`}>{routine.title}</p>
+                <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-ink/40 line-through decoration-ink/25" : "text-ink/90"}`}>{routine.title}</p>
                 {routine.alarm !== "none" || routine.cue ? (
-                  <p className="mt-0.5 text-[11.5px] text-white/42">
+                  <p className="mt-0.5 text-[11.5px] text-ink/42">
                     {[routine.alarm !== "none" ? alarmLabels[routine.alarm] : null, routine.cue ? `if ${routine.cue}` : null]
                       .filter(Boolean)
                       .join(" · ")}
@@ -138,20 +144,20 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                 <Tick done={false} onClick={() => void act("completeDeadline", deadline.id)} className="mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start gap-2">
-                    <p className="min-w-0 flex-1 text-[13px] leading-snug text-white/90">{deadline.title}</p>
+                    <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink/90">{deadline.title}</p>
                     <span
                       className={`shrink-0 rounded-md px-1.5 py-px font-mono text-[11px] tabular-nums ${
-                        days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-white/6 text-white/55"
+                        days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-ink/6 text-ink/55"
                       }`}
                     >
                       {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
                     </span>
                   </div>
-                  <p className="mt-0.5 font-mono text-[11px] text-white/40 tabular-nums">
+                  <p className="mt-0.5 font-mono text-[11px] text-ink/40 tabular-nums">
                     {deadline.dueDate}
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
-                  <NodePicker model={model} value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-white/45 hover:bg-white/6" />
+                  <NodePicker model={model} value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-ink/45 hover:bg-ink/6" />
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
@@ -193,7 +199,7 @@ function RoutineForm({ act }: { act: Act }) {
             key={day}
             type="button"
             onClick={() => setDays((current) => (current.includes(day) ? current.filter((d) => d !== day) : [...current, day]))}
-            className={`flex-1 rounded-md border py-1 text-[10.5px] ${days.includes(day) ? "border-ember/50 bg-ember/12 text-white/90" : "border-white/10 text-white/40"}`}
+            className={`flex-1 rounded-md border py-1 text-[10.5px] ${days.includes(day) ? "border-ember/50 bg-ember/12 text-ink/90" : "border-ink/10 text-ink/40"}`}
           >
             {day.slice(0, 2)}
           </button>
@@ -266,16 +272,16 @@ function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
 }
 
 const fieldClass =
-  "w-full rounded-lg border border-white/10 bg-night/60 px-2.5 py-1.5 text-[13px] text-white/85 placeholder:text-white/35 focus:border-ember/50 focus:outline-none";
-const popoverClass = "absolute right-0 top-8 z-10 w-72 space-y-2 rounded-xl border border-white/10 bg-night-card p-3 shadow-[var(--card-shadow)]";
+  "w-full rounded-lg border border-ink/10 bg-canvas/60 px-2.5 py-1.5 text-[13px] text-ink/85 placeholder:text-ink/35 focus:border-ember/50 focus:outline-none";
+const popoverClass = "absolute right-0 top-8 z-10 w-72 space-y-2 rounded-xl border border-ink/10 bg-card p-3 shadow-[var(--card-shadow)]";
 // A list row: quiet until hovered
-const rowClass = "flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white/[0.04]";
+const rowClass = "flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-ink/[0.04]";
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <div>
       <div className="relative mb-2 flex items-center justify-between px-1">
-        <p className="font-display text-[13px] font-semibold text-white/70">{title}</p>
+        <p className="font-display text-[13px] font-semibold text-ink/70">{title}</p>
         {action}
       </div>
       <div className="space-y-2">{children}</div>
@@ -284,7 +290,7 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
 }
 
 function Empty({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-[12px] leading-relaxed text-white/40">{children}</p>;
+  return <p className="rounded-lg border border-dashed border-ink/10 px-3 py-2.5 text-[12px] leading-relaxed text-ink/40">{children}</p>;
 }
 
 // Escape closes a popover form; preventDefault keeps the navbar from also hiding the window
@@ -299,7 +305,7 @@ function closeOnEscape(close: () => void) {
 
 function AddButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} title="Add" className="flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-white/45 hover:bg-white/8 hover:text-white/85">
+    <button type="button" onClick={onClick} title="Add" className="flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-ink/45 hover:bg-ink/8 hover:text-ink/85">
       +
     </button>
   );
@@ -325,7 +331,7 @@ function DeleteButton({ warning, onDelete }: { warning: string; onDelete: () => 
       type="button"
       onClick={() => setConfirming(true)}
       title="Delete"
-      className="shrink-0 text-xs text-white/0 group-hover:text-white/40 hover:!text-red-300 pointer-coarse:text-white/40"
+      className="shrink-0 text-xs text-ink/0 group-hover:text-ink/40 hover:!text-red-300 pointer-coarse:text-ink/40"
     >
       ×
     </button>
@@ -335,10 +341,10 @@ function DeleteButton({ warning, onDelete }: { warning: string; onDelete: () => 
 function FormButtons({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: () => void }) {
   return (
     <div className="flex justify-end gap-2 pt-1 text-[12.5px]">
-      <button type="button" onClick={onCancel} className="rounded-lg border border-white/12 px-3 py-1 text-white/70 hover:bg-white/6">
+      <button type="button" onClick={onCancel} className="rounded-lg border border-ink/12 px-3 py-1 text-ink/70 hover:bg-ink/6">
         Cancel
       </button>
-      <button type="button" onClick={onSubmit} className="rounded-lg bg-ember px-3 py-1 font-medium text-night hover:brightness-110">
+      <button type="button" onClick={onSubmit} className="rounded-lg bg-ember px-3 py-1 font-medium text-canvas hover:brightness-110">
         Add
       </button>
     </div>

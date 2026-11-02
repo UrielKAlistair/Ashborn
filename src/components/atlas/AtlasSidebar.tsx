@@ -19,7 +19,7 @@ export function AtlasSidebarItem({
       type="button"
       onClick={() => onNavigate(entry.path)}
       className={`block w-full rounded-lg px-3 py-2 text-left text-[13px] transition-colors ${
-        active ? "bg-ember/10 text-ember" : "bg-white/[0.03] text-white/75 hover:bg-white/[0.055]"
+        active ? "bg-ember/10 text-ember" : "bg-ink/[0.03] text-ink/75 hover:bg-ink/[0.055]"
       }`}
     >
       {entry.label}
@@ -49,14 +49,12 @@ export function AtlasSidebarSection({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between rounded-lg px-1 py-1 text-left hover:bg-white/[0.03]"
+        className="flex w-full items-center justify-between rounded-lg px-1 py-1 text-left hover:bg-ink/[0.03]"
       >
-        <span className="font-display text-[13px] font-semibold text-white/80">
+        <span className="font-display text-[13px] font-semibold text-ink/80">
           {label}
         </span>
-        <span className="text-base leading-none text-white/50">
-          {isOpen ? "-" : "+"}
-        </span>
+        <span className={`inline-block text-ink/45 transition-transform ${isOpen ? "rotate-90" : ""}`}>›</span>
       </button>
 
       {isOpen ? (

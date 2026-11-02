@@ -119,10 +119,10 @@ test("finished chains fold", async () => {
     await expect(nodes().filter({ hasText: "Done quest" })).toHaveCount(0);
     await page.getByRole("button", { name: /Quests/ }).click();
     await expect(page.getByRole("button", { name: "Reopen" })).toHaveCount(0);
-    await page.getByRole("button", { name: /Completed \(1\)/ }).click();
+    await page.getByRole("button", { name: /Completed\s*1/ }).click();
     await expect(page.getByRole("checkbox", { name: "Done quest" })).toHaveCount(0);
     await page.getByRole("button", { name: "Archive", exact: true }).click();
-    await page.getByRole("button", { name: /Archive \(1\)/ }).click();
+    await page.getByRole("button", { name: /Archive\s*1/ }).click();
     await expect(page.getByRole("button", { name: /Completed/ })).toHaveCount(0);
     await expect(page.getByRole("checkbox", { name: "Done quest" })).toHaveCount(0);
     // Completed is still open: it stayed mounted, empty, while its quest was archived

@@ -18,7 +18,7 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
   };
 
   return (
-    <nav className="relative z-10 flex shrink-0 justify-center gap-4 border-t border-white/8 bg-night-panel px-6 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <nav className="relative z-10 flex shrink-0 justify-center gap-4 border-t border-ink/8 bg-panel px-6 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {openSection ? <div className="fixed inset-0 z-40" onClick={() => setOpenSection(null)} /> : null}
 
       {phoneSections.map((section) => {
@@ -30,7 +30,7 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
               type="button"
               onClick={() => choose(section)}
               aria-expanded={section.phone.length > 1 ? openSection === section : undefined}
-              className={`group flex min-h-11 flex-col items-center gap-0.5 px-3 py-0.5 ${isActive ? "text-ember" : "text-white/50"}`}
+              className={`group flex min-h-11 flex-col items-center gap-0.5 px-3 py-0.5 ${isActive ? "text-ember" : "text-ink/50"}`}
             >
               <HexTile active={isActive} className="h-9 w-[42px]">
                 <Icon />
@@ -72,7 +72,7 @@ function ScreenMenu({
     <div
       role="menu"
       aria-label={section.label}
-      className={`absolute bottom-full z-50 mb-3 flex left-1/2 -translate-x-1/2 flex-col-reverse gap-0.5 rounded-xl border border-white/10 bg-night-card p-1 shadow-[var(--card-shadow)]`}
+      className={`absolute bottom-full z-50 mb-3 flex left-1/2 -translate-x-1/2 flex-col-reverse gap-0.5 rounded-xl border border-ink/10 bg-card p-1 shadow-[var(--card-shadow)]`}
     >
       {section.phone.map((screen) => {
         const Icon = screen.icon;
@@ -84,7 +84,7 @@ function ScreenMenu({
             role="menuitem"
             onClick={() => onChoose(screen.path)}
             className={`flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 whitespace-nowrap ${
-              active ? "bg-ember/10 text-ember" : "text-white/65 active:bg-white/6"
+              active ? "bg-ember/10 text-ember" : "text-ink/65 active:bg-ink/6"
             }`}
           >
             <Icon className="h-5 w-5" />
