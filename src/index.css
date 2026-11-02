@@ -174,13 +174,13 @@ body {
 }
 
 /* B: one spotlight colour, brighter the more urgent, everything else strongly dimmed */
-:root[data-priority-look="b"] { --priority-edge-1: #fde68a; --priority-edge-2: #fde68acc; --priority-edge-3: #fde68a99; --priority-edge-4: #fde68a66; }
+:root[data-priority-look="b"] { --priority-edge-1: var(--color-ember); --priority-edge-2: color-mix(in oklab, var(--color-ember) 80%, transparent); --priority-edge-3: color-mix(in oklab, var(--color-ember) 60%, transparent); --priority-edge-4: color-mix(in oklab, var(--color-ember) 40%, transparent); }
 :root[data-priority-look="b"] [data-priority="none"] { opacity: 0.28; }
-:root[data-priority-look="b"] [data-priority]:not([data-priority="none"]) > .priority-mark { border-width: 1px; border-color: #fde68a; }
-:root[data-priority-look="b"] [data-priority="1"] > .priority-mark { box-shadow: 0 0 26px 3px #fde68a99; }
-:root[data-priority-look="b"] [data-priority="2"] > .priority-mark { box-shadow: 0 0 16px 1px #fde68a66; border-color: #fde68acc; }
-:root[data-priority-look="b"] [data-priority="3"] > .priority-mark { box-shadow: 0 0 8px #fde68a33; border-color: #fde68a99; }
-:root[data-priority-look="b"] [data-priority="4"] > .priority-mark { border-color: #fde68a66; }
+:root[data-priority-look="b"] [data-priority]:not([data-priority="none"]) > .priority-mark { border-width: 1px; border-color: var(--color-ember); }
+:root[data-priority-look="b"] [data-priority="1"] > .priority-mark { box-shadow: 0 0 26px 3px color-mix(in oklab, var(--color-ember) 60%, transparent); }
+:root[data-priority-look="b"] [data-priority="2"] > .priority-mark { box-shadow: 0 0 16px 1px color-mix(in oklab, var(--color-ember) 40%, transparent); border-color: color-mix(in oklab, var(--color-ember) 80%, transparent); }
+:root[data-priority-look="b"] [data-priority="3"] > .priority-mark { box-shadow: 0 0 8px color-mix(in oklab, var(--color-ember) 20%, transparent); border-color: color-mix(in oklab, var(--color-ember) 60%, transparent); }
+:root[data-priority-look="b"] [data-priority="4"] > .priority-mark { border-color: color-mix(in oklab, var(--color-ember) 40%, transparent); }
 
 /* C: a coloured rail down the card's left edge, nothing dimmed */
 :root[data-priority-look="c"] [data-priority]:not([data-priority="none"]) > .priority-mark { border-left-width: 5px; border-left-color: var(--mark); }
@@ -209,4 +209,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .progress-fill { transition: none; }
   .tick-done { animation: none; }
+}
+
+/* Keyboard focus shows as an ember ring; pointer clicks don't draw it */
+:focus-visible {
+  outline: 2px solid var(--color-ember);
+  outline-offset: 2px;
 }

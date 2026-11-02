@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { setTheme, useTheme } from "../lib/useTheme";
+import { setPriorityLook, setTheme, usePriorityLook, useTheme, type PriorityLook } from "../lib/useTheme";
 import { HexTile } from "./HexTile";
 import { MoonIcon, SunIcon } from "./icons";
 import { desktopSections, screenAt, sectionAt, type Section } from "./sections";
@@ -55,6 +55,7 @@ export function Navbar({
   }, [openSection]);
 
   const theme = useTheme();
+  const look = usePriorityLook();
 
   return (
     <aside className="relative z-10 flex h-full min-h-0 w-[5.5rem] shrink-0 flex-col items-center border-r border-ink/8 bg-panel/80 px-2 pt-10 pb-5">
@@ -95,6 +96,14 @@ export function Navbar({
 
       <button
         type="button"
+        onClick={() => setPriorityLook(nextLook[look])}
+        title={`Priority look ${look.toUpperCase()}: ${lookNames[look]}. A trial; click for the next`}
+        className="mb-1 rounded-md px-1.5 py-0.5 font-mono text-[10.5px] text-muted hover:bg-ink/8 hover:text-ink/85"
+      >
+        Look {look.toUpperCase()}
+      </button>
+      <button
+        type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         title={theme === "dark" ? "Parchment: the light theme" : "Ember: the dark theme"}
         className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-ink/8 hover:text-ink/85"
@@ -104,6 +113,9 @@ export function Navbar({
     </aside>
   );
 }
+
+const nextLook: Record<PriorityLook, PriorityLook> = { a: "b", b: "c", c: "a" };
+const lookNames: Record<PriorityLook, string> = { a: "coloured chain", b: "spotlight", c: "rail" };
 
 // A section's pages, unfolding below its button: the grid row grows from nothing to the
 // list's height, so the change animates
