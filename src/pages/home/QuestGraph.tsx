@@ -32,6 +32,7 @@ import { MoveTargets, MoveToPicker } from "./Capture";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
 import { SplitContext, SplitSteps } from "./SplitSteps";
+import { onShowOnGraph } from "./showOnGraph";
 import { usePhonePanZoom } from "./phonePanZoom";
 import Territories from "./territory/Territories";
 import type { TerritoryQuest } from "./territory/territoryGrid";
@@ -144,6 +145,36 @@ export function QuestGraph(props: QuestGraphProps) {
 
 function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   const { fitView, setViewport } = useReactFlow();
+  const latestModel = useRef(model);
+  latestModel.current = model;
+
+  // A new quest opens straight onto Split, its first steps being the obvious next question
+  const newQuest = (title: string) => {
+    const id = crypto.randomUUID();
+    listWanted.add(id);
+    void act("createNode", title, null, id);
+    setAddingTo(id);
+  };
+
+  // Brings a node into view and marks it a moment, as Focus asks; a node folded away or inside a
+  // hidden box shows its nearest box on screen instead (desktop: the phone's graph is its own tab)
+  useEffect(
+    () =>
+      onShowOnGraph((id) => {
+        if (phone) return;
+        const onScreen = (at: string) => document.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(at)}"]`);
+        let target: string | null = id;
+        while (target && !onScreen(target)) target = latestModel.current.byId.get(target)?.parentId ?? null;
+        if (!target) return;
+        void fitView({ nodes: [{ id: target }], duration: 400, padding: 0.8, maxZoom: 1.1 });
+        const element = onScreen(target)!;
+        element.classList.remove("node-flash");
+        void element.offsetWidth; // restarts the animation when asked twice in a row
+        element.classList.add("node-flash");
+        window.setTimeout(() => element.classList.remove("node-flash"), 1600);
+      }),
+    [phone, fitView],
+  );
   const [placements, setPlacements] = useState<Record<string, Box>>({});
   // Positions mid-drag, shown until the layout includes them
   const [moving, setMoving] = useState<Record<string, XYPosition>>({});
@@ -480,7 +511,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       {quests.length > 0 ? (
         <Panel position="top-left" className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
-            <InlineInput placeholder="+ New quest" onSubmit={(title) => act("createNode", title, null)} className="w-52" />
+            <InlineInput placeholder="+ New quest" onSubmit={newQuest} className="w-52" />
             <button
               type="button"
               onClick={() => setQuestsOpen((open) => !open)}
@@ -551,7 +582,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
                 Start a quest: something you are learning or building.
               </p>
               <div className="pointer-events-auto">
-                <InlineInput placeholder="Name your first quest (Enter)" onSubmit={(title) => act("createNode", title, null)} className="w-72 py-2 text-center" />
+                <InlineInput placeholder="Name your first quest (Enter)" onSubmit={newQuest} className="w-72 py-2 text-center" />
               </div>
             </>
           ) : (
@@ -995,12 +1026,18 @@ function HexDot({ className }: { className: string }) {
   );
 }
 
+// Boxes whose add row should open on the Split panel: a quest just made
+const listWanted = new Set<string>();
+
 // The input row at the bottom of a box being added to; Enter adds and stays open, Escape closes
 function AddRow({ data }: { data: CardData }) {
   const { node, adding } = data;
   const { act, onAdding } = boundActions(data);
   // A list being split into steps: what was pasted, or "" when opened from the button
   const [list, setList] = useState<string | null>(null);
+  useEffect(() => {
+    if (adding && listWanted.delete(node.id)) setList("");
+  }, [adding, node.id]);
   if (!adding) return null;
 
   return (

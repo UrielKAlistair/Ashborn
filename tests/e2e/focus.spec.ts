@@ -48,6 +48,11 @@ test("focus", async () => {
     await expect(now).toContainText("1 of 2");
   });
 
+  await test.step("its title shows it on the graph", async () => {
+    await now.getByTitle("Show on the graph").click();
+    await expect(page.locator('.react-flow__node[data-id="' + id.survey + '"]')).toHaveClass(/node-flash/);
+  });
+
   await test.step("Not now passes to the next, raised by its deadline", async () => {
     await now.getByRole("button", { name: "Not now" }).click();
     await expect(now).toContainText("Apply to DTL");
@@ -87,6 +92,18 @@ test("focus", async () => {
     await now.getByRole("button", { name: "Done" }).click();
     await expect(now).toContainText("Read section 2");
     await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("title", "Skim the abstract").single()).data?.completed_at).toBeTruthy();
+    await page.getByRole("button", { name: /of progress today/ }).click();
+    await expect(page.getByRole("list", { name: "Done today" })).toContainText("Skim the abstract");
+  });
+
+  await test.step("a priority on a quest reads as the quest's, not as a step it leads to", async () => {
+    const errands = crypto.randomUUID();
+    await insert("graph_nodes", [{ id: errands, title: "Errands", parent_id: null, priority: 1 }]);
+    await insert("graph_nodes", [{ id: crypto.randomUUID(), title: "Buy stamps", parent_id: errands }]);
+    await expect(now).toContainText(/of \d/);
+    for (let i = 0; i < 5 && !(await now.textContent())?.includes("Buy stamps"); i++) await page.keyboard.press("n");
+    await expect(now).toContainText("Buy stamps");
+    await expect(now).toContainText("Part of Errands, which has this priority");
   });
 
   await test.step("a ready step without a priority gets one from the to-do", async () => {

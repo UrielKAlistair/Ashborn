@@ -21,6 +21,7 @@ export function SplitSteps({
   parentId,
   initial = "",
   onDone,
+  onAdded,
   graph,
   className = "w-80 shadow-[var(--card-shadow)]",
 }: {
@@ -28,6 +29,7 @@ export function SplitSteps({
   parentId: string;
   initial?: string;
   onDone: () => void;
+  onAdded?: () => void; // before onDone, only when steps were added
   graph?: { model: GraphModel; snapshot: Snapshot }; // outside the graph's context
   className?: string;
 }) {
@@ -41,6 +43,7 @@ export function SplitSteps({
   const submit = () => {
     if (steps.length === 0) return;
     addSteps(act, parentId, steps, inOrder);
+    onAdded?.();
     onDone();
   };
 

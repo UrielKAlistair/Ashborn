@@ -81,7 +81,7 @@ test("inbox", async () => {
 
     await expect(quest("Inbox")).toBeVisible();
     await expect(step("Call the bank")).toBeVisible();
-    await expect(page.getByText("1 in Inbox")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sort 1" })).toBeVisible();
     await expect.poll(inboxRows).toEqual([{ id: userId, title: "Inbox", active: true }]);
     await expect.poll(() => parentOf("Call the bank")).toBe(userId);
   });
@@ -89,7 +89,7 @@ test("inbox", async () => {
   await test.step("later captures join it, its items stay off the to-do, and it sits after other quests", async () => {
     await capture("Book a dentist");
     await capture("Project idea");
-    await expect(page.getByText("3 in Inbox")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sort 3" })).toBeVisible();
     await expect(upNext()).not.toContainText("Call the bank");
     await expect.poll(async () => (await db.from("graph_nodes").select("id").eq("title", "Inbox")).data?.length).toBe(1);
 
@@ -109,7 +109,7 @@ test("inbox", async () => {
     await page.keyboard.press("Escape");
     await moveTo("Call the bank", "Work");
     await expect.poll(() => parentOf("Call the bank")).toBe(work);
-    await expect(page.getByText("2 in Inbox")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sort 2" })).toBeVisible();
 
     await moveTo("Book a dentist", "  Write report");
     await expect.poll(() => parentOf("Book a dentist")).toBe(report);
@@ -117,7 +117,7 @@ test("inbox", async () => {
     await moveTo("Project idea", "Its own quest");
     await expect.poll(() => parentOf("Project idea")).toBeNull();
     await expect(quest("Project idea")).toBeVisible();
-    await expect(page.getByText(/in Inbox/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Sort \d/ })).toHaveCount(0);
   });
 
   await test.step("a step sorted out of the Inbox has no Move to…", async () => {
@@ -172,7 +172,7 @@ test("inbox", async () => {
     await phoneWindow(app, page);
     await expect(upNext()).toBeVisible();
     await capture("Thought on the phone");
-    await expect(page.getByText("1 in Inbox")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sort 1" })).toBeVisible();
     await page.screenshot({ path: `${shots}/inbox-phone-todo.png` });
 
     await page.getByRole("button", { name: "Home", exact: true }).click();

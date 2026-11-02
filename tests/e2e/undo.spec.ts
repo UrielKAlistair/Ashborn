@@ -84,7 +84,7 @@ test("undo a tick", async () => {
 
   await test.step("Focus's Done offers it too, and Undo brings the step back to the card", async () => {
     const focus = page.getByRole("region", { name: "Now" });
-    const shown = await focus.locator("p").first().innerText();
+    const shown = await focus.getByRole("button").first().innerText(); // the step's title
     await focus.getByRole("button", { name: "Done", exact: true }).click();
     await expect(toast()).toContainText(`Done: ${shown}`);
     await expect(focus).not.toContainText(shown);

@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
-import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
+import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
@@ -27,6 +27,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const { dayStartHour } = snapshot.settings;
   const date = useToday(dayStartHour);
   const [dayStartOpen, setDayStartOpen] = useState(false);
+  // While the Inbox is being sorted, Focus steps aside: one card at a time
+  const [sorting, setSorting] = useState(false);
   // With one step in Focus, the rest of the to-do waits behind a line, so the screen holds one thing
   const [showAll, setShowAllState] = useState(() => loadShowAll());
   const setShowAll = (show: boolean) => {
@@ -52,6 +54,11 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 
   // The count is from the last change; once the next day starts it belongs to yesterday until the next one
   const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
+  // The steps ticked today, latest first, behind the progress line; level-ups count but have no title
+  const [doneOpen, setDoneOpen] = useState(false);
+  const doneToday = snapshot.nodes
+    .filter((node) => node.parentId && node.completedAt && dayOf(new Date(node.completedAt)) === date)
+    .sort((a, b) => b.completedAt!.localeCompare(a.completedAt!));
 
   const routines = snapshot.routines.filter((routine) => routine.weekdays.includes(weekday)).sort(byTime);
   // The time column only when some routine today has a time
@@ -91,14 +98,34 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         </label>
       ) : null}
       {progressToday > 0 ? (
-        <p className="-mt-5 flex items-center gap-1.5 px-1 text-[12px] text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-ember" />
-          {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
-        </p>
+        <div className="-mt-5 px-1">
+          <button
+            type="button"
+            onClick={() => setDoneOpen(!doneOpen)}
+            aria-expanded={doneOpen}
+            disabled={doneToday.length === 0}
+            className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-ember" />
+            {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
+            {doneToday.length > 0 ? <span className={`inline-block transition-transform ${doneOpen ? "rotate-90" : ""}`}>›</span> : null}
+          </button>
+          {doneOpen ? (
+            <ul aria-label="Done today" className="mt-2 space-y-1 border-l border-ember/30 pl-3 text-[12.5px] text-ink/75">
+              {doneToday.map((step) => (
+                <li key={step.id} className="flex items-baseline gap-2">
+                  <span className="text-emerald-300">✓</span>
+                  <span className="min-w-0 flex-1">{step.title}</span>
+                  <span className="shrink-0 truncate text-[11px] text-muted">{questOf(model.byId, step).title}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
 
-      <Capture snapshot={snapshot} model={model} act={act} />
-      <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} />
+      <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
+      {sorting ? null : <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} />}
 
       <Section title="Up next">
         {todo.length === 0 ? (
@@ -108,9 +135,9 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
               : "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."}
           </Empty>
         ) : null}
-        {todo.length > 0 && !showAll ? (
+        {todoCount > 0 && !showAll ? (
           <button type="button" onClick={() => setShowAll(true)} className="px-1 text-[12.5px] text-muted hover:text-ink/85">
-            › Show all {todoCount} ready
+            › {todoCount === 1 ? "Show the list" : `Show all ${todoCount} ready`}
           </button>
         ) : null}
         {showAll ? (

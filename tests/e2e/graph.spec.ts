@@ -108,6 +108,10 @@ test("home graph", async () => {
     await first.fill("Deep Learning");
     await first.press("Enter");
     await expect(nodes()).toHaveCount(1);
+    // A new quest opens on Split, for its first steps; Escape puts it away
+    await expect(page.getByLabel("Steps, one per line")).toBeFocused();
+    await page.getByLabel("Steps, one per line").press("Escape");
+    await expect(page.getByLabel("Steps, one per line")).toHaveCount(0);
   });
 
   await test.step("the green + adds steps and stays open; Escape closes it, not the window", async () => {
@@ -141,7 +145,7 @@ test("home graph", async () => {
     await card("Deep Learning").getByTitle("Options").click();
     await page.getByRole("radio", { name: "Priority 1" }).click();
     await card("Deep Learning").getByTitle("Options").click();
-    await page.getByRole("button", { name: /Show all \d+ ready/ }).click(); // the whole to-do, not only Now
+    await page.getByRole("button", { name: /Show (all \d+ ready|the list)/ }).click(); // the whole to-do, not only Now
     await expect(upNext()).toContainText("Backprop by hand");
     await expect(upNext()).toContainText("CNN basics");
     await expect(upNext()).not.toContainText("Implement an MLP");

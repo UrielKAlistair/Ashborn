@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { KeyHelp } from "./components/KeyHelp";
 import { Navbar } from "./components/Navbar";
 import { WindowControls } from "./components/WindowControls";
 import { PhoneTabs } from "./components/PhoneTabs";
@@ -301,6 +302,7 @@ function App() {
       )}
 
       {window.ashborn ? <WindowControls /> : null}
+      {!phone && userId ? <KeyHelp /> : null}
 
       {ticked ? <UndoToast ticked={ticked} act={acting} onDismiss={dismiss} phone={phone} /> : null}
 

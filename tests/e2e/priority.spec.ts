@@ -81,7 +81,7 @@ test("priorities", async () => {
     await row.hover();
     await row.getByTitle("Priority").click();
     await page.getByRole("radio", { name: "Priority 2" }).click();
-    await page.getByRole("button", { name: /Show all \d+ ready/ }).click(); // the whole to-do, not only Now
+    await page.getByRole("button", { name: /Show (all \d+ ready|the list)/ }).click(); // the whole to-do, not only Now
     await expect(upNext()).toContainText("Review the survey");
     await expect(upNext()).not.toContainText("Presentation part 2");
     await expect(upNext()).not.toContainText("Presentation part 1");

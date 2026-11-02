@@ -270,3 +270,18 @@ body {
   color: var(--color-card);
   box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.2);
 }
+
+/* A node the graph was asked to show: an ember ring that fades */
+.react-flow__node.node-flash {
+  border-radius: 12px;
+  animation: node-flash 1.6s ease-out;
+}
+
+@keyframes node-flash {
+  0%, 30% { box-shadow: 0 0 0 3px var(--color-ember); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node.node-flash { animation: none; box-shadow: 0 0 0 3px var(--color-ember); }
+}

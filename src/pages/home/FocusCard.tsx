@@ -7,6 +7,7 @@ import type { Priorities } from "../../shared/priority";
 import type { GraphNode, ISODate, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { SplitSteps } from "./SplitSteps";
+import { showOnGraph } from "./showOnGraph";
 
 // One step to do now: the most urgent ready one, with why it is here. Done ticks it; Not now
 // passes to the next for this sitting; Split turns it into smaller steps.
@@ -49,7 +50,10 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
   const origin = priorities.origin.get(step.id);
   const quest = questOf(model.byId, step);
   const parent = step.parentId && step.parentId !== quest.id ? model.byId.get(step.parentId) : null;
-  const leadsTo = origin && origin.nodeId !== step.id ? model.byId.get(origin.nodeId) : null;
+  const from = origin && origin.nodeId !== step.id ? model.byId.get(origin.nodeId) : null;
+  // The priority came down from a box the step sits in, or back along links from a step it leads to
+  let within = false;
+  for (let at = step.parentId; at && !within; at = model.byId.get(at)?.parentId ?? null) within = at === from?.id;
   // The deadline that raised it, else the nearest one linked to the step or to what it leads to:
   // a deadline can tie with the user's own priority and lose the walk, but still matters here
   const deadline =
@@ -77,7 +81,14 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
         </span>
       </div>
 
-      <p className="mt-2 font-display text-[17px] leading-snug font-semibold text-ink/95">{step.title}</p>
+      <button
+        type="button"
+        onClick={() => showOnGraph(step.id)}
+        title="Show on the graph"
+        className="mt-2 block text-left font-display text-[17px] leading-snug font-semibold text-ink/95 decoration-ember/50 underline-offset-4 hover:underline"
+      >
+        {step.title}
+      </button>
       <p className="mt-1 flex items-center gap-1.5 text-[12px] text-muted">
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
         <span className="truncate">
@@ -87,7 +98,13 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
       </p>
 
       <ul className="mt-3 space-y-1 text-[12.5px] text-ink/75">
-        {leadsTo ? <li>→ Leads to {leadsTo.title}</li> : step.priority ? <li>→ You gave it this priority</li> : null}
+        {from && within ? (
+          <li>→ Part of {from.title}, which has this priority</li>
+        ) : from ? (
+          <li>→ Leads to {from.title}</li>
+        ) : step.priority ? (
+          <li>→ You gave it this priority</li>
+        ) : null}
         {deadline && daysLeft !== null ? (
           <li className={daysLeft <= 2 ? "text-amber-200" : ""}>
             ◷ {deadline.title}, {daysLeft < 0 ? `${-daysLeft}d late` : daysLeft === 0 ? "due today" : `due in ${daysLeft}d`}
