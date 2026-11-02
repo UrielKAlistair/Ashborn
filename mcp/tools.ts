@@ -13,6 +13,7 @@ import { nodeLevel } from "../src/shared/progression";
 import { byTime, nextOccurrence } from "../src/shared/schedule";
 import { inboxLast, inInbox } from "../src/shared/inbox";
 import { derivePriorities, needsFirstStep, prioritisedSteps } from "../src/shared/priority";
+import { goneQuiet } from "../src/shared/goneQuiet";
 import { mealSlots, questColors, stockUnits, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
 // The tools, acting as whoever `db` is signed in as, `userId`. `blocked` gives a reason every tool refuses
@@ -550,10 +551,14 @@ function describe(snapshot: Snapshot, questId?: string) {
   const shownIds = new Set(shown.map((quest) => quest.id));
   const ready = snapshot.nodes.filter((node) => (node.parentId || needsFirstStep(model, node)) && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id) && !inInbox(model, node, snapshot.inboxId));
   const priorities = derivePriorities(model, snapshot, today());
+  // As in the app: a quiet quest's steps are listed with it, not again under Also ready
+  const quiet = goneQuiet(model, snapshot, priorities, today()).filter(({ quest }) => shownIds.has(quest.id));
+  const quietIds = new Set(quiet.map(({ quest }) => quest.id));
   const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) => steps.map((node) => `- P${priority} ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`));
-  const unprioritised = ready.filter((node) => !priorities.effective.has(node.id)).map((node) => `- ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet)" : ""}`);
+  const unprioritised = ready.filter((node) => !priorities.effective.has(node.id) && !quietIds.has(questOf(model.byId, node).id)).map((node) => `- ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet)" : ""}`);
   lines.push("Up next (the user's to-do: ready to do now, with a priority):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
   lines.push("Also ready, no priority (not on the user's to-do):", ...(unprioritised.length ? unprioritised : ["- nothing"]), "");
+  if (quiet.length) lines.push("Gone quiet (open steps, nothing done for a week or more; the user may want to prioritise, add a next step, or shelve):", ...quiet.map(({ quest, days, openSteps }) => `- ${quest.title} [${quest.id}]: quiet ${days} days, ${openSteps} open ${openSteps === 1 ? "step" : "steps"}`), "");
 
   for (const quest of shown) {
     const level = nodeLevel(model.totalXp.get(quest.id) ?? 0);
