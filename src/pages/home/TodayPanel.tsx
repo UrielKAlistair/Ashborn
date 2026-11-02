@@ -4,13 +4,14 @@ import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, needsFirstStep, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
-import type { AlarmKind, GraphNode, Snapshot, Weekday } from "../../shared/types";
+import type { AlarmKind, Deadline, GraphNode, Snapshot, Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
 import { Capture, NodePicker } from "./Capture";
 import { FocusCard } from "./FocusCard";
 import { goneQuiet } from "../../shared/goneQuiet";
 import { inInbox } from "../../shared/inbox";
+import { likelyQuest } from "../../shared/likelyQuest";
 import { GoneQuiet } from "./GoneQuiet";
 import { useOneTap } from "./oneTap";
 import { SplitSteps } from "./SplitSteps";
@@ -241,21 +242,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
                   <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
-                  {/* Unlinked, it raises nothing; as its own quest it reaches Now, asking for a first step */}
-                  {deadline.nodeId ? null : (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        // The link refers to the quest, so the quest is saved first
-                        const questId = crypto.randomUUID();
-                        await act("createNode", deadline.title, null, questId);
-                        await act("linkDeadline", deadline.id, questId);
-                      }}
-                      className="-ml-1 mt-0.5 rounded-md px-1 py-0.5 text-[11.5px] text-ember hover:bg-ink/6 pointer-coarse:min-h-8"
-                    >
-                      + Make it a quest
-                    </button>
-                  )}
+                  {/* Unlinked, it raises nothing: linked to the quest it names, or made one, it reaches Now */}
+                  {deadline.nodeId ? null : <LinkDeadline deadline={deadline} model={model} act={act} inboxId={snapshot.inboxId} />}
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
@@ -526,6 +514,31 @@ function FormButtons({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (
       </button>
       <button type="button" onClick={onSubmit} className="rounded-lg bg-ember px-3 py-1 font-medium text-canvas hover:brightness-110">
         Add
+      </button>
+    </div>
+  );
+}
+
+// One tap to give an unlinked deadline a quest: the one its title names, if one does, or a new one of
+// its name, which Now then asks a first step for
+function LinkDeadline({ deadline, model, act, inboxId }: { deadline: Deadline; model: GraphModel; act: Act; inboxId: string }) {
+  const named = likelyQuest(model, deadline.title, inboxId);
+  const makeQuest = async () => {
+    // The link refers to the quest, so the quest is saved first
+    const questId = crypto.randomUUID();
+    await act("createNode", deadline.title, null, questId);
+    await act("linkDeadline", deadline.id, questId);
+  };
+  const linkClass = "rounded-md px-1 py-0.5 text-[11.5px] hover:bg-ink/6 pointer-coarse:min-h-8";
+  return (
+    <div className="-ml-1 mt-0.5 flex flex-wrap items-center gap-x-1">
+      {named ? (
+        <button type="button" onClick={() => void act("linkDeadline", deadline.id, named.id)} className={`${linkClass} text-ember`}>
+          + Link to {named.title}
+        </button>
+      ) : null}
+      <button type="button" onClick={makeQuest} className={`${linkClass} ${named ? "text-muted" : "text-ember"}`}>
+        {named ? "or make it a quest" : "+ Make it a quest"}
       </button>
     </div>
   );

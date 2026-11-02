@@ -53,6 +53,18 @@ test("make a deadline a quest", async () => {
     })
     .toBe(true);
 
+  await test.step("a deadline whose title names a quest offers that quest, and linking it brings its steps to Now", async () => {
+    const { error: readingError } = await db.from("deadlines").insert([{ title: "Reading quiz", due_date: addDays(today(), 1), node_id: null }]);
+    if (readingError) throw readingError;
+    await expect(deadlines.getByRole("button", { name: "Link to Reading" })).toBeVisible({ timeout: 15_000 });
+    await expect(deadlines.getByRole("button", { name: "or make it a quest" })).toBeVisible();
+    await deadlines.getByRole("button", { name: "Link to Reading" }).click();
+    await expect(deadlines.getByRole("button", { name: "Link to Reading" })).toHaveCount(0);
+    await expect.poll(async () => (await db.from("deadlines").select("node_id").eq("title", "Reading quiz").single()).data?.node_id).toBe(quest);
+    for (let i = 0; i < 3 && !(await now.textContent())?.includes("Read chapter 1"); i++) await page.keyboard.press("n");
+    await expect(now).toContainText("Read chapter 1");
+  });
+
   await app.close();
   rmSync(profile, { recursive: true, force: true });
 });
