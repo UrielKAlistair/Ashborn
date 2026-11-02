@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { breakdownPrompt } from "../../shared/breakdown";
 import type { GraphModel } from "../../shared/graphModel";
 import { parseStepList } from "../../shared/splitList";
@@ -41,6 +41,12 @@ export function SplitSteps({
   const [text, setText] = useState(initial);
   const [inOrder, setInOrder] = useState(true);
   const steps = parseStepList(text);
+  const panel = useRef<HTMLDivElement>(null);
+
+  // In the Today panel it can open below the fold, with Add out of reach; on the graph the canvas moves instead
+  useEffect(() => {
+    if (graph) panel.current?.scrollIntoView({ block: "nearest" });
+  }, []);
 
   const submit = () => {
     if (steps.length === 0) return;
@@ -51,6 +57,7 @@ export function SplitSteps({
 
   return (
     <div
+      ref={panel}
       className={`nodrag nopan nowheel space-y-2.5 rounded-xl border border-ink/10 bg-card p-3 text-[13px] text-ink/85 ${className}`}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -86,7 +93,7 @@ export function SplitSteps({
                 () => setCopied("failed"),
               )
             }
-            className="rounded-md px-1 py-0.5 text-ember underline-offset-2 hover:underline"
+            className="min-h-8 rounded-md px-1 py-0.5 text-ember underline-offset-2 hover:underline"
           >
             Copy a prompt for Claude
           </button>
@@ -100,14 +107,14 @@ export function SplitSteps({
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[11.5px] text-muted tabular-nums">{steps.length === 1 ? "1 step" : `${steps.length} steps`}</span>
         <div className="flex gap-2">
-          <button type="button" onClick={onDone} className="rounded-lg border border-ink/12 px-3 py-1 text-ink/70 hover:bg-ink/6">
+          <button type="button" onClick={onDone} className="min-h-8 rounded-lg border border-ink/12 px-3 py-1 text-ink/70 hover:bg-ink/6">
             Cancel
           </button>
           <button
             type="button"
             onClick={submit}
             disabled={steps.length === 0}
-            className="rounded-lg bg-ember px-3 py-1 font-medium text-canvas hover:brightness-110 disabled:opacity-40"
+            className="min-h-8 rounded-lg bg-ember px-3 py-1 font-medium text-canvas hover:brightness-110 disabled:opacity-40"
           >
             {first ? "Add" : `Add ${steps.length === 1 ? "step" : "steps"}`}
           </button>

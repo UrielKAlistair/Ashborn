@@ -32,7 +32,8 @@ export function useUndoableChanges(act: Act, snapshot: Snapshot | null) {
 }
 
 // What was just done, with Undo, for a few seconds; a newer change replaces it and starts the time
-// again. `act` is the unwrapped one, so an undo offers no undo of its own.
+// again. `act` is the unwrapped one, so an undo offers no undo of its own. Only Undo takes taps: the
+// rest lets them through to what it covers.
 export function UndoToast({ undoable, act, onDismiss, phone }: { undoable: Undoable; act: Act; onDismiss: () => void; phone: boolean }) {
   useEffect(() => {
     const timer = window.setTimeout(onDismiss, TOAST_MS);
@@ -41,7 +42,7 @@ export function UndoToast({ undoable, act, onDismiss, phone }: { undoable: Undoa
 
   return (
     <div className={`pointer-events-none absolute inset-x-0 z-50 flex justify-center px-4 ${phone ? "bottom-20" : "bottom-6"}`}>
-      <div role="status" className="pointer-events-auto flex max-w-md min-w-0 items-center gap-2 rounded-xl border border-ink/12 bg-card py-1 pr-1 pl-3.5 text-[13px] text-ink/85 shadow-[var(--card-shadow)] transition duration-150 ease-out starting:translate-y-2 starting:opacity-0">
+      <div role="status" className="flex max-w-md min-w-0 items-center gap-2 rounded-xl border border-ink/12 bg-card py-1 pr-1 pl-3.5 text-[13px] text-ink/85 shadow-[var(--card-shadow)] transition duration-150 ease-out starting:translate-y-2 starting:opacity-0">
         <span className="truncate">{undoable.label}</span>
         <button
           type="button"
@@ -49,7 +50,7 @@ export function UndoToast({ undoable, act, onDismiss, phone }: { undoable: Undoa
             void act("updateNode", undoable.id, undoable.undo);
             onDismiss();
           }}
-          className="min-h-9 shrink-0 rounded-lg px-2.5 font-medium text-ember hover:bg-ink/6"
+          className="pointer-events-auto min-h-9 shrink-0 rounded-lg px-2.5 font-medium text-ember hover:bg-ink/6"
         >
           Undo
         </button>

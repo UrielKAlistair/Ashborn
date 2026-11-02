@@ -82,7 +82,7 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
             onClick={() => setSorting((open) => !open)}
             aria-expanded={sorting}
             title="Sort the Inbox, one at a time"
-            className={`-mr-1.5 shrink-0 rounded-md px-1.5 py-1 font-mono text-[11px] tabular-nums hover:bg-ink/6 ${sorting ? "text-ember" : "text-muted hover:text-ink/85"}`}
+            className={`-mr-2 min-h-9 shrink-0 rounded-md px-2 font-mono text-[11px] tabular-nums hover:bg-ink/6 ${sorting ? "text-ember" : "text-muted hover:text-ink/85"}`}
           >
             Sort {waiting.length}
           </button>
@@ -162,7 +162,7 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
         <span className="font-mono text-[11px] text-muted tabular-nums">
           {place} of {total}
         </span>
-        <button type="button" onClick={onClose} title="Close (Esc)" aria-label="Close" className="-mr-1 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-ink/8 hover:text-ink/85">
+        <button type="button" onClick={onClose} title="Close (Esc)" aria-label="Close" className="-mr-1.5 flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-ink/8 hover:text-ink/85">
           ×
         </button>
       </div>
@@ -175,7 +175,7 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
       ) : (
         <>
           <MoveToPicker step={item} act={act} selectRef={picker} offerOwnQuest={false} className="mt-3 min-h-9 w-full rounded-lg border border-ink/10 bg-canvas/60 px-2.5 py-1.5 text-[13px] text-ink/85" />
-          <div role="group" aria-label={`Priority for ${item.title}`} className="mt-2 flex items-center gap-1">
+          <div role="group" aria-label={`Priority for ${item.title}`} className="mt-2 flex items-center gap-1.5">
             <span className="mr-1 text-[12px] text-muted">When, if you know</span>
             {PRIORITIES.map((priority) => (
               <button
@@ -185,20 +185,20 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
                 aria-pressed={item.priority === priority}
                 onClick={() => prioritise(priority)}
                 title={`Priority ${priority} (${priority})`}
-                className={`rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 py-0.5 font-mono text-[10.5px] text-[var(--mark)] ${item.priority === priority ? "bg-[color-mix(in_oklab,var(--mark)_22%,transparent)] font-semibold" : "hover:bg-[color-mix(in_oklab,var(--mark)_12%,transparent)]"}`}
+                className={`min-h-8 min-w-8 rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 font-mono text-[10.5px] text-[var(--mark)] ${item.priority === priority ? "bg-[color-mix(in_oklab,var(--mark)_22%,transparent)] font-semibold" : "hover:bg-[color-mix(in_oklab,var(--mark)_12%,transparent)]"}`}
               >
                 P{priority}
               </button>
             ))}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
-            <button type="button" onClick={ownQuest} title="Its own quest (Q)" className="rounded-lg border border-ink/12 px-3 py-1.5 text-ink/75 hover:bg-ink/6">
+            <button type="button" onClick={ownQuest} title="Its own quest (Q)" className="min-h-8 rounded-lg border border-ink/12 px-3 py-1.5 text-ink/75 hover:bg-ink/6">
               Its own quest
             </button>
-            <button type="button" onClick={() => setSplitting(true)} title="Split it (S)" className="rounded-lg border border-ink/12 px-3 py-1.5 text-ink/75 hover:bg-ink/6">
+            <button type="button" onClick={() => setSplitting(true)} title="Split it (S)" className="min-h-8 rounded-lg border border-ink/12 px-3 py-1.5 text-ink/75 hover:bg-ink/6">
               Split it
             </button>
-            <button type="button" onClick={onSkip} title="Skip (N)" className="rounded-lg px-2 py-1.5 text-muted hover:bg-ink/6 hover:text-ink/85">
+            <button type="button" onClick={onSkip} title="Skip (N)" className="min-h-8 rounded-lg px-2 py-1.5 text-muted hover:bg-ink/6 hover:text-ink/85">
               Skip
             </button>
             <span className="flex-1" />
@@ -206,7 +206,7 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
               type="button"
               onClick={remove}
               title="Delete (X)"
-              className={`rounded-lg px-2 py-1.5 ${confirmDelete ? "bg-red-500/20 text-red-300" : "text-muted hover:bg-red-500/15 hover:text-red-300"}`}
+              className={`min-h-8 rounded-lg px-2 py-1.5 ${confirmDelete ? "bg-red-500/20 text-red-300" : "text-muted hover:bg-red-500/15 hover:text-red-300"}`}
             >
               {confirmDelete ? "Delete?" : "Delete"}
             </button>

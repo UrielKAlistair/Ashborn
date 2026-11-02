@@ -17,7 +17,7 @@ export function Tick({ done, onClick, className = "" }: { done: boolean; onClick
         onClick();
       }}
       title={done ? "Mark not done" : "Mark done"}
-      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors ${
+      className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors pointer-coarse:before:absolute pointer-coarse:before:-inset-2 pointer-coarse:before:content-[''] ${
         done ? `${justDone ? "tick-done " : ""}border-transparent bg-emerald-400 text-canvas` : "border-ink/30 text-transparent hover:border-ember hover:text-ember/70"
       } ${className}`}
     >

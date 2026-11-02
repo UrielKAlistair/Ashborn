@@ -237,6 +237,11 @@ test("brain dump and sort", async () => {
     await page.screenshot({ path: `${shots}/sort-phone.png` });
     const del = (await card().getByRole("button", { name: "Delete" }).boundingBox())!;
     expect(del.x + del.width).toBeLessThanOrEqual(400);
+    for (const name of ["Delete", "Skip", "Split it", "Its own quest", "Close", "P1", "P4"]) {
+      const box = (await card().getByRole("button", { name, exact: true }).boundingBox())!;
+      expect(Math.min(box.width, box.height), name).toBeGreaterThanOrEqual(32);
+    }
+    expect((await sortButton(2).boundingBox())!.height).toBeGreaterThanOrEqual(32);
     await card().getByRole("button", { name: "Its own quest" }).click();
     await expect.poll(() => parentOf("One more")).toBeNull();
     await expect(card()).toContainText("A second thought");

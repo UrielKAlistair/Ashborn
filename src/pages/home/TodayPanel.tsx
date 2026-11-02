@@ -105,7 +105,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           onClick={() => setDoneOpen(!doneOpen)}
           aria-expanded={doneOpen}
           disabled={doneToday.length === 0}
-          className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85"
+          className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85 pointer-coarse:min-h-8"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-ember" />
           {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
@@ -136,7 +136,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           </Empty>
         ) : null}
         {todoCount > 0 && !showAll ? (
-          <button type="button" onClick={() => setShowAll(true)} className="px-1 text-[12.5px] text-muted hover:text-ink/85">
+          <button type="button" onClick={() => setShowAll(true)} className="px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
             › {todoCount === 1 ? "Show the list" : `Show all ${todoCount} ready`}
           </button>
         ) : null}
@@ -168,7 +168,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                 })}
               </div>
             ))}
-            <button type="button" onClick={() => setShowAll(false)} className="px-1 text-[12.5px] text-muted hover:text-ink/85">
+            <button type="button" onClick={() => setShowAll(false)} className="px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
               ‹ Show only Now
             </button>
           </>
@@ -247,7 +247,7 @@ function Unprioritised({ steps, model, act }: { steps: GraphNode[]; model: Graph
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-1.5 px-1 text-[12.5px] text-muted hover:text-ink/85"
+        className="flex w-full items-center gap-1.5 px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8"
       >
         <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>›</span>
         Ready, no priority <span className="font-mono tabular-nums">{steps.length}</span>
@@ -273,7 +273,7 @@ function Unprioritised({ steps, model, act }: { steps: GraphNode[]; model: Graph
                       data-priority={priority}
                       onClick={() => void act("updateNode", step.id, { priority })}
                       title={`Priority ${priority}`}
-                      className="rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 py-0.5 font-mono text-[10.5px] text-[var(--mark)] hover:bg-[color-mix(in_oklab,var(--mark)_14%,transparent)]"
+                      className="rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 py-0.5 font-mono pointer-coarse:min-h-8 pointer-coarse:min-w-8 text-[10.5px] text-[var(--mark)] hover:bg-[color-mix(in_oklab,var(--mark)_14%,transparent)]"
                     >
                       P{priority}
                     </button>
@@ -406,7 +406,7 @@ function FirstStepRow({ quest, snapshot, model, act }: { quest: GraphNode; snaps
           onClick={() => setOpen(!open)}
           aria-expanded={open}
           title="Add a first step"
-          className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-dashed border-ink/30 text-[12px] leading-none text-muted hover:border-ember hover:text-ember"
+          className="relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center pointer-coarse:before:absolute pointer-coarse:before:-inset-2 pointer-coarse:before:content-[''] justify-center rounded-full border border-dashed border-ink/30 text-[12px] leading-none text-muted hover:border-ember hover:text-ember"
         >
           +
         </button>
@@ -452,7 +452,7 @@ function closeOnEscape(close: () => void) {
 
 function AddButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} title="Add" className="flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-muted hover:bg-ink/8 hover:text-ink/85">
+    <button type="button" onClick={onClick} title="Add" className="flex h-6 w-6 items-center pointer-coarse:h-8 pointer-coarse:w-8 justify-center rounded-md text-base leading-none text-muted hover:bg-ink/8 hover:text-ink/85">
       +
     </button>
   );

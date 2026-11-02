@@ -1,0 +1,87 @@
+import { _electron as electron, expect, test } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+// Start on Now: a 15-minute box that holds the step in Now, ends with "Done, or keep going?", and
+// survives a reload; and a step passed over three times asks why.
+
+const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
+
+test("start timer and passing over", async () => {
+  const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
+  if (error) throw error;
+  for (const table of ["graph_nodes", "deadlines"]) await db.from(table).delete().not("id", "is", null);
+  const id = { quest: crypto.randomUUID(), draft: crypto.randomUUID(), email: crypto.randomUUID() };
+  const insert = async (rows: Array<Record<string, unknown>>) => {
+    const { error: insertError } = await db.from("graph_nodes").insert(rows);
+    if (insertError) throw insertError;
+  };
+  await insert([{ id: id.quest, title: "Work", parent_id: null, priority: 1 }]);
+  await insert([
+    { id: id.draft, title: "Draft the intro", parent_id: id.quest },
+    { id: id.email, title: "Email the professor", parent_id: id.quest },
+    { id: crypto.randomUUID(), title: "Tidy the notes", parent_id: id.quest },
+  ]);
+
+  const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
+  const env = { ...process.env } as Record<string, string>;
+  delete env.ELECTRON_RUN_AS_NODE;
+  env.ASHBORN_BACKUP_DIR = path.join(profile, "backups");
+  const app = await electron.launch({ args: [`--user-data-dir=${profile}`, "."], env });
+  const page = await app.firstWindow();
+  const now = page.getByRole("region", { name: "Now" });
+  const storage = (key: string) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? "null"), key);
+
+  await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
+  await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(now).toContainText("Draft the intro", { timeout: 15_000 });
+
+  await test.step("Start boxes the step: it holds Now, Not now goes, Stop ends it", async () => {
+    await now.getByRole("button", { name: "Start", exact: true }).click();
+    await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/1[45]:\d\d/);
+    await expect(now.getByRole("button", { name: "Not now" })).toHaveCount(0);
+    await page.keyboard.press("n");
+    await expect(now).toContainText("Draft the intro");
+    await page.reload();
+    await expect(now.getByRole("timer", { name: "Time left" })).toBeVisible({ timeout: 15_000 });
+    await expect(now).toContainText("Draft the intro");
+    await now.getByRole("button", { name: "Stop" }).click();
+    await expect(now.getByRole("timer")).toHaveCount(0);
+    expect(await storage("ashborn-now-timer")).toBeNull();
+  });
+
+  await test.step("when the time is up: Done, or keep going", async () => {
+    await page.evaluate((stepId) => localStorage.setItem("ashborn-now-timer", JSON.stringify({ stepId, startedAt: Date.now() - 60_000, endsAt: Date.now() - 1 })), id.email);
+    await page.reload();
+    await expect(now).toContainText("Email the professor", { timeout: 15_000 });
+    await expect(now).toContainText("Time's up. Done, or keep going?");
+    await now.getByRole("button", { name: "5 more minutes" }).click();
+    await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/[45]:\d\d/);
+    await now.getByRole("button", { name: "Done" }).click();
+    await expect(now).toContainText("Draft the intro");
+    await expect(now.getByRole("timer")).toHaveCount(0);
+    expect(await storage("ashborn-now-timer")).toBeNull();
+  });
+
+  await test.step("passing a step over is counted, and the third time Now asks why", async () => {
+    await page.evaluate(() => localStorage.removeItem("ashborn-passed-over"));
+    await expect(now).toContainText(/of 2/);
+    await now.getByRole("button", { name: "Not now" }).click();
+    expect(await storage("ashborn-passed-over")).toEqual({ [id.draft]: 1 });
+    await page.evaluate((stepId) => localStorage.setItem("ashborn-passed-over", JSON.stringify({ [stepId]: 3 })), id.draft);
+    await page.reload();
+    await expect(now).toContainText("Draft the intro", { timeout: 15_000 });
+    await expect(now).toContainText("Passed over 3 times. Too big, or waiting on something?");
+    await now.getByRole("button", { name: "Too big? Split it" }).click();
+    await now.getByLabel("Steps, one per line").fill("Write the first sentence");
+    await now.getByRole("button", { name: /^Add step/ }).click();
+    await expect(now).toContainText("Write the first sentence");
+    expect(await storage("ashborn-passed-over")).toEqual({});
+  });
+
+  await app.close();
+  rmSync(profile, { recursive: true, force: true });
+});

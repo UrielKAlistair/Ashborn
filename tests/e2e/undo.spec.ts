@@ -162,6 +162,12 @@ test("undo a tick", async () => {
     const box = (await toast().boundingBox())!;
     const tabs = (await page.getByRole("button", { name: "Home", exact: true }).boundingBox())!;
     expect(box.y + box.height).toBeLessThanOrEqual(tabs.y);
+    // Only Undo takes taps: a tap on its words reaches what lies under them
+    const underWords = await toast().evaluate((el) => {
+      const words = el.querySelector("span")!.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(words.left + 4, words.top + words.height / 2));
+    });
+    expect(underWords).toBe(false);
   });
 
   expect(pageErrors).toEqual([]);
