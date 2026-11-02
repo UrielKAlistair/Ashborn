@@ -32,6 +32,7 @@ import { MoveTargets, MoveToPicker } from "./Capture";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
 import { SplitContext, SplitSteps } from "./SplitSteps";
+import { useIsNowStep } from "./nowMirror";
 import { onShowOnGraph, takeWaitingShow } from "./showOnGraph";
 import { usePhonePanZoom } from "./phonePanZoom";
 import Territories from "./territory/Territories";
@@ -700,6 +701,7 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
   const { node } = data;
   const { act } = data.actions;
   const done = isDone(node);
+  const now = useIsNowStep(node.id);
   if (data.folded !== null) return <FoldedCard data={data} steps={data.folded} />;
   const holdsSteps = data.hasSteps && !data.collapsed;
 
@@ -721,7 +723,11 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
           className={`truncate ${done ? "text-ink/35 line-through decoration-ink/25" : holdsSteps ? "font-medium text-ink/80" : "text-ink/88"}`}
         />
         <span className="flex-1" />
-        {node.priority && !data.phone ? <span className="shrink-0 font-mono text-[10px] text-muted group-hover:invisible">P{node.priority}</span> : null}
+        {now ? (
+          <span className="shrink-0 rounded bg-ember/15 px-1 font-mono text-[10px] font-semibold text-ember group-hover:invisible">Now</span>
+        ) : node.priority && !data.phone ? (
+          <span className="shrink-0 font-mono text-[10px] text-muted group-hover:invisible">P{node.priority}</span>
+        ) : null}
         <BoxButtons data={data} />
       </div>
       <AddRow data={data} />

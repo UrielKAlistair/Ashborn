@@ -10,7 +10,7 @@ import type { Act } from "./HomePage";
 import { passedOver, storePassedOver, storedTimer, storeTimer, type StartTimer } from "./nowStore";
 import { SplitSteps } from "./SplitSteps";
 import { showOnGraph } from "./showOnGraph";
-import { useTrayNow } from "./trayNow";
+import { useNowMirror } from "./nowMirror";
 
 // A started step's time box, and on how many days a step can be passed over before Now asks why
 const START_MINUTES = 15;
@@ -36,7 +36,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   const [timer, setTimer] = useState(storedTimer);
   const [clock, setClock] = useState(Date.now);
   const phone = usePhone();
-  const trayNow = useTrayNow();
+  const mirror = useNowMirror();
   // The notice at the end reads the steps as they are then
   const latestSteps = useRef(steps);
   latestSteps.current = steps;
@@ -81,7 +81,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
 
   if (steps.length === 0) {
     keys.current = { "/": requestCapture };
-    trayNow.current = null;
+    mirror.current = null;
     return null;
   }
 
@@ -143,7 +143,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
     setPassed(waiting.length > 1 ? [...passed, step.id] : []);
   };
   const firstStep = needsFirstStep(model, step);
-  trayNow.current = { id: step.id, title: step.title, endsAt: running?.endsAt ?? null, canTick: !firstStep };
+  mirror.current = { id: step.id, title: step.title, endsAt: running?.endsAt ?? null, canTick: !firstStep };
   keys.current = splitting
     ? { "/": requestCapture }
     : firstStep

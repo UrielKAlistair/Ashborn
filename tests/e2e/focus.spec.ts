@@ -50,6 +50,16 @@ test("focus", async () => {
     await expect(now).toContainText("1 of 2");
   });
 
+  await test.step("the graph marks the step in Now, and the mark follows Not now", async () => {
+    const tag = (stepId: string) => page.locator(`.react-flow__node[data-id="${stepId}"]`).getByText("Now", { exact: true });
+    await expect(tag(id.survey)).toBeVisible();
+    await now.getByRole("button", { name: "Not now" }).click();
+    await expect(tag(id.apply)).toBeVisible();
+    await expect(tag(id.survey)).toHaveCount(0);
+    await now.getByRole("button", { name: "Not now" }).click();
+    await expect(tag(id.survey)).toBeVisible();
+  });
+
   await test.step("its title shows it on the graph", async () => {
     await now.getByTitle("Show on the graph").click();
     await expect(page.locator('.react-flow__node[data-id="' + id.survey + '"]')).toHaveClass(/node-flash/);
