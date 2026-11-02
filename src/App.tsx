@@ -4,7 +4,7 @@ import { Navbar } from "./components/Navbar";
 import { WindowControls } from "./components/WindowControls";
 import { PhoneTabs } from "./components/PhoneTabs";
 import { fixPermission, useAlarmPermissions, useAlarmSchedule, useRingingAlarm } from "./lib/alarms";
-import { applyDelta, createApi } from "./lib/api";
+import { applyDelta, createApi, keepNodeOrder } from "./lib/api";
 import { useBackupSchedule } from "./lib/backupSchedule";
 import { api, db } from "./lib/client";
 import { watchChanges } from "./lib/live";
@@ -32,6 +32,8 @@ const routesInAddress = window.location.protocol !== "file:";
 // How often the app tries the server again while offline: a request can fail while the device
 // stays online (a server hiccup), and then no "online" event comes
 const OFFLINE_RETRY_MS = 30_000;
+// Hidden for longer than this (a phone asleep, say), the app reads its data again on coming back
+const WAKE_READ_AFTER_MS = 30_000;
 // How long the data must stay unchanged before it is saved on the device
 const CACHE_SETTLE_MS = 1000;
 
@@ -63,6 +65,8 @@ function App() {
   // The data as last updated, ahead of the render that shows it, so a change made straight after
   // another (a tick on a step just added) is checked against it
   const dataRef = useRef(data);
+  // The list of changes each running load will replay onto what it read, for `act` to add its answers to
+  const loadsRunning = useRef(new Set<Delta[]>());
   const offlineRef = useRef(offline);
   offlineRef.current = offline;
 
@@ -85,8 +89,8 @@ function App() {
   useEffect(() => {
     if (!userId) return;
 
-    // One load at a time, so two never send the same queued change. Changes streamed in while it
-    // runs may be missing from what it reads, so they are kept and replayed onto it in order.
+    // One load at a time, so two never send the same queued change. Changes streamed in or answered
+    // while it runs may be missing from what it reads, so they are kept and replayed onto it in order.
     let loading = false;
     let loadAgain = false;
     let arrived: Delta[] = [];
@@ -95,11 +99,15 @@ function App() {
       if (loading) return;
       loading = true;
       arrived = [];
+      loadsRunning.current.add(arrived);
       try {
         const refused = await sendQueue((at) => createApi(db, () => at));
         const loaded = replay(await api.getSnapshot(userId));
         // The same data keeps the same objects, so reading it again draws nothing
-        confirm((current) => (JSON.stringify(current) === JSON.stringify(loaded) ? current : loaded));
+        confirm((current) => {
+          const next = current ? keepNodeOrder(loaded, current) : loaded;
+          return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+        });
         setOffline(false);
         setQueued(0);
         setError(refused.length > 0 ? `Not saved from offline: ${refused.join("; ")}` : null);
@@ -114,6 +122,7 @@ function App() {
         if (reason instanceof QueueHeld && reason.shown && !/fetch|network/i.test(reason.reason)) setError(`Not synced yet: ${reason.reason}`);
       } finally {
         loading = false;
+        loadsRunning.current.delete(arrived);
         arrived = [];
         if (loadAgain) {
           loadAgain = false;
@@ -125,22 +134,31 @@ function App() {
       if (offlineRef.current && document.visibilityState === "visible") void load();
     };
 
+    // A load under way may have read too early, so it runs again after
+    const readAgain = () => {
+      if (loading) loadAgain = true;
+      else void load();
+    };
+    let hiddenAt = 0;
+    const readOnWaking = () => {
+      if (document.visibilityState === "hidden") hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > WAKE_READ_AFTER_MS) readAgain();
+    };
+
     void load();
     window.addEventListener("online", load);
     document.addEventListener("visibilitychange", retry);
+    document.addEventListener("visibilitychange", readOnWaking);
     const retryTimer = window.setInterval(retry, OFFLINE_RETRY_MS);
     const stopWatching = watchChanges(db, () => dataRef.current.confirmed, (delta) => {
       if (loading) arrived.push(delta);
       else confirm((current) => current && applyDelta(current, delta));
-    }, () => {
-      // A load under way may have read before the channel was listening
-      if (loading) loadAgain = true;
-      else void load();
-    });
+    }, readAgain);
 
     return () => {
       window.removeEventListener("online", load);
       document.removeEventListener("visibilitychange", retry);
+      document.removeEventListener("visibilitychange", readOnWaking);
       window.clearInterval(retryTimer);
       stopWatching();
     };
@@ -210,6 +228,7 @@ function App() {
       update({ ...dataRef.current, pending: [...dataRef.current.pending, change] });
       try {
         const delta = await (createApi(db, () => made)[name] as (...params: unknown[]) => Promise<Delta>)(...change.args);
+        loadsRunning.current.forEach((arrived) => arrived.push(delta));
         confirm((current) => current && applyDelta(current, delta), change);
         setError(null);
         return true;

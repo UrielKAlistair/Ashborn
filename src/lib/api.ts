@@ -587,6 +587,15 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
   return (Object.keys(next) as (keyof Snapshot)[]).every((key) => next[key] === snapshot[key]) ? snapshot : next;
 }
 
+// A new read with its nodes in the order on screen, new ones after: rows with equal creation times
+// come back in no fixed order, which would change which step is next without anything having changed
+export function keepNodeOrder(read: Snapshot, shown: Snapshot): Snapshot {
+  const byId = new Map(read.nodes.map((node) => [node.id, node]));
+  const kept = shown.nodes.flatMap((node) => byId.get(node.id) ?? []);
+  const known = new Set(shown.nodes.map((node) => node.id));
+  return { ...read, nodes: [...kept, ...read.nodes.filter((node) => !known.has(node.id))] };
+}
+
 function edgeKey(edge: { from: string; to: string }) {
   return `${edge.from}->${edge.to}`;
 }

@@ -20,7 +20,16 @@ const KITCHEN_SETTLE_MS = 300;
 // insert or update of a row not on screen is read again first, and shown only if the row exists,
 // lest it bring back a row already deleted.
 export function watchChanges(db: SupabaseClient, current: () => Snapshot | null, onDelta: (delta: Delta) => void, onSubscribed: () => void) {
-  const emit = (delta: Delta | Promise<Delta>) => void Promise.resolve(delta).then(onDelta, () => {});
+  // Delivered in the order they arrived: a change that waits on a read must not land after a newer one
+  let delivered = Promise.resolve();
+  const emit = (delta: Delta | Promise<Delta>) => {
+    const ready = Promise.resolve(delta).catch((): Delta => ({}));
+    // A change that fails to apply is reported and passed over, so the ones after it still arrive
+    delivered = delivered
+      .then(() => ready)
+      .then(onDelta)
+      .catch((reason) => console.error("A live change could not be shown", reason));
+  };
 
   // A row's change as it arrived if the row is on screen, or as it is now in the database
   const checked = <R>(onScreen: (snapshot: Snapshot) => boolean, row: R, read: () => PromiseLike<{ data: unknown }>, toDelta: (row: R) => Delta) => {
@@ -136,11 +145,13 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     (channel, { table, handle }) => channel.on("postgres_changes", { event: "*", schema: "public", table }, handle),
     db.channel("ashborn-changes"),
   );
-  // Changes made before the channel is listening are never sent, on the first join or a rejoin after
-  // a dropped connection, so each time it starts listening the data is read again
-  channel.subscribe((status) => {
-    if (status === "SUBSCRIBED") onSubscribed();
+  // Changes made before the server is listening are never sent, on the first join or a rejoin after a
+  // dropped connection, so each time it starts listening the data is read again. That moment is this
+  // message, which comes up to 1.5 s after subscribe's own SUBSCRIBED.
+  channel.on("system", {}, (message: { extension?: string; status?: string }) => {
+    if (message.extension === "postgres_changes" && message.status === "ok") onSubscribed();
   });
+  channel.subscribe();
 
   return () => {
     clearTimeout(kitchenTimer);
