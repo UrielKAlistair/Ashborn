@@ -18,6 +18,7 @@ const node = (id: string, overrides: Partial<GraphNode>): GraphNode => ({
   priority: null,
   ownXp: 0,
   lastActive: "2026-01-01T00:00:00.000Z",
+  stamps: {},
   position: null,
   size: null,
   ...overrides,

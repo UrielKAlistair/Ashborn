@@ -444,7 +444,7 @@ function loadCachedSnapshot(userId: string): Snapshot | null {
   try {
     const cached = JSON.parse(window.localStorage.getItem(snapshotStorageKey) ?? "null") as Snapshot | null;
     // Saved before the Kitchen or the settings existed
-    return cached && { ...cached, kitchen: cached.kitchen ?? emptyKitchen, settings: cached.settings ?? { dayStartHour: DEFAULT_DAY_START_HOUR, timeZone: null }, inboxId: userId };
+    return cached && { ...cached, nodes: cached.nodes.map((node) => ({ ...node, stamps: node.stamps ?? {} })), kitchen: cached.kitchen ?? emptyKitchen, settings: cached.settings ?? { dayStartHour: DEFAULT_DAY_START_HOUR, timeZone: null }, inboxId: userId };
   } catch {
     return null;
   }

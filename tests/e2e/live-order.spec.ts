@@ -5,11 +5,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 // A streamed change that needs a read before it can be shown (a tick also moves today's count) must
-// not land after a newer change that didn't: the app would stay on the older state.
+// not land after a newer change that didn't, and the read must not hold back what comes after it.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
-test("streamed changes land in the order they arrived", async () => {
+test("the latest streamed change stands, and a slow read holds nothing back", async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
   await db.from("graph_nodes").delete().not("id", "is", null);
@@ -54,6 +54,10 @@ test("streamed changes land in the order they arrived", async () => {
   await setDone(true);
   await expect.poll(() => held, { timeout: 5000 }).toBeGreaterThan(0);
   await setDone(false);
+  // Nor does a slow read hold back what comes after it
+  const { error: titleError } = await db.from("graph_nodes").update({ title: "Quick change", changed_at: { title: new Date().toISOString() } }).eq("id", quest);
+  if (titleError) throw titleError;
+  await expect(page.locator(".react-flow__node-quest", { hasText: "Quick change" })).toBeVisible({ timeout: 2000 });
   await page.waitForTimeout(5000);
   await page.unrouteAll({ behavior: "wait" });
 

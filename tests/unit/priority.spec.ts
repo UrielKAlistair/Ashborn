@@ -19,6 +19,7 @@ const node = (id: string, parentId: string | null, fields: Partial<GraphNode> = 
   priority: null,
   ownXp: 0,
   lastActive: "2026-01-01T00:00:00.000Z",
+  stamps: {},
   position: null,
   ...fields,
 });

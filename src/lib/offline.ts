@@ -54,6 +54,7 @@ const preview: Record<Mutation, Preview> = {
         ownXp: 0,
         lastActive: at,
         position: null,
+        stamps: {},
       },
     ],
   }),

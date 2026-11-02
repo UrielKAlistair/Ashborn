@@ -27,6 +27,7 @@ export type GraphNode = {
   ownXp: number; // level-ups plus the completion credit
   lastActive: string; // when it was last made, ticked, levelled up or otherwise worked on; layout and looks don't count
   position: Point | null; // where the user put it, relative to its box; null: laid out automatically
+  stamps: Record<string, string>; // column name → when the server last changed it
 };
 
 export type Point = { x: number; y: number };

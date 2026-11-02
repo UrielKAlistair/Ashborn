@@ -478,6 +478,7 @@ export function toNode(row: NodeRow): GraphNode {
     ownXp: (row.logged_xp ?? 0) + (row.completed_at ? PROGRESS_UNIT : 0),
     lastActive: lastActive(row),
     position: row.x === null || row.y === null ? null : { x: row.x, y: row.y },
+    stamps: row.changed_at ?? {},
   };
 }
 
@@ -568,7 +569,7 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
   const wasChecked = check && snapshot.routineChecks.some((c) => c.routineId === check.routineId && c.date === check.date);
 
   const next: Snapshot = {
-    nodes: merge(snapshot.nodes, (node) => node.id, delta.nodes, removedNodes),
+    nodes: merge(snapshot.nodes, (node) => node.id, delta.nodes?.map((node) => latestFields(snapshot.nodes.find(({ id }) => id === node.id), node)), removedNodes),
     edges: merge(snapshot.edges, edgeKey, delta.edges, removedEdges),
     routines: merge(snapshot.routines, (routine) => routine.id, delta.routines, new Set(delta.removedRoutineIds)),
     routineChecks:
@@ -587,6 +588,37 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
   };
 
   return (Object.keys(next) as (keyof Snapshot)[]).every((key) => next[key] === snapshot[key]) ? snapshot : next;
+}
+
+// The columns behind each of a node's fields that the server stamps
+const STAMPED_FIELDS = [
+  ["title", ["title"]],
+  ["statWeights", ["stat_weights"]],
+  ["color", ["color"]],
+  ["active", ["active"]],
+  ["completedAt", ["completed_at"]],
+  ["shelved", ["shelved"]],
+  ["priority", ["priority"]],
+  ["parentId", ["parent_id"]],
+  ["position", ["x", "y"]],
+] as const;
+
+// A node as it arrived, except for fields where what is shown was changed later on the server: changes
+// don't always arrive in the order they were made, and the older one must not overwrite the newer.
+// Equal stamps are the same write, so what arrived stands. Activity only moves forward.
+function latestFields(shown: GraphNode | undefined, arrived: GraphNode): GraphNode {
+  if (!shown) return arrived;
+  const later = { ...arrived, lastActive: shown.lastActive > arrived.lastActive ? shown.lastActive : arrived.lastActive };
+  for (const [field, columns] of STAMPED_FIELDS) {
+    if (!columns.some((column) => isOlder(arrived.stamps[column], shown.stamps[column]))) continue;
+    Object.assign(later, { [field]: shown[field], stamps: { ...later.stamps, ...Object.fromEntries(columns.map((column) => [column, shown.stamps[column]])) } });
+  }
+  const logged = arrived.ownXp - (arrived.completedAt ? PROGRESS_UNIT : 0);
+  return { ...later, ownXp: logged + (later.completedAt ? PROGRESS_UNIT : 0) };
+}
+
+function isOlder(stamp: string | undefined, than: string | undefined) {
+  return than !== undefined && (stamp === undefined || Date.parse(stamp) < Date.parse(than));
 }
 
 function edgeKey(edge: { from: string; to: string }) {

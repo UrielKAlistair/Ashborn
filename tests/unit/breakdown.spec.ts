@@ -4,7 +4,7 @@ import { buildGraphModel } from "../../src/shared/graphModel";
 import type { GraphNode, Snapshot } from "../../src/shared/types";
 
 const node = (id: string, parentId: string | null, title: string, fields: Partial<GraphNode> = {}): GraphNode =>
-  ({ id, parentId, title, statWeights: {}, color: null, active: true, createdAt: "2026-10-20T00:00:00", completedAt: null, shelved: false, priority: null, ownXp: 0, lastActive: "", position: null, ...fields }) as GraphNode;
+  ({ id, parentId, title, statWeights: {}, color: null, active: true, createdAt: "2026-10-20T00:00:00", completedAt: null, shelved: false, priority: null, ownXp: 0, lastActive: "", stamps: {}, position: null, ...fields }) as GraphNode;
 
 function setup() {
   const snapshot = {
