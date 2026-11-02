@@ -14,7 +14,7 @@ test("start timer and passing over", async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
   for (const table of ["graph_nodes", "deadlines"]) await db.from(table).delete().not("id", "is", null);
-  const id = { quest: crypto.randomUUID(), draft: crypto.randomUUID(), email: crypto.randomUUID() };
+  const id = { quest: crypto.randomUUID(), draft: crypto.randomUUID(), email: crypto.randomUUID(), tidy: crypto.randomUUID() };
   const insert = async (rows: Array<Record<string, unknown>>) => {
     const { error: insertError } = await db.from("graph_nodes").insert(rows);
     if (insertError) throw insertError;
@@ -23,7 +23,7 @@ test("start timer and passing over", async () => {
   await insert([
     { id: id.draft, title: "Draft the intro", parent_id: id.quest },
     { id: id.email, title: "Email the professor", parent_id: id.quest },
-    { id: crypto.randomUUID(), title: "Tidy the notes", parent_id: id.quest },
+    { id: id.tidy, title: "Tidy the notes", parent_id: id.quest },
   ]);
 
   const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
@@ -91,6 +91,25 @@ test("start timer and passing over", async () => {
     await now.getByRole("button", { name: /^Add step/ }).click();
     await expect(now).toContainText("Write the first sentence");
     expect(await storage("ashborn-passed-over")).toEqual({});
+  });
+
+  await test.step("the notice at time up comes on any screen", async () => {
+    await page.evaluate(() => {
+      const said: string[] = [];
+      (window as unknown as { said: string[] }).said = said;
+      window.Notification = class {
+        static permission = "granted";
+        constructor(title: string) {
+          said.push(title);
+        }
+      } as unknown as typeof Notification;
+    });
+    await page.getByRole("button", { name: "Kitchen", exact: true }).click();
+    await page.evaluate((stepId) => {
+      localStorage.setItem("ashborn-now-timer", JSON.stringify({ stepId, startedAt: Date.now(), endsAt: Date.now() + 1500 }));
+      window.dispatchEvent(new Event("ashborn:now-timer"));
+    }, id.tidy);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { said: string[] }).said)).toEqual(["Time's up: Tidy the notes"]);
   });
 
   await app.close();

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 // What Now remembers on this device between sittings: on how many days each step was passed over, and the
 // timer on a started step. Where storage refuses (a private window), it is forgotten.
 
@@ -32,6 +34,32 @@ export function timerBox(stepId: string, minutes: number): StartTimer {
 export function onTimerChange(follow: () => void) {
   window.addEventListener(timerEvent, follow);
   return () => window.removeEventListener(timerEvent, follow);
+}
+
+// Says when a started step's time is up, whichever screen is open and even with the window hidden.
+// `titleOf` names the step, or gives nothing once it is done or gone, and then nothing is said.
+export function useTimeUpNotice(titleOf: (stepId: string) => string | undefined) {
+  const latestTitleOf = useRef(titleOf);
+  latestTitleOf.current = titleOf;
+  useEffect(() => {
+    let end = 0;
+    const schedule = () => {
+      window.clearTimeout(end);
+      const timer = storedTimer();
+      // A timer that ended while the app was closed has had its moment
+      if (!timer || timer.endsAt <= Date.now()) return;
+      end = window.setTimeout(() => {
+        const title = latestTitleOf.current(timer.stepId);
+        if (title && "Notification" in window && Notification.permission === "granted") new Notification(`Time's up: ${title}`, { body: "Done, or keep going?" });
+      }, timer.endsAt - Date.now());
+    };
+    schedule();
+    const stop = onTimerChange(schedule);
+    return () => {
+      stop();
+      window.clearTimeout(end);
+    };
+  }, []);
 }
 
 function read<T>(key: string, fallback: T): T {

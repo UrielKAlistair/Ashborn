@@ -45,9 +45,6 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   );
   const phone = usePhone();
   const mirror = useNowMirror();
-  // The notice at the end reads the steps as they are then
-  const latestSteps = useRef(steps);
-  latestSteps.current = steps;
   // The keys act on the step shown now, whichever render set them up
   const keys = useRef<Record<string, () => void>>({});
 
@@ -71,16 +68,13 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
     return () => onBoxed?.(false);
   }, [boxed, onBoxed]);
 
-  // A running timer ticks each second until it ends, and says so then, even with the window hidden.
-  // One that ended before this card mounted has had its notice.
+  // A running timer ticks each second until it ends (the app says when, see useTimeUpNotice)
   useEffect(() => {
     if (!timer || timer.endsAt <= Date.now()) return;
     const tick = window.setInterval(() => setClock(Date.now()), 1000);
     const end = window.setTimeout(() => {
       window.clearInterval(tick);
       setClock(Date.now());
-      const step = latestSteps.current.find(({ id }) => id === timer.stepId);
-      if (step && "Notification" in window && Notification.permission === "granted") new Notification(`Time's up: ${step.title}`, { body: "Done, or keep going?" });
     }, timer.endsAt - Date.now());
     return () => {
       window.clearInterval(tick);

@@ -18,7 +18,7 @@ import { AlarmsPage } from "./pages/AlarmsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
 import { onShowOnGraph } from "./pages/home/showOnGraph";
-import { START_MINUTES, storeTimer, timerBox } from "./pages/home/nowStore";
+import { START_MINUTES, storeTimer, timerBox, useTimeUpNotice } from "./pages/home/nowStore";
 import { PhoneHome } from "./pages/phone/PhoneHome";
 import { SignInPage } from "./pages/SignInPage";
 import { DEFAULT_DAY_START_HOUR, setDayStartHour } from "./shared/dates";
@@ -290,6 +290,10 @@ function App() {
   const latestActing = useRef(acting);
   latestActing.current = acting;
   useEffect(() => window.ashborn?.onNowDone((id) => void latestActing.current("updateNode", id, { done: true })), []);
+  useTimeUpNotice((stepId) => {
+    const step = dataRef.current.confirmed?.nodes.find(({ id }) => id === stepId);
+    return step && !step.completedAt ? step.title : undefined;
+  });
   // Start or Stop chosen there sets the step's timer, whichever screen is open
   useEffect(() => window.ashborn?.onNowTimer((id, start) => storeTimer(start ? timerBox(id, START_MINUTES) : null)), []);
 
