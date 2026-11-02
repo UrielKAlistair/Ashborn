@@ -14,7 +14,7 @@ import type { Alarm, Deadline, Recipe, RecipeReminder, Routine, Snapshot } from 
 const FIXTURES = "android/app/src/test/resources/schedule-fixtures.json";
 
 const routine = (overrides: Partial<Routine>): Routine => ({ id: "r", title: "Routine", cue: "", weekdays: [], time: null, alarm: "none", ...overrides });
-const deadline = (overrides: Partial<Deadline>): Deadline => ({ id: "d", title: "Deadline", dueDate: "2026-10-20", alarmTime: null, ...overrides });
+const deadline = (overrides: Partial<Deadline>): Deadline => ({ id: "d", nodeId: null, title: "Deadline", dueDate: "2026-10-20", alarmTime: null, ...overrides });
 const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", at: null, time: null, weekdays: [], enabled: true, ...overrides });
 const reminder = (id: string, offsetMinutes: number, anchorId: string | null = null): RecipeReminder => ({ id, label: id, offsetMinutes, anchorId });
 const recipe = (id: string, title: string, reminders: RecipeReminder[]): Recipe => ({ id, title, body: "", ingredients: [], reminders });

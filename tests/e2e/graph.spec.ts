@@ -131,7 +131,11 @@ test("home graph", async () => {
     await expect(edges()).toHaveCount(1);
   });
 
-  await test.step("Up next lists only ready steps", async () => {
+  await test.step("Up next holds nothing until a priority covers the steps, then only ready ones", async () => {
+    await expect(upNext()).not.toContainText("Backprop by hand");
+    await card("Deep Learning").getByTitle("Options").click();
+    await page.getByRole("radio", { name: "Priority 1" }).click();
+    await card("Deep Learning").getByTitle("Options").click();
     await expect(upNext()).toContainText("Backprop by hand");
     await expect(upNext()).toContainText("CNN basics");
     await expect(upNext()).not.toContainText("Implement an MLP");

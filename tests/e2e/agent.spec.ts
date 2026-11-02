@@ -63,8 +63,8 @@ test("agent tools", async () => {
     expect(body).toContain("# Deep Learning");
     expect(body).toContain("- [ ] Kernel trick");
     expect(body).toMatch(/Kernel trick \[[^\]]+\] \(after: PCA from scratch\)/);
-    expect(body.split("\n\n")[0]).toContain("PCA from scratch");
-    expect(body.split("\n\n")[0]).not.toContain("Kernel trick");
+    expect(body.split("\n\n")[1]).toContain("PCA from scratch");
+    expect(body.split("\n\n")[1]).not.toContain("Kernel trick");
   });
 
   await test.step("loops and moving a node inside itself are refused", async () => {
@@ -96,15 +96,27 @@ test("agent tools", async () => {
     expect(body).not.toMatch(/Kernel PCA \[[^\]]+\] P/);
   });
 
+  await test.step("a deadline links to a step: as it nears the step joins Up next, and unlinking takes it out", async () => {
+    const soon = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    expect((await call("add_deadline", { title: "Soon", due_date: soon, node_id: id("kernel") })).ok).toBe(true);
+    let { body } = await call("overview");
+    expect(body.split("\n\n")[0]).toMatch(/- P1 Kernel trick/);
+    expect(body).toContain(", for Kernel trick: due");
+    const deadlineId = /- Soon \[([^\]]+)\]/.exec(body)![1];
+    expect((await call("link_deadline", { id: deadlineId, node_id: null })).ok).toBe(true);
+    ({ body } = await call("overview"));
+    expect(body.split("\n\n")[0]).not.toContain("Kernel trick");
+  });
+
   await test.step("a shelved step is marked, and nothing inside it is up next until it is unshelved", async () => {
     expect((await call("shelve", { ids: [id("kpca")] })).ok).toBe(true);
     let { body } = await call("overview", { quest_id: id("dl") });
     expect(body).toMatch(/Kernel PCA \[[^\]]+\] \(shelved\)/);
-    expect(body.split("\n\n")[0]).not.toContain("Kernel trick");
+    expect(body.split("\n\n")[1]).not.toContain("Kernel trick");
     expect((await call("unshelve", { ids: [id("kpca")] })).ok).toBe(true);
     ({ body } = await call("overview", { quest_id: id("dl") }));
     expect(body).not.toContain("(shelved)");
-    expect(body.split("\n\n")[0]).toContain("Kernel trick");
+    expect(body.split("\n\n")[1]).toContain("Kernel trick");
   });
 
   await test.step("finished before today: a box is one line, a quest moves to Completed, and asking for it shows it whole", async () => {

@@ -11,6 +11,7 @@ import { addDays, currentTimeZone, daysBetween, setDayStartHour, today, week, we
 import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
 import { byTime, nextOccurrence } from "../src/shared/schedule";
+import { derivePriorities, prioritisedSteps } from "../src/shared/priority";
 import { mealSlots, questColors, stockUnits, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
 // The tools, acting as whoever `db` is signed in as. `blocked` gives a reason every tool refuses
@@ -94,7 +95,8 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
   register(
     "set_priority",
     {
-      description: "Sets the priority of quests or steps: 1 is the most urgent, 4 the least, null removes it.",
+      description:
+        "Sets the priority of quests or steps: 1 is the most urgent, 4 the least, null removes it. It covers the node's chain: its open prerequisites and the steps inside. Only ready steps a priority covers show in the user's to-do.",
       inputSchema: { ids, priority: z.number().int().min(1).max(4).nullable() },
     },
     async ({ ids, priority }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { priority: priority as Priority | null })), "Prioritised"),
@@ -187,11 +189,21 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
   register(
     "add_deadline",
     {
-      description: "Adds a dated obligation, optionally with an alarm at a time on its due day (rings on the phone).",
-      inputSchema: { title: z.string().min(1), due_date: z.string().describe("YYYY-MM-DD"), alarm_time: clock.optional() },
+      description:
+        "Adds a dated obligation, optionally with an alarm at a time on its due day (rings on the phone). Linked to a quest or step (`node_id`), it raises that chain's priority as it nears: within 14 days P4, 7 P3, 3 P2, 1 P1.",
+      inputSchema: { title: z.string().min(1), due_date: z.string().describe("YYYY-MM-DD"), alarm_time: clock.optional(), node_id: id.optional() },
     },
-    async ({ title, due_date, alarm_time }) =>
-      run([() => api.createDeadline({ id: crypto.randomUUID(), title, dueDate: due_date, alarmTime: alarm_time ?? null })], "Added deadline"),
+    async ({ title, due_date, alarm_time, node_id }) =>
+      run([() => api.createDeadline({ id: crypto.randomUUID(), title, dueDate: due_date, alarmTime: alarm_time ?? null, nodeId: node_id ?? null })], "Added deadline"),
+  );
+
+  register(
+    "link_deadline",
+    {
+      description: "Links a deadline to a quest or step, whose chain's priority it raises as it nears; null unlinks it.",
+      inputSchema: { id, node_id: id.nullable() },
+    },
+    async ({ id, node_id }) => run([() => api.linkDeadline(id, node_id)], "Linked deadline"),
   );
 
   register(
@@ -536,7 +548,11 @@ function describe(snapshot: Snapshot, questId?: string) {
 
   const shownIds = new Set(shown.map((quest) => quest.id));
   const ready = snapshot.nodes.filter((node) => node.parentId && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id));
-  lines.push("Up next (ready to do now):", ...(ready.length ? ready.map((node) => `- ${node.title} [${node.id}]`) : ["- nothing"]), "");
+  const priorities = derivePriorities(model, snapshot, today());
+  const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) => steps.map((node) => `- P${priority} ${node.title} [${node.id}]`));
+  const unprioritised = ready.filter((node) => !priorities.effective.has(node.id)).map((node) => `- ${node.title} [${node.id}]`);
+  lines.push("Up next (the user's to-do: ready to do now, with a priority):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
+  lines.push("Also ready, no priority (not on the user's to-do):", ...(unprioritised.length ? unprioritised : ["- nothing"]), "");
 
   for (const quest of shown) {
     const level = nodeLevel(model.totalXp.get(quest.id) ?? 0);
@@ -575,7 +591,7 @@ function describe(snapshot: Snapshot, questId?: string) {
       ...(snapshot.deadlines.length
         ? snapshot.deadlines.map(
             (deadline) =>
-              `- ${deadline.title}: due ${deadline.dueDate} (in ${daysBetween(today(), deadline.dueDate)} days)${deadline.alarmTime ? `, alarm at ${deadline.alarmTime}` : ""}`,
+              `- ${deadline.title} [${deadline.id}]${deadline.nodeId ? `, for ${model.byId.get(deadline.nodeId)?.title}` : ""}: due ${deadline.dueDate} (in ${daysBetween(today(), deadline.dueDate)} days)${deadline.alarmTime ? `, alarm at ${deadline.alarmTime}` : ""}`,
           )
         : ["- none"]),
       "",

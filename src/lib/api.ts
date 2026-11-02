@@ -53,7 +53,7 @@ export type NodeRow = {
 };
 export type RoutineRow = { id: string; title: string; cue: string; weekdays: Weekday[]; time: string | null; alarm: AlarmKind };
 export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean };
-export type DeadlineRow = { id: string; title: string; due_date: string; done_at: string | null; alarm_time: string | null };
+export type DeadlineRow = { id: string; title: string; due_date: string; done_at: string | null; alarm_time: string | null; node_id: string | null };
 type StockRow = { id: string; name: string; unit: StockUnit; target: number; on_hand: number; read_at: string | null };
 type RecipeRow = {
   id: string;
@@ -196,9 +196,16 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { routineCheck: { routineId, date, checked: (result.data as { checked: boolean }).checked } };
     },
 
-    async createDeadline({ id, title, dueDate, alarmTime }) {
-      must(await db.from("deadlines").upsert({ id, title, due_date: dueDate, alarm_time: alarmTime }, { onConflict: "id", ignoreDuplicates: true }));
+    async createDeadline({ id, title, dueDate, alarmTime, nodeId }) {
+      must(await db.from("deadlines").upsert({ id, title, due_date: dueDate, alarm_time: alarmTime, node_id: nodeId }, { onConflict: "id", ignoreDuplicates: true }));
       return { deadlines: [toDeadline(must(await db.from("deadlines").select().eq("id", id).single()))] };
+    },
+
+    async linkDeadline(id, nodeId) {
+      const fields = { node_id: nodeId };
+      const row = must(await db.from("deadlines").update({ ...fields, changed_at: stamps(fields, clock().toISOString()) }).eq("id", id).select().maybeSingle());
+      if (!row) throw new Error("This deadline was deleted on another device.");
+      return { deadlines: [toDeadline(row as DeadlineRow)] };
     },
 
     async completeDeadline(id) {
@@ -335,6 +342,7 @@ const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string
   deleteRoutine: (id) => [`routine:${id}`],
   setRoutineCheck: (routineId, date) => [`routine:${routineId}@${date}`, `routine:${routineId}`],
   createDeadline: (deadline) => [`deadline:${deadline.id}`],
+  linkDeadline: (id) => [`deadline:${id}`],
   completeDeadline: (id) => [`deadline:${id}`],
   deleteDeadline: (id) => [`deadline:${id}`],
   createAlarm: (alarm) => [`alarm:${alarm.id}`],
@@ -481,7 +489,7 @@ export function toRoutine(row: RoutineRow): Routine {
 }
 
 export function toDeadline(row: DeadlineRow): Deadline {
-  return { id: row.id, title: row.title, dueDate: row.due_date, alarmTime: toClock(row.alarm_time) };
+  return { id: row.id, title: row.title, dueDate: row.due_date, alarmTime: toClock(row.alarm_time), nodeId: row.node_id };
 }
 
 export function toAlarm(row: AlarmRow): Alarm {

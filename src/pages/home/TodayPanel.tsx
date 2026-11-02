@@ -1,7 +1,8 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
-import { questOf, type GraphModel } from "../../shared/graphModel";
+import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
+import { derivePriorities, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
 import type { AlarmKind, Snapshot, Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
@@ -24,10 +25,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const [dayStartOpen, setDayStartOpen] = useState(false);
   const weekday = weekdayOf(date);
 
-  // Steps you can do now: in a shown quest, nothing unfinished before or inside them
-  const readySteps = snapshot.nodes.filter(
-    (node) => node.parentId && model.ready.has(node.id) && questOf(model.byId, node).active,
-  );
+  // Steps you can do now, of the chains that have a priority
+  const todo = prioritisedSteps(model, snapshot, derivePriorities(model, snapshot, date));
 
   // The count is from the last change; once the next day starts it belongs to yesterday until the next one
   const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
@@ -74,22 +73,27 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       ) : null}
 
       <Section title="Up next">
-        {readySteps.length === 0 ? <Empty>Add steps to a quest and the ones you can start show here.</Empty> : null}
-        {readySteps.map((step) => {
-          const quest = questOf(model.byId, step);
-          return (
-            <div key={step.id} className="flex items-start gap-3 rounded-xl border border-white/8 bg-night/50 px-3 py-2">
-              <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs leading-snug text-white/85">{step.title}</p>
-                <p className="mt-1 truncate text-[10px] tracking-[0.12em] text-white/40">
-                  {model.byId.get(step.parentId!)?.title}
-                  {quest.id !== step.parentId ? ` · ${quest.title}` : ""}
-                </p>
-              </div>
-            </div>
-          );
-        })}
+        {todo.length === 0 ? <Empty>Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here.</Empty> : null}
+        {todo.map(({ priority, steps }) => (
+          <div key={priority} className="space-y-2">
+            <p className="text-[10px] tracking-[0.14em] text-white/45">P{priority}</p>
+            {steps.map((step) => {
+              const quest = questOf(model.byId, step);
+              return (
+                <div key={step.id} className="flex items-start gap-3 rounded-xl border border-white/8 bg-night/50 px-3 py-2">
+                  <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs leading-snug text-white/85">{step.title}</p>
+                    <p className="mt-1 truncate text-[10px] tracking-[0.12em] text-white/40">
+                      {model.byId.get(step.parentId!)?.title}
+                      {quest.id !== step.parentId ? ` · ${quest.title}` : ""}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </Section>
 
       <Section title="Routines" action={<RoutineForm act={act} />}>
@@ -115,7 +119,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         )}
       </Section>
 
-      <Section title="Deadlines" action={<DeadlineForm act={act} />}>
+      <Section title="Deadlines" action={<DeadlineForm act={act} model={model} />}>
         {deadlines.length === 0 ? (
           <Empty>Nothing due in the next {DEADLINE_HORIZON_DAYS} days.</Empty>
         ) : (
@@ -130,6 +134,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     {days < 0 ? `${-days}d overdue` : days === 0 ? "today" : `in ${days}d`} · {deadline.dueDate}
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
+                  <NodePicker model={model} value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="mt-1 w-full truncate bg-transparent text-[10px] tracking-[0.1em] text-white/40" />
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
@@ -192,17 +197,39 @@ function RoutineForm({ act }: { act: Act }) {
   );
 }
 
-function DeadlineForm({ act }: { act: Act }) {
+// A choice of open quests and steps, nested as on the graph, or none
+function NodePicker({ model, value, onChange, className }: { model: GraphModel; value: string | null; onChange: (nodeId: string | null) => void; className: string }) {
+  const options = (parentId: string | null, depth: number): ReactNode[] =>
+    (model.children.get(parentId) ?? [])
+      .filter((node) => !isDone(node) && (parentId || node.active))
+      .flatMap((node) => [
+        <option key={node.id} value={node.id}>
+          {"\u00a0\u00a0".repeat(depth)}
+          {node.title}
+        </option>,
+        ...options(node.id, depth + 1),
+      ]);
+  return (
+    <select aria-label="Deadline for" value={value ?? ""} onChange={(event) => onChange(event.target.value || null)} className={className}>
+      <option value="">Not linked to a quest</option>
+      {options(null, 0)}
+    </select>
+  );
+}
+
+function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState(today());
   const [alarmTime, setAlarmTime] = useState("");
+  const [nodeId, setNodeId] = useState<string | null>(null);
 
   const submit = () => {
     if (!title.trim() || !dueDate) return;
-    void act("createDeadline", { id: crypto.randomUUID(), title: title.trim(), dueDate, alarmTime: alarmTime || null });
+    void act("createDeadline", { id: crypto.randomUUID(), title: title.trim(), dueDate, alarmTime: alarmTime || null, nodeId });
     setTitle("");
     setAlarmTime("");
+    setNodeId(null);
     setOpen(false);
   };
 
@@ -215,6 +242,7 @@ function DeadlineForm({ act }: { act: Act }) {
         <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
         <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} title="Alarm on the day (optional)" className={`${fieldClass} w-24 [color-scheme:dark]`} />
       </div>
+      <NodePicker model={model} value={nodeId} onChange={setNodeId} className={fieldClass} />
       <FormButtons onCancel={() => setOpen(false)} onSubmit={submit} />
     </div>
   );

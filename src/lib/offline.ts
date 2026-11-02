@@ -93,6 +93,7 @@ const preview: Record<Mutation, Preview> = {
   deleteRoutine: (_snapshot, [id]) => ({ removedRoutineIds: [id] }),
   setRoutineCheck: (_snapshot, [routineId, date, checked]) => ({ routineCheck: { routineId, date, checked } }),
   createDeadline: (_snapshot, [deadline]) => ({ deadlines: [deadline as Deadline] }),
+  linkDeadline: (snapshot, [id, nodeId]) => ({ deadlines: [{ ...existing(snapshot.deadlines, id, "This deadline"), nodeId: nodeId as string | null }] }),
   completeDeadline: (_snapshot, [id]) => ({ removedDeadlineIds: [id] }),
   deleteDeadline: (_snapshot, [id]) => ({ removedDeadlineIds: [id] }),
   createAlarm: (_snapshot, [alarm]) => ({ alarms: [alarm as Alarm] }),
