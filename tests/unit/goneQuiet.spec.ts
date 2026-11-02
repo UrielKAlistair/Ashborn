@@ -53,6 +53,10 @@ test("six days isn't quiet; the threshold is seven", () => {
   expect(quiet([node("q", null, daysAgo(7)), node("a", "q", daysAgo(7))]).map(([id]) => id)).toEqual(["q"]);
 });
 
+test("a box that groups steps isn't counted as an open step", () => {
+  expect(quiet([node("q", null, daysAgo(30)), node("box", "q", daysAgo(30)), node("a", "box", daysAgo(30)), node("b", "box", daysAgo(30))])).toEqual([["q", 30, 2]]);
+});
+
 test("activity anywhere inside keeps a quest alive, however deep", () => {
   expect(quiet([node("q", null, daysAgo(30)), node("box", "q", daysAgo(30)), node("deep", "box", daysAgo(1))])).toEqual([]);
   expect(quiet([node("q", null, daysAgo(1)), node("a", "q", daysAgo(30))])).toEqual([]);

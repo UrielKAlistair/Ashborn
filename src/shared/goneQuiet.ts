@@ -16,7 +16,8 @@ export function goneQuiet(model: GraphModel, snapshot: Snapshot, { effective }: 
   return quests
     .flatMap((quest) => {
       const inside = stepsInside(model, quest.id);
-      const open = inside.filter((step) => !isDone(step) && !model.shelved.has(step.id));
+      // Steps only: a box that groups steps is not one more thing to do
+      const open = inside.filter((step) => !model.children.has(step.id) && !isDone(step) && !model.shelved.has(step.id));
       if (open.length === 0 || open.some((step) => model.ready.has(step.id) && effective.has(step.id))) return [];
       const latest = Math.max(...[quest, ...inside].map((node) => Date.parse(node.lastActive)));
       const days = daysBetween(dayOf(new Date(latest)), date);
