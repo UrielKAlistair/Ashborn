@@ -90,7 +90,8 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const settings = readSettings(db);
       const date = settings.then(({ dayStartHour }) => dayOf(new Date(), dayStartHour));
       const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, progressToday, kitchen, settingsRow] = await Promise.all([
-        nodes().select().order("created_at"),
+        // A second key for rows made at the same moment: without one, an update can move a row among them
+        nodes().select().order("created_at").order("id"),
         db.from("graph_edges").select("from_id, to_id"),
         db.from("routines").select().order("created_at"),
         date.then((day) => db.from("routine_checks").select("routine_id, date").eq("date", day).eq("checked", true)),
@@ -586,15 +587,6 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
   };
 
   return (Object.keys(next) as (keyof Snapshot)[]).every((key) => next[key] === snapshot[key]) ? snapshot : next;
-}
-
-// A new read with its nodes in the order on screen, new ones after: rows with equal creation times
-// come back in no fixed order, which would change which step is next without anything having changed
-export function keepNodeOrder(read: Snapshot, shown: Snapshot): Snapshot {
-  const byId = new Map(read.nodes.map((node) => [node.id, node]));
-  const kept = shown.nodes.flatMap((node) => byId.get(node.id) ?? []);
-  const known = new Set(shown.nodes.map((node) => node.id));
-  return { ...read, nodes: [...kept, ...read.nodes.filter((node) => !known.has(node.id))] };
 }
 
 function edgeKey(edge: { from: string; to: string }) {

@@ -4,7 +4,7 @@ import { Navbar } from "./components/Navbar";
 import { WindowControls } from "./components/WindowControls";
 import { PhoneTabs } from "./components/PhoneTabs";
 import { fixPermission, useAlarmPermissions, useAlarmSchedule, useRingingAlarm } from "./lib/alarms";
-import { applyDelta, createApi, keepNodeOrder } from "./lib/api";
+import { applyDelta, createApi } from "./lib/api";
 import { useBackupSchedule } from "./lib/backupSchedule";
 import { api, db } from "./lib/client";
 import { watchChanges } from "./lib/live";
@@ -40,6 +40,8 @@ const routesInAddress = window.location.protocol !== "file:";
 const OFFLINE_RETRY_MS = 30_000;
 // Hidden for longer than this (a phone asleep, say), the app reads its data again on coming back
 const WAKE_READ_AFTER_MS = 30_000;
+// A read again that failed is tried once more after this, before the app calls itself offline
+const READ_RETRY_MS = 3000;
 // How long the data must stay unchanged before it is saved on the device
 const CACHE_SETTLE_MS = 1000;
 
@@ -101,7 +103,8 @@ function App() {
     let loadAgain = false;
     let arrived: Delta[] = [];
     const replay = (snapshot: Snapshot) => arrived.reduce(applyDelta, snapshot);
-    const load = async () => {
+    let readRetry = 0;
+    const load = async (quietly = false) => {
       if (loading) return;
       loading = true;
       arrived = [];
@@ -110,15 +113,21 @@ function App() {
         const refused = await sendQueue((at) => createApi(db, () => at));
         const loaded = replay(await api.getSnapshot(userId));
         // The same data keeps the same objects, so reading it again draws nothing
-        confirm((current) => {
-          const next = current ? keepNodeOrder(loaded, current) : loaded;
-          return JSON.stringify(current) === JSON.stringify(next) ? current : next;
-        });
+        confirm((current) => (JSON.stringify(current) === JSON.stringify(loaded) ? current : loaded));
         setOffline(false);
-        setQueued(0);
+        // Queued after the queue was sent, while the read ran: the next load sends it
+        if (queuedCount() > 0) loadAgain = true;
+        setQueued(queuedCount());
         setError(refused.length > 0 ? `Not saved from offline: ${refused.join("; ")}` : null);
       } catch (reason) {
         if (!isConnectionError(reason)) return setError((reason as Error).message);
+        // A phone just woken has no radio yet: what is on screen stays until a second try says more
+        if (quietly && navigator.onLine && !offlineRef.current && dataRef.current.confirmed) {
+          confirm((current) => current && replay(current));
+          window.clearTimeout(readRetry);
+          readRetry = window.setTimeout(() => void load(), READ_RETRY_MS);
+          return;
+        }
         const fallback = dataRef.current.confirmed ?? loadCachedSnapshot(userId);
         if (!fallback) return setError("No connection, and no data saved on this device yet.");
         confirm(() => replay(fallback));
@@ -132,27 +141,28 @@ function App() {
         arrived = [];
         if (loadAgain) {
           loadAgain = false;
-          void load();
+          void load(true);
         }
       }
     };
     const retry = () => {
       if (offlineRef.current && document.visibilityState === "visible") void load();
     };
+    const loadNow = () => void load();
 
     // A load under way may have read too early, so it runs again after
     const readAgain = () => {
       if (loading) loadAgain = true;
-      else void load();
+      else void load(true);
     };
     let hiddenAt = 0;
     const readOnWaking = () => {
       if (document.visibilityState === "hidden") hiddenAt = Date.now();
-      else if (hiddenAt && Date.now() - hiddenAt > WAKE_READ_AFTER_MS) readAgain();
+      else if (!offlineRef.current && hiddenAt && Date.now() - hiddenAt > WAKE_READ_AFTER_MS) readAgain();
     };
 
     void load();
-    window.addEventListener("online", load);
+    window.addEventListener("online", loadNow);
     document.addEventListener("visibilitychange", retry);
     document.addEventListener("visibilitychange", readOnWaking);
     const retryTimer = window.setInterval(retry, OFFLINE_RETRY_MS);
@@ -162,10 +172,11 @@ function App() {
     }, readAgain);
 
     return () => {
-      window.removeEventListener("online", load);
+      window.removeEventListener("online", loadNow);
       document.removeEventListener("visibilitychange", retry);
       document.removeEventListener("visibilitychange", readOnWaking);
       window.clearInterval(retryTimer);
+      window.clearTimeout(readRetry);
       stopWatching();
     };
   }, [userId]);
@@ -209,7 +220,7 @@ function App() {
   const act = useCallback<Act>(
     async (name, ...args) => {
       // The change is stamped when the user makes it, not when it is sent or queued
-      const made = new Date();
+      const made = changeMoment();
       const change: Pending = { name, args: withIds(name, args), at: made.toISOString() };
       // Offline, every change waits for the connection; one that could never be accepted is
       // refused now, with the reason
@@ -224,6 +235,7 @@ function App() {
           setError((reason as Error).message);
           return false;
         }
+        loadsRunning.current.forEach((arrived) => arrived.push(delta));
         confirm((current) => current && applyDelta(current, delta), change);
         setQueued(queuedCount());
         setError(null);
@@ -411,6 +423,13 @@ function App() {
       ) : null}
     </main>
   );
+}
+
+// Now, but always after the last change: steps added together keep their order by when they were made
+let lastChange = 0;
+function changeMoment() {
+  lastChange = Math.max(Date.now(), lastChange + 1);
+  return new Date(lastChange);
 }
 
 function withPreview(shown: Snapshot, change: Pending): Snapshot {
