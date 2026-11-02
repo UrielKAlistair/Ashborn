@@ -187,3 +187,23 @@ body {
 :root[data-priority-look="a"] .react-flow__node-quest .priority-mark {
   background: transparent !important;
 }
+
+/* Progress shows as it happens: bars grow into their new length, a tick pops once */
+.progress-fill {
+  transition: width 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tick-done {
+  animation: tick-pop 260ms ease-out;
+}
+
+@keyframes tick-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill { transition: none; }
+  .tick-done { animation: none; }
+}

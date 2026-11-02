@@ -597,7 +597,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
             {node.shelved ? <span className="ml-2 font-sans text-ink/60">· Shelved</span> : null}
           </span>
           <div className="mt-1 h-1 overflow-hidden rounded-full bg-ink/8">
-            <div className={`h-full rounded-full ${palette.bar}`} style={{ width: `${level.percent}%` }} />
+            <div className={`progress-fill h-full rounded-full ${palette.bar}`} style={{ width: `${level.percent}%` }} />
           </div>
         </div>
       </div>

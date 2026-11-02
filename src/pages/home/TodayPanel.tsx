@@ -33,6 +33,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
 
   const routines = snapshot.routines.filter((routine) => routine.weekdays.includes(weekday)).sort(byTime);
+  // The time column only when some routine today has a time
+  const timed = routines.some((routine) => routine.time);
   const checked = new Set(
     snapshot.routineChecks.filter((check) => check.date === date).map((check) => check.routineId),
   );
@@ -116,7 +118,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           routines.map((routine) => (
             <div key={routine.id} className={`group ${rowClass}`}>
               <Tick done={checked.has(routine.id)} onClick={() => void act("setRoutineCheck", routine.id, date, !checked.has(routine.id))} className="mt-0.5" />
-              <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-ink/45 tabular-nums">{routine.time}</span>
+              {timed ? <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-ink/45 tabular-nums">{routine.time}</span> : null}
               <div className="min-w-0 flex-1">
                 <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-ink/40 line-through decoration-ink/25" : "text-ink/90"}`}>{routine.title}</p>
                 {routine.alarm !== "none" || routine.cue ? (

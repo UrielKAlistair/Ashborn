@@ -9,6 +9,8 @@ import { phoneWindow } from "../phoneWindow";
 // steps, links, ticking, hiding, XP, renaming, deleting, live changes from elsewhere, and state
 // surviving a reload.
 
+const SETTLE_LIMIT_MS = 10_000;
+
 // The same account the app signs into, used to reset its data and to make changes "elsewhere"
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
@@ -52,10 +54,13 @@ const addInput = () => page.getByPlaceholder("Step name, Enter to add");
 const windowVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible());
 
 // Where a box or dot is once the layout has left it still for 600 ms: after a reload the layout
-// worker starts cold, so a shorter pause can come before it has placed anything
+// worker starts cold, so a shorter pause can come before it has placed anything. A box that never
+// settles fails the step here rather than running on to the test's timeout.
 async function settledBox(handle: Locator) {
+  const deadline = Date.now() + SETTLE_LIMIT_MS;
   let previous = await handle.boundingBox();
   for (let still = 0; still < 4; ) {
+    if (Date.now() > deadline) throw new Error(`Not still after ${SETTLE_LIMIT_MS} ms: ${handle}, last box ${JSON.stringify(previous)}`);
     await page.waitForTimeout(150);
     const box = await handle.boundingBox();
     const same = box && previous && box.x === previous.x && box.y === previous.y && box.width === previous.width && box.height === previous.height;

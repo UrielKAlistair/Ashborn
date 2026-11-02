@@ -1,5 +1,14 @@
+import { useEffect, useRef } from "react";
+
 // The round done/not-done toggle used for steps, routines and deadlines
 export function Tick({ done, onClick, className = "" }: { done: boolean; onClick: () => void; className?: string }) {
+  // Pops only when it turns done here, not when a done tick first appears
+  const wasDone = useRef(done);
+  const justDone = done && !wasDone.current;
+  useEffect(() => {
+    wasDone.current = done;
+  }, [done]);
+
   return (
     <button
       type="button"
@@ -9,7 +18,7 @@ export function Tick({ done, onClick, className = "" }: { done: boolean; onClick
       }}
       title={done ? "Mark not done" : "Mark done"}
       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors ${
-        done ? "border-transparent bg-emerald-400 text-canvas" : "border-ink/30 text-transparent hover:border-ember hover:text-ember/70"
+        done ? `${justDone ? "tick-done " : ""}border-transparent bg-emerald-400 text-canvas` : "border-ink/30 text-transparent hover:border-ember hover:text-ember/70"
       } ${className}`}
     >
       <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

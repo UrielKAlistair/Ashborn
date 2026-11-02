@@ -33,7 +33,7 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
         Level <span className="text-ember">{overall.level}</span>
       </p>
       <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-ink/8">
-        <div className="h-full rounded-full bg-ember" style={{ width: `${overall.percent}%` }} />
+        <div className="progress-fill h-full rounded-full bg-ember" style={{ width: `${overall.percent}%` }} />
       </div>
     </div>
   );
@@ -49,7 +49,7 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
               <dd className={`font-mono text-ink/90 ${card ? "text-base" : "text-[13px]"}`}>{level}</dd>
             </div>
             <div className={`mt-1 overflow-hidden rounded-full bg-ink/8 ${card ? "h-1.5" : "h-1"}`}>
-              <div className={`h-full rounded-full ${palettes[statColors[key]].bar}`} style={{ width: `${percent}%` }} />
+              <div className={`progress-fill h-full rounded-full ${palettes[statColors[key]].bar}`} style={{ width: `${percent}%` }} />
             </div>
           </div>
         );
