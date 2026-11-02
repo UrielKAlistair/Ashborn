@@ -7,6 +7,8 @@ import os from "node:os";
 const isDev = !app.isPackaged;
 // Started at login (see scripts/install-appimage.sh): only the tray icon until it is clicked
 const startHidden = process.argv.includes("--hidden");
+// Launched with --capture (GNOME can bind a key to that command): the capture field, ready for a thought
+const startCapture = process.argv.includes("--capture");
 // `npm run phone`: open straight in the phone view, for checking the phone layout
 const startPhone = process.argv.includes("--phone");
 // The phone view's window size: narrow enough for the phone layout (under 640 px wide)
@@ -245,10 +247,13 @@ function backupFiles() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", showMainWindow);
+  // A second launch shows this one; with --capture, at the capture field. On a Wayland desktop that is
+  // the dependable way to a desktop-wide key, since the key grab below hears keys only over X11 windows.
+  app.on("second-instance", (_event, argv) => (argv.includes("--capture") ? captureThought() : showMainWindow()));
   app.whenReady().then(() => {
     createWindow();
     createTray();
+    if (startCapture) mainWindow?.webContents.once("did-finish-load", captureThought);
     // From anywhere on the desktop: the window, with its capture field ready for a thought. A key
     // another app already holds is left to it.
     globalShortcut.register("CommandOrControl+Alt+Space", captureThought);
