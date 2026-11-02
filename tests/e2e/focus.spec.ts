@@ -102,6 +102,7 @@ test("focus", async () => {
   });
 
   await test.step("Done ticks it, without moving the card; Done today can untick it", async () => {
+    await expect(page.getByText("No steps of progress yet today")).toBeVisible();
     const before = (await now.boundingBox())!.y;
     await now.getByRole("button", { name: "Done" }).click();
     await expect(now).toContainText("Read section 2");

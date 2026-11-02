@@ -106,8 +106,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           </select>
         </label>
       ) : null}
-      {/* Held in place before the first tick too, so the cards below don't shift under the finger */}
-      <div className={`-mt-5 px-1 ${progressToday > 0 ? "" : "invisible"}`} aria-hidden={progressToday === 0}>
+      {/* There before the first tick too, so the cards below don't shift under the finger */}
+      <div className="-mt-5 px-1">
         <button
           type="button"
           onClick={() => setDoneOpen(!doneOpen)}
@@ -115,8 +115,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           disabled={doneToday.length === 0}
           className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85 pointer-coarse:min-h-8"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-ember" />
-          {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
+          <span className={`h-1.5 w-1.5 rounded-full ${progressToday > 0 ? "bg-ember" : "border border-muted"}`} />
+          {progressToday === 0 ? "No steps of progress yet today" : `${progressToday} ${progressToday === 1 ? "step" : "steps"} of progress today`}
           {doneToday.length > 0 ? <span className={`inline-block transition-transform ${doneOpen ? "rotate-90" : ""}`}>›</span> : null}
         </button>
         {doneOpen ? (
