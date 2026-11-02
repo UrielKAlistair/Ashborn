@@ -136,13 +136,11 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     (channel, { table, handle }) => channel.on("postgres_changes", { event: "*", schema: "public", table }, handle),
     db.channel("ashborn-changes"),
   );
-  // Changes made before the server is listening are never sent, on the first join or a rejoin after a
-  // dropped connection, so each time it starts listening the data is read again. That moment is this
-  // message, which comes up to 1.5 s after subscribe's own SUBSCRIBED.
-  channel.on("system", {}, (message: { extension?: string; status?: string }) => {
-    if (message.extension === "postgres_changes" && message.status === "ok") onSubscribed();
+  // Changes made before the channel is listening are never sent, on the first join or a rejoin after
+  // a dropped connection, so each time it starts listening the data is read again
+  channel.subscribe((status) => {
+    if (status === "SUBSCRIBED") onSubscribed();
   });
-  channel.subscribe();
 
   return () => {
     clearTimeout(kitchenTimer);
