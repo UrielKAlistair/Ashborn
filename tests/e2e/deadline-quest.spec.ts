@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { addDays, today } from "../../src/shared/dates";
 
-// A deadline linked to nothing raises nothing. "Make it a quest" makes one of the same name and
-// links it, so the deadline's priority reaches Now, which asks for a first step.
+// With nothing prioritised, Ready starts open. A deadline linked to nothing raises nothing; "Make it a
+// quest" makes one of the same name and links it, so the deadline's priority reaches Now, which asks
+// for a first step.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
@@ -16,6 +17,11 @@ test("make a deadline a quest", async () => {
   for (const table of ["graph_nodes", "deadlines"]) await db.from(table).delete().not("id", "is", null);
   const { error: insertError } = await db.from("deadlines").insert([{ title: "Judge the science fest", due_date: addDays(today(), 2), node_id: null }]);
   if (insertError) throw insertError;
+  const quest = crypto.randomUUID();
+  const { error: nodeError } = await db.from("graph_nodes").insert([{ id: quest, title: "Reading", parent_id: null }]);
+  if (nodeError) throw nodeError;
+  const { error: stepError } = await db.from("graph_nodes").insert([{ id: crypto.randomUUID(), title: "Read chapter 1", parent_id: quest }]);
+  if (stepError) throw stepError;
 
   const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
   const env = { ...process.env } as Record<string, string>;
@@ -31,6 +37,8 @@ test("make a deadline a quest", async () => {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(deadlines).toContainText("Judge the science fest", { timeout: 15_000 });
   await expect(now).toHaveCount(0);
+  // With nothing prioritised, Ready is open from the start: giving a priority is the way to a Now
+  await expect(page.getByRole("group", { name: "Priority for Read chapter 1" })).toBeVisible();
 
   await deadlines.getByRole("button", { name: "Make it a quest" }).click();
   await expect(now).toContainText("Judge the science fest");

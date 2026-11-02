@@ -187,7 +187,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
             ) : null}
           </Section>
 
-          {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} /> : null}
+          {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} openAtFirst={todoCount === 0} /> : null}
           <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} />
         </>
       )}
@@ -269,8 +269,9 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 
 // Ready steps without a priority, folded away by default; a P chip gives one its priority, which
 // moves it into Up next
-function Unprioritised({ steps, model, act }: { steps: GraphNode[]; model: GraphModel; act: Act }) {
-  const [open, setOpen] = useState(false);
+// Open from the start when nothing has a priority, since giving one is then the only way to a Now
+function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[]; model: GraphModel; act: Act; openAtFirst: boolean }) {
+  const [open, setOpen] = useState(openAtFirst);
   const oneTap = useOneTap();
   return (
     <div className="-mt-3">
