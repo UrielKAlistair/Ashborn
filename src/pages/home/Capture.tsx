@@ -24,6 +24,8 @@ export function requestCapture() {
 export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapshot; model: GraphModel; act: Act; onSorting?: (open: boolean) => void }) {
   const [draft, setDraft] = useState("");
   const [sorting, setSorting] = useState(false);
+  // Sorting the last item away says so for a moment, so the card's going reads as done
+  const [cleared, setCleared] = useState(false);
   const field = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,8 +44,15 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
 
   // Sorting the last item away ends it; the next capture does not reopen the card
   useEffect(() => {
-    if (waiting.length === 0) setSorting(false);
+    if (waiting.length > 0) return;
+    if (sorting) setCleared(true);
+    setSorting(false);
   }, [waiting.length]);
+  useEffect(() => {
+    if (!cleared) return;
+    const hide = window.setTimeout(() => setCleared(false), 2500);
+    return () => window.clearTimeout(hide);
+  }, [cleared]);
 
   const sortShown = sorting && waiting.length > 0;
   useEffect(() => onSorting?.(sortShown), [sortShown, onSorting]);
@@ -92,6 +101,10 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
         <MoveTargets.Provider value={moveTargets}>
           <SortInbox items={waiting} snapshot={snapshot} model={model} act={act} onClose={() => setSorting(false)} />
         </MoveTargets.Provider>
+      ) : cleared ? (
+        <p role="status" className="-mt-3 px-1 text-[12.5px] text-emerald-300">
+          ✓ Inbox clear
+        </p>
       ) : null}
     </>
   );

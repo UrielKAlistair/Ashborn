@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { paletteOf } from "../../lib/theme";
 import type { QuietQuest } from "../../shared/goneQuiet";
+import { useOneTap } from "./oneTap";
 import type { GraphModel } from "../../shared/graphModel";
 import type { Priority, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
@@ -12,6 +13,7 @@ const PRIORITIES: Priority[] = [1, 2, 3, 4];
 // away. Any of them counts as touching it, so it leaves the list.
 export function GoneQuiet({ quiet, snapshot, model, act }: { quiet: QuietQuest[]; snapshot: Snapshot; model: GraphModel; act: Act }) {
   const [open, setOpen] = useState(false);
+  const oneTap = useOneTap();
   if (quiet.length === 0) return null;
   return (
     <div className="-mt-3" role="group" aria-label="Gone quiet">
@@ -27,7 +29,7 @@ export function GoneQuiet({ quiet, snapshot, model, act }: { quiet: QuietQuest[]
       {open ? (
         <div className="mt-1 space-y-1">
           {quiet.map((entry) => (
-            <QuietRow key={entry.quest.id} entry={entry} snapshot={snapshot} model={model} act={act} />
+            <QuietRow key={entry.quest.id} entry={entry} snapshot={snapshot} model={model} act={act} oneTap={oneTap} />
           ))}
         </div>
       ) : null}
@@ -35,7 +37,13 @@ export function GoneQuiet({ quiet, snapshot, model, act }: { quiet: QuietQuest[]
   );
 }
 
-function QuietRow({ entry: { quest, days, openSteps }, snapshot, model, act }: { entry: QuietQuest; snapshot: Snapshot; model: GraphModel; act: Act }) {
+function QuietRow({ entry: { quest, days, openSteps }, snapshot, model, act, oneTap }: {
+  entry: QuietQuest;
+  snapshot: Snapshot;
+  model: GraphModel;
+  act: Act;
+  oneTap: ReturnType<typeof useOneTap>;
+}) {
   const [adding, setAdding] = useState(false);
   return (
     <div className="rounded-lg px-2 py-2 hover:bg-ink/[0.04]">
@@ -54,7 +62,7 @@ function QuietRow({ entry: { quest, days, openSteps }, snapshot, model, act }: {
                 key={priority}
                 type="button"
                 data-priority={priority}
-                onClick={() => void act("updateNode", quest.id, { priority })}
+                onClick={oneTap(() => void act("updateNode", quest.id, { priority }))}
                 title={`Priority ${priority}`}
                 className="min-h-8 min-w-8 rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 font-mono text-[10.5px] text-[var(--mark)] hover:bg-[color-mix(in_oklab,var(--mark)_14%,transparent)]"
               >
@@ -66,7 +74,7 @@ function QuietRow({ entry: { quest, days, openSteps }, snapshot, model, act }: {
           <button type="button" onClick={() => setAdding(true)} className="min-h-8 rounded-lg border border-ink/12 px-2.5 text-ink/75 hover:bg-ink/6">
             Add a next step
           </button>
-          <button type="button" onClick={() => void act("updateNode", quest.id, { shelved: true })} className="min-h-8 rounded-lg px-2 text-muted hover:bg-ink/6 hover:text-ink/85">
+          <button type="button" onClick={oneTap(() => void act("updateNode", quest.id, { shelved: true }))} className="min-h-8 rounded-lg px-2 text-muted hover:bg-ink/6 hover:text-ink/85">
             Shelve
           </button>
         </div>

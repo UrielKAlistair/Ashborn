@@ -25,6 +25,7 @@ test("focus", async () => {
     { id: id.talk, title: "Give the talk", parent_id: id.quest, priority: 1 },
     { id: id.apply, title: "Apply to DTL", parent_id: id.quest },
     { id: crypto.randomUUID(), title: "Tidy the notes", parent_id: id.quest },
+    { id: crypto.randomUUID(), title: "Water the plants", parent_id: id.quest },
   ]);
   await insert("graph_edges", [{ from_id: id.survey, to_id: id.talk }]);
   await insert("deadlines", [{ title: "Applications close", due_date: addDays(today(), 3), node_id: id.apply }]);
@@ -118,9 +119,13 @@ test("focus", async () => {
   await test.step("a ready step without a priority gets one from the to-do", async () => {
     await expect(page.getByRole("region", { name: "Now" })).not.toContainText("Tidy the notes");
     await page.getByRole("button", { name: /Ready, no priority/ }).click();
-    await page.getByRole("group", { name: "Priority for Tidy the notes" }).getByRole("button", { name: "P2" }).click();
+    await expect(page.getByText("P1 most urgent, P4 least")).toBeVisible();
+    await page.getByRole("group", { name: "Priority for Tidy the notes" }).getByRole("button", { name: "P2" }).dblclick();
     await expect(page.getByRole("group", { name: "Priority for Tidy the notes" })).toHaveCount(0);
     await expect.poll(async () => (await db.from("graph_nodes").select("priority").eq("title", "Tidy the notes").single()).data?.priority).toBe(2);
+    // The double-click's second press landed where the next row had slid up, and was let go
+    await expect(page.getByRole("group", { name: "Priority for Water the plants" })).toBeVisible();
+    expect((await db.from("graph_nodes").select("priority").eq("title", "Water the plants").single()).data?.priority).toBeNull();
   });
 
   await app.close();

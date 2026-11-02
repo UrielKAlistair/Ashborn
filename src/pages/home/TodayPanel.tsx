@@ -12,6 +12,7 @@ import { FocusCard } from "./FocusCard";
 import { goneQuiet } from "../../shared/goneQuiet";
 import { inInbox } from "../../shared/inbox";
 import { GoneQuiet } from "./GoneQuiet";
+import { useOneTap } from "./oneTap";
 import { SplitSteps } from "./SplitSteps";
 import { Tick } from "./Tick";
 
@@ -247,6 +248,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 // moves it into Up next
 function Unprioritised({ steps, model, act }: { steps: GraphNode[]; model: GraphModel; act: Act }) {
   const [open, setOpen] = useState(false);
+  const oneTap = useOneTap();
   return (
     <div className="-mt-3">
       <button
@@ -260,6 +262,7 @@ function Unprioritised({ steps, model, act }: { steps: GraphNode[]; model: Graph
       </button>
       {open ? (
         <div className="mt-2 space-y-0.5">
+          <p className="px-1 pb-1 text-[11px] text-muted">P1 most urgent, P4 least</p>
           {steps.map((step) => {
             const quest = questOf(model.byId, step);
             return (
@@ -277,7 +280,7 @@ function Unprioritised({ steps, model, act }: { steps: GraphNode[]; model: Graph
                       key={priority}
                       type="button"
                       data-priority={priority}
-                      onClick={() => void act("updateNode", step.id, { priority })}
+                      onClick={oneTap(() => void act("updateNode", step.id, { priority }))}
                       title={`Priority ${priority}`}
                       className="rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 py-0.5 font-mono pointer-coarse:min-h-8 pointer-coarse:min-w-8 text-[10.5px] text-[var(--mark)] hover:bg-[color-mix(in_oklab,var(--mark)_14%,transparent)]"
                     >

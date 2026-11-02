@@ -88,6 +88,7 @@ function App() {
     // One load at a time, so two never send the same queued change. Changes streamed in while it
     // runs may be missing from what it reads, so they are kept and replayed onto it in order.
     let loading = false;
+    let loadAgain = false;
     let arrived: Delta[] = [];
     const replay = (snapshot: Snapshot) => arrived.reduce(applyDelta, snapshot);
     const load = async () => {
@@ -97,7 +98,8 @@ function App() {
       try {
         const refused = await sendQueue((at) => createApi(db, () => at));
         const loaded = replay(await api.getSnapshot(userId));
-        confirm(() => loaded);
+        // The same data keeps the same objects, so reading it again draws nothing
+        confirm((current) => (JSON.stringify(current) === JSON.stringify(loaded) ? current : loaded));
         setOffline(false);
         setQueued(0);
         setError(refused.length > 0 ? `Not saved from offline: ${refused.join("; ")}` : null);
@@ -113,6 +115,10 @@ function App() {
       } finally {
         loading = false;
         arrived = [];
+        if (loadAgain) {
+          loadAgain = false;
+          void load();
+        }
       }
     };
     const retry = () => {
@@ -126,6 +132,10 @@ function App() {
     const stopWatching = watchChanges(db, () => dataRef.current.confirmed, (delta) => {
       if (loading) arrived.push(delta);
       else confirm((current) => current && applyDelta(current, delta));
+    }, () => {
+      // A load under way may have read before the channel was listening
+      if (loading) loadAgain = true;
+      else void load();
     });
 
     return () => {

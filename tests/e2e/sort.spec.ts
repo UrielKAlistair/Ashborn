@@ -215,6 +215,7 @@ test("brain dump and sort", async () => {
     await sortButton(1).click();
     await card().getByLabel("Move to…").selectOption({ label: "Work" });
     await expect(card()).toHaveCount(0);
+    await expect(page.getByRole("status").filter({ hasText: "Inbox clear" })).toBeVisible();
     await field().fill("One more");
     await field().press("Enter");
     await expect(sortButton(1)).toBeVisible();
