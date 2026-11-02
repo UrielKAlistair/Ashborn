@@ -33,6 +33,34 @@ uniform vec4 u_fabric;      // rgb, alpha
 uniform vec4 u_grid;        // first column, first row, columns, rows
 uniform sampler2D u_fill;   // per cell: rgb, fill alpha
 uniform sampler2D u_stroke; // per cell: rgb, outline alpha
+uniform float u_terrain;    // 1: every cell is painted as ground (grass and dirt), as on a game map
+uniform vec2 u_boost;       // territories' fill and outline alpha, scaled to show over the ground
+
+float hash(vec2 c) {
+  return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// Smooth value noise over cells, in patches about five cells across
+float noise(vec2 c) {
+  vec2 g = c / 5.0;
+  vec2 i = floor(g);
+  vec2 f = fract(g);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// Mostly grass in three shades, with patches of dirt, each cell a little different
+vec3 ground(vec2 cell) {
+  float lay = noise(cell);
+  float shade = noise(cell * 1.7 + 31.0);
+  vec3 dirt = vec3(0.83, 0.75, 0.56);
+  vec3 grass = vec3(0.60, 0.75, 0.40);
+  vec3 deep = vec3(0.48, 0.66, 0.33);
+  vec3 meadow = vec3(0.72, 0.81, 0.49);
+  vec3 green = mix(grass, shade < 0.5 ? deep : meadow, abs(shade - 0.5) * 1.6);
+  vec3 colour = mix(dirt, green, smoothstep(0.26, 0.34, lay));
+  return colour + (hash(cell) - 0.5) * 0.05;
+}
 
 vec4 over(vec4 below, vec3 rgb, float alpha) {
   return vec4(rgb * alpha + below.rgb * (1.0 - alpha), alpha + below.a * (1.0 - alpha));
@@ -73,23 +101,31 @@ void main() {
   float apothem = 0.8660254 * u_radius * u_cellScale;
   float px = 1.0 / (u_camera.z * u_ratio); // one device pixel, in map units
 
+  float inside = clamp((apothem - h) / px + 0.5, 0.0, 1.0);
+  vec4 colour = vec4(0.0);
+  if (u_terrain > 0.5) colour = over(colour, ground(cell), 0.9 * inside);
+
   // The fabric's outline is one CSS pixel wide at every zoom
-  vec4 colour = over(vec4(0.0), u_fabric.rgb, u_fabric.a * line(abs(h - apothem), 0.5 / u_camera.z, px));
+  colour = over(colour, u_fabric.rgb, u_fabric.a * line(abs(h - apothem), 0.5 / u_camera.z, px));
 
   vec2 texel = cell - u_grid.xy;
   if (texel.x >= 0.0 && texel.y >= 0.0 && texel.x < u_grid.z && texel.y < u_grid.w) {
     vec2 uv = (texel + 0.5) / u_grid.zw;
     vec4 fill = texture2D(u_fill, uv);
     vec4 stroke = texture2D(u_stroke, uv);
-    colour = over(colour, fill.rgb, fill.a * clamp((apothem - h) / px + 0.5, 0.0, 1.0));
+    colour = over(colour, fill.rgb, min(1.0, fill.a * u_boost.x) * inside);
     // Outlines are one map unit wide
-    colour = over(colour, stroke.rgb, stroke.a * line(abs(h - apothem), 0.5, px));
+    colour = over(colour, stroke.rgb, min(1.0, stroke.a * u_boost.y) * line(abs(h - apothem), 0.5, px));
   }
   gl_FragColor = colour;
 }
 `;
 
 type Camera = { x: number; y: number; zoom: number };
+
+// How the theme wants the canvas drawn: the outlines' colour and strength, whether the cells are
+// painted as ground, and how much stronger territories must be to show over it
+export type CanvasStyle = { ink: [number, number, number]; fabricAlpha: number; terrain: boolean; boost: [number, number] };
 
 // The paint of one cell: rgb (0-255), fill alpha, outline alpha
 const paintSize = 5;
@@ -105,7 +141,7 @@ export class TerritoryRenderer {
   private dirty = true;
 
   private camera: Camera = { x: 0, y: 0, zoom: 1 };
-  private ink: [number, number, number] = [255, 255, 255];
+  private style: CanvasStyle = { ink: [255, 255, 255], fabricAlpha, terrain: false, boost: [1, 1] };
 
   // Cell state, by texel (row-major over the grid's columns and rows)
   private grid: Grid | null = null;
@@ -147,9 +183,8 @@ export class TerritoryRenderer {
     if (this.program) gl.deleteProgram(this.program);
   }
 
-  // The fabric's colour: the theme's ink
-  setInk(ink: [number, number, number]) {
-    this.ink = ink;
+  setStyle(style: CanvasStyle) {
+    this.style = style;
     this.invalidate();
   }
 
@@ -273,8 +308,10 @@ export class TerritoryRenderer {
     gl.uniform3f(u.camera, this.camera.x, this.camera.y, this.camera.zoom);
     gl.uniform1f(u.radius, territoryCellRadius);
     gl.uniform1f(u.cellScale, hexCellScale);
-    const [r, g, b] = this.ink;
-    gl.uniform4f(u.fabric, r / 255, g / 255, b / 255, fabricAlpha * fabricOpacity(this.camera.zoom));
+    const { ink: [r, g, b], terrain, boost } = this.style;
+    gl.uniform4f(u.fabric, r / 255, g / 255, b / 255, this.style.fabricAlpha * fabricOpacity(this.camera.zoom));
+    gl.uniform1f(u.terrain, terrain ? 1 : 0);
+    gl.uniform2f(u.boost, boost[0], boost[1]);
     const grid = this.grid;
     if (grid) gl.uniform4f(u.grid, grid.cols[0], grid.rows[0], grid.cols[1] - grid.cols[0] + 1, grid.rows[1] - grid.rows[0] + 1);
     else gl.uniform4f(u.grid, 0, 0, 0, 0);
@@ -311,7 +348,7 @@ export class TerritoryRenderer {
     gl.enableVertexAttribArray(corner);
     gl.vertexAttribPointer(corner, 2, gl.FLOAT, false, 0, 0);
 
-    for (const name of ["size", "ratio", "camera", "radius", "cellScale", "fabric", "grid"]) {
+    for (const name of ["size", "ratio", "camera", "radius", "cellScale", "fabric", "grid", "terrain", "boost"]) {
       this.uniforms[name] = gl.getUniformLocation(program, `u_${name}`);
     }
     const texture = (unit: number, name: string) => {

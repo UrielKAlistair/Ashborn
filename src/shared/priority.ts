@@ -8,7 +8,11 @@ import type { GraphNode, ISODate, Priority, Snapshot } from "./types";
 export type Priorities = {
   effective: Map<string, Priority>; // what covers the node; absent: nothing does
   best: Map<string, Priority>; // the most urgent in the node and everything inside it
+  origin: Map<string, PriorityOrigin>; // where a covered node's priority comes from
 };
+
+// The node a priority was set on, or the node a deadline raised it on (with the deadline)
+export type PriorityOrigin = { nodeId: string; deadlineId: string | null };
 
 // The nearer the deadline, the higher the priority; further out than this raises nothing
 export function deadlinePriority(daysLeft: number): Priority | null {
@@ -23,22 +27,26 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot, date: IS
   const prerequisites = new Map<string, string[]>();
   for (const { from, to } of snapshot.edges) prerequisites.set(to, [...(prerequisites.get(to) ?? []), from]);
 
-  const set = snapshot.nodes.flatMap((node) => (node.priority ? [{ id: node.id, priority: node.priority }] : []));
+  const set = snapshot.nodes.flatMap((node) => (node.priority ? [{ id: node.id, priority: node.priority, deadlineId: null }] : []));
   const raised = snapshot.deadlines.flatMap((deadline) => {
     const priority = deadlinePriority(daysBetween(date, deadline.dueDate));
-    return deadline.nodeId && priority ? [{ id: deadline.nodeId, priority }] : [];
+    return deadline.nodeId && priority ? [{ id: deadline.nodeId, priority, deadlineId: deadline.id }] : [];
   });
 
   // Most urgent first, so a node's first visit is its highest priority and ends the walk there
   const effective = new Map<string, Priority>();
-  const cover = (id: string, priority: Priority) => {
+  const origin = new Map<string, PriorityOrigin>();
+  const cover = (id: string, priority: Priority, from: PriorityOrigin) => {
     const node = model.byId.get(id);
     if (!node || isDone(node) || effective.has(id)) return;
     effective.set(id, priority);
-    (prerequisites.get(id) ?? []).forEach((from) => cover(from, priority));
-    (model.children.get(id) ?? []).forEach((step) => cover(step.id, priority));
+    origin.set(id, from);
+    (prerequisites.get(id) ?? []).forEach((before) => cover(before, priority, from));
+    (model.children.get(id) ?? []).forEach((step) => cover(step.id, priority, from));
   };
-  [...set, ...raised].sort((a, b) => a.priority - b.priority).forEach(({ id, priority }) => cover(id, priority));
+  [...set, ...raised]
+    .sort((a, b) => a.priority - b.priority)
+    .forEach(({ id, priority, deadlineId }) => cover(id, priority, { nodeId: id, deadlineId }));
 
   const best = new Map<string, Priority>();
   const bestIn = (node: GraphNode): Priority | undefined => {
@@ -49,7 +57,7 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot, date: IS
   };
   (model.children.get(null) ?? []).forEach(bestIn);
 
-  return { effective, best };
+  return { effective, best, origin };
 }
 
 // Most urgent first, the given order kept among equals; no priority comes last

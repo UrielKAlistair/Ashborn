@@ -4,12 +4,13 @@ type InlineInputProps = {
   placeholder: string;
   onSubmit: (value: string) => unknown;
   onEscape?: () => void;
+  onPasteList?: (text: string) => void; // a paste of several lines, instead of filling the field
   autoFocus?: boolean;
   className?: string;
 };
 
 // A one-line input that submits on Enter and clears itself for the next entry
-export function InlineInput({ placeholder, onSubmit, onEscape, autoFocus = false, className = "" }: InlineInputProps) {
+export function InlineInput({ placeholder, onSubmit, onEscape, onPasteList, autoFocus = false, className = "" }: InlineInputProps) {
   const [value, setValue] = useState("");
 
   return (
@@ -18,6 +19,13 @@ export function InlineInput({ placeholder, onSubmit, onEscape, autoFocus = false
       autoFocus={autoFocus}
       placeholder={placeholder}
       onChange={(event) => setValue(event.target.value)}
+      onPaste={(event) => {
+        const text = event.clipboardData.getData("text");
+        if (!onPasteList || !/\n/.test(text.trim())) return;
+        event.preventDefault();
+        onPasteList(value + text);
+        setValue("");
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter" && value.trim()) {
           onSubmit(value.trim());

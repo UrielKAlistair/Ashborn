@@ -2,6 +2,8 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource/space-grotesk/500.css";
 @import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/pixelify-sans/500.css";
+@import "@fontsource/pixelify-sans/600.css";
 @import "@fontsource/jetbrains-mono/400.css";
 
 /* Two themes, Ember (dark, the default) and Parchment (light), set by data-theme on <html>.
@@ -27,6 +29,36 @@
   --card-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.9);
   --sheet-shadow: 0 -20px 60px rgb(0 0 0 / 0.6);
   color-scheme: dark;
+}
+
+:root[data-theme="meadow"] {
+  --color-canvas: #e4d9b4;
+  --color-panel: #f8f1da;
+  --color-card: #fffaea;
+  --color-ink: #33281a;
+  --color-ember: #a84a17;
+  --color-muted: #66553a;
+  --font-display: "Pixelify Sans", "Space Grotesk", ui-sans-serif, sans-serif;
+  --glow: rgb(255 248 222 / 0.6);
+  --panel-shadow: 0 3px 0 rgb(110 84 40 / 0.22), 0 10px 24px rgb(90 64 30 / 0.12);
+  --card-shadow: 0 2px 0 rgb(110 84 40 / 0.28), 0 12px 24px -10px rgb(90 64 30 / 0.28);
+  --sheet-shadow: 0 -8px 24px rgb(90 64 30 / 0.16);
+  color-scheme: light;
+
+  --color-emerald-100: oklch(43.2% 0.095 166.913);
+  --color-emerald-200: oklch(50.8% 0.118 165.612);
+  --color-emerald-300: oklch(50.8% 0.118 165.612);
+  --color-emerald-400: oklch(59.6% 0.145 163.225);
+  --color-red-100: oklch(44.4% 0.177 26.899);
+  --color-red-200: oklch(50.5% 0.213 27.518);
+  --color-red-300: oklch(50.5% 0.213 27.518);
+  --color-red-400: oklch(57.7% 0.245 27.325);
+  --color-amber-100: oklch(47.3% 0.137 46.201);
+  --color-amber-200: oklch(55.5% 0.163 48.998);
+  --color-amber-300: oklch(55.5% 0.163 48.998);
+  --color-sky-200: oklch(50% 0.134 242.749);
+  --color-sky-300: oklch(50% 0.134 242.749);
+  --color-sky-400: oklch(58.8% 0.158 241.966);
 }
 
 :root[data-theme="light"] {
@@ -142,7 +174,8 @@ body {
   --priority-edge-3: var(--priority-3);
   --priority-edge-4: var(--priority-4);
 }
-:root[data-theme="light"] {
+:root[data-theme="light"],
+:root[data-theme="meadow"] {
   --priority-1: #cf3f24;
   --priority-2: #b9770e;
   --priority-3: #1f7fb3;
@@ -165,6 +198,7 @@ body {
 :root:not([data-priority-look]) [data-priority="none"] { opacity: 0.45; }
 /* Fading towards a pale ground loses more contrast than towards a dark one */
 :root[data-theme="light"][data-priority-look="a"] [data-priority="none"],
+:root[data-theme="meadow"][data-priority-look="a"] [data-priority="none"],
 :root[data-theme="light"]:not([data-priority-look]) [data-priority="none"] { opacity: 0.6; }
 :root[data-priority-look="a"] [data-priority]:not([data-priority="none"]) > .priority-mark,
 :root:not([data-priority-look]) [data-priority]:not([data-priority="none"]) > .priority-mark {
@@ -211,8 +245,23 @@ body {
   .tick-done { animation: none; }
 }
 
-/* Keyboard focus shows as an ember ring; pointer clicks don't draw it */
-:focus-visible {
-  outline: 2px solid var(--color-ember);
-  outline-offset: 2px;
+/* Keyboard focus shows as an ember ring; pointer clicks don't draw it. In the base layer, so a field
+   that shows focus its own way (focus:outline-none and a border) keeps that */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-ember);
+    outline-offset: 2px;
+  }
+}
+
+/* Meadow: chunkier, game-like surfaces. Panels carry a thicker edge, and the ember buttons a
+   pressed lip and light text */
+:root[data-theme="meadow"] .panel-lift {
+  border-width: 2px;
+  border-color: rgb(110 84 40 / 0.22);
+}
+
+:root[data-theme="meadow"] .bg-ember {
+  color: var(--color-card);
+  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.2);
 }

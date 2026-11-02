@@ -34,6 +34,7 @@ function setup(nodes: GraphNode[], edges: GraphEdge[] = [], deadlines: Deadline[
     progressToday: { date: today, count: 0 },
     kitchen: emptyKitchen,
     settings: { dayStartHour: 4, timeZone: null },
+    inboxId: "user",
   } as unknown as Snapshot;
   const model = buildGraphModel(snapshot);
   return { snapshot, model, priorities: derivePriorities(model, snapshot, today) };
@@ -107,4 +108,15 @@ test("quests and steps sort by the best priority inside them, keeping order amon
   const { priorities } = setup(nodes);
   const quests = nodes.filter(({ parentId }) => !parentId);
   expect(byPriority(quests, priorities).map(({ id }) => id)).toEqual(["first", "second", "plain", "other"]);
+});
+
+test("each covered node knows where its priority comes from: the node set, or the deadline that raised it", () => {
+  const { priorities } = setup(
+    [node("q", null), node("a", "q"), node("b", "q", { priority: 2 }), node("c", "q"), node("d", "q")],
+    [{ from: "a", to: "b" }, { from: "c", to: "d" }],
+    [deadline("d", "2026-11-03")],
+  );
+  expect(priorities.origin.get("a")).toEqual({ nodeId: "b", deadlineId: null });
+  expect(priorities.origin.get("b")).toEqual({ nodeId: "b", deadlineId: null });
+  expect(priorities.origin.get("c")).toEqual({ nodeId: "d", deadlineId: "d-2026-11-03" });
 });

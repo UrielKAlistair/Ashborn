@@ -46,7 +46,7 @@ async function serve() {
   }
 
   const server = new McpServer({ name: "ashborn", version: "0.1.0" });
-  registerTools(server, db);
+  registerTools(server, db, data.session.user.id);
   await server.connect(new StdioServerTransport());
 }
 

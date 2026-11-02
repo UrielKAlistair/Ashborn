@@ -11,12 +11,13 @@ import { addDays, currentTimeZone, daysBetween, setDayStartHour, today, week, we
 import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
 import { byTime, nextOccurrence } from "../src/shared/schedule";
+import { inboxLast, inInbox } from "../src/shared/inbox";
 import { derivePriorities, prioritisedSteps } from "../src/shared/priority";
 import { mealSlots, questColors, stockUnits, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
-// The tools, acting as whoever `db` is signed in as. `blocked` gives a reason every tool refuses
+// The tools, acting as whoever `db` is signed in as, `userId`. `blocked` gives a reason every tool refuses
 // with, or null.
-export function registerTools(server: McpServer, db: SupabaseClient, blocked: () => string | null = () => null) {
+export function registerTools(server: McpServer, db: SupabaseClient, userId: string, blocked: () => string | null = () => null) {
   const api = createApi(db);
   const register = ((name: string, config: unknown, handler: (...args: unknown[]) => unknown) =>
     server.registerTool(name, config as never, ((...args: unknown[]) => {
@@ -32,10 +33,10 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
     "overview",
     {
       description:
-        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list (done steps marked [x], prerequisites shown as 'after'), hidden quests, today's routines and open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
+        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list, the Inbox of unsorted thoughts last (done steps marked [x], prerequisites shown as 'after'), hidden quests, today's routines and open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
       inputSchema: { quest_id: z.string().optional().describe("Show only this quest") },
     },
-    async ({ quest_id }) => text(describe(await api.getSnapshot(), quest_id)),
+    async ({ quest_id }) => text(describe(await api.getSnapshot(userId), quest_id)),
   );
 
   register(
@@ -541,13 +542,13 @@ function describe(snapshot: Snapshot, questId?: string) {
   const folds = (id: string) => !questId && isFinished(model, id);
   const quests = (model.children.get(null) ?? []).filter((quest) => (questId ? quest.id === questId : true));
   const completed = quests.filter((quest) => quest.active && folds(quest.id));
-  const shown = quests.filter((quest) => quest.active && !folds(quest.id));
+  const shown = inboxLast(quests.filter((quest) => quest.active && !folds(quest.id)), snapshot.inboxId);
   const archived = quests.filter((quest) => !quest.active && model.finishedAt.has(quest.id));
   const hidden = quests.filter((quest) => !quest.active && !model.finishedAt.has(quest.id));
   const lines: string[] = [];
 
   const shownIds = new Set(shown.map((quest) => quest.id));
-  const ready = snapshot.nodes.filter((node) => node.parentId && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id));
+  const ready = snapshot.nodes.filter((node) => node.parentId && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id) && !inInbox(model, node, snapshot.inboxId));
   const priorities = derivePriorities(model, snapshot, today());
   const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) => steps.map((node) => `- P${priority} ${node.title} [${node.id}]`));
   const unprioritised = ready.filter((node) => !priorities.effective.has(node.id)).map((node) => `- ${node.title} [${node.id}]`);
@@ -557,6 +558,7 @@ function describe(snapshot: Snapshot, questId?: string) {
   for (const quest of shown) {
     const level = nodeLevel(model.totalXp.get(quest.id) ?? 0);
     const trains = trainedStats(quest.statWeights).map(([key, weight]) => `${key} ${weight}`);
+    if (quest.id === snapshot.inboxId) lines.push("The Inbox: thoughts the user captured and hasn't sorted. To sort them, `move` each into a quest, or use `add_plan` and delete the original.");
     lines.push(`# ${quest.title} [${quest.id}] Lv ${level.level}${trains.length ? `, trains ${trains.join(", ")}` : ""}${quest.color ? `, ${quest.color}` : ""}${quest.priority ? `, P${quest.priority}` : ""}${quest.shelved ? " (shelved)" : ""}`);
     outline(model, snapshot, quest.id, 1, lines, folds);
     lines.push("");

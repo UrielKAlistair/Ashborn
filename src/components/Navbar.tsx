@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { setPriorityLook, setTheme, usePriorityLook, useTheme, type PriorityLook } from "../lib/useTheme";
+import { setPriorityLook, setTheme, themeNames, themes, usePriorityLook, useTheme, type PriorityLook } from "../lib/useTheme";
 import { HexTile } from "./HexTile";
-import { MoonIcon, SunIcon } from "./icons";
+import { LeafIcon, MoonIcon, SunIcon } from "./icons";
 import { desktopSections, screenAt, sectionAt, type Section } from "./sections";
 
 type NavbarProps = {
@@ -56,6 +56,8 @@ export function Navbar({
 
   const theme = useTheme();
   const look = usePriorityLook();
+  // The switch shows, and goes to, the next theme in turn
+  const next = themes[(themes.indexOf(theme) + 1) % themes.length];
 
   return (
     <aside className="relative z-10 flex h-full min-h-0 w-[5.5rem] shrink-0 flex-col items-center border-r border-ink/8 bg-panel/80 px-2 pt-10 pb-5">
@@ -104,11 +106,11 @@ export function Navbar({
       </button>
       <button
         type="button"
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        title={theme === "dark" ? "Parchment: the light theme" : "Ember: the dark theme"}
+        onClick={() => setTheme(next)}
+        title={`${themeNames[next]}: switch to the ${next === "dark" ? "dark" : next === "light" ? "light" : "game-map"} theme`}
         className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-ink/8 hover:text-ink/85"
       >
-        {theme === "dark" ? <SunIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
+        {next === "light" ? <SunIcon className="h-[18px] w-[18px]" /> : next === "meadow" ? <LeafIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
       </button>
     </aside>
   );

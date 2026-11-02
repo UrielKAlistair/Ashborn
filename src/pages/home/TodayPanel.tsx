@@ -1,12 +1,14 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
-import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
+import { questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
 import type { AlarmKind, Snapshot, Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
+import { Capture, NodePicker } from "./Capture";
+import { FocusCard } from "./FocusCard";
 import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
@@ -27,7 +29,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const weekday = weekdayOf(date);
 
   // Steps you can do now, of the chains that have a priority
-  const todo = prioritisedSteps(model, snapshot, derivePriorities(model, snapshot, date));
+  const priorities = derivePriorities(model, snapshot, date);
+  const todo = prioritisedSteps(model, snapshot, priorities);
 
   // The count is from the last change; once the next day starts it belongs to yesterday until the next one
   const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
@@ -75,6 +78,9 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
         </p>
       ) : null}
+
+      <Capture snapshot={snapshot} model={model} act={act} />
+      <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} />
 
       <Section title="Up next">
         {todo.length === 0 ? (
@@ -159,7 +165,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     {deadline.dueDate}
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
-                  <NodePicker model={model} value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
+                  <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
@@ -222,26 +228,6 @@ function RoutineForm({ act }: { act: Act }) {
   );
 }
 
-// A choice of open quests and steps, nested as on the graph, or none
-function NodePicker({ model, value, onChange, className }: { model: GraphModel; value: string | null; onChange: (nodeId: string | null) => void; className: string }) {
-  const options = (parentId: string | null, depth: number): ReactNode[] =>
-    (model.children.get(parentId) ?? [])
-      .filter((node) => !isDone(node) && (parentId || node.active))
-      .flatMap((node) => [
-        <option key={node.id} value={node.id}>
-          {"\u00a0\u00a0".repeat(depth)}
-          {node.title}
-        </option>,
-        ...options(node.id, depth + 1),
-      ]);
-  return (
-    <select aria-label="Deadline for" value={value ?? ""} onChange={(event) => onChange(event.target.value || null)} className={className}>
-      <option value="">Not linked to a quest</option>
-      {options(null, 0)}
-    </select>
-  );
-}
-
 function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -267,7 +253,7 @@ function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
         <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${fieldClass} `} />
         <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} title="Alarm on the day (optional)" className={`${fieldClass} w-24 `} />
       </div>
-      <NodePicker model={model} value={nodeId} onChange={setNodeId} className={fieldClass} />
+      <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={nodeId} onChange={setNodeId} className={fieldClass} />
       <FormButtons onCancel={() => setOpen(false)} onSubmit={submit} />
     </div>
   );

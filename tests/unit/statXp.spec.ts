@@ -31,6 +31,7 @@ const snapshot = (nodes: GraphNode[]): Snapshot => ({
   progressToday: { date: "2026-10-20", count: 0 },
   kitchen: emptyKitchen,
   settings: { dayStartHour: 4, timeZone: null },
+  inboxId: "user",
 });
 const quest = (statWeights: StatWeights, ownXp = 10) => node("quest", { statWeights, ownXp });
 

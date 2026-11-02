@@ -269,3 +269,12 @@ export function MoonIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function LeafIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14Z" />
+      <path d="M5 19l7-7" />
+    </svg>
+  );
+}

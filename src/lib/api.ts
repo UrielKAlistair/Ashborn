@@ -83,7 +83,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
   const readNode = async (id: string) => toNode(must(await nodes().select().eq("id", id).single()));
 
   return inRowOrder(db, {
-    async getSnapshot() {
+    async getSnapshot(userId) {
       // Which day it is depends on the day-start hour, so the reads of today's data wait for it
       const settings = readSettings(db);
       const date = settings.then(({ dayStartHour }) => dayOf(new Date(), dayStartHour));
@@ -109,6 +109,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         progressToday,
         kitchen,
         settings: settingsRow,
+        inboxId: userId,
       };
     },
 
@@ -567,6 +568,7 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
     progressToday: delta.progressToday && !same(delta.progressToday, snapshot.progressToday) ? delta.progressToday : snapshot.progressToday,
     kitchen: delta.kitchen && !same(delta.kitchen, snapshot.kitchen) ? delta.kitchen : snapshot.kitchen,
     settings: delta.settings && !same(delta.settings, snapshot.settings) ? delta.settings : snapshot.settings,
+    inboxId: snapshot.inboxId,
   };
 
   return (Object.keys(next) as (keyof Snapshot)[]).every((key) => next[key] === snapshot[key]) ? snapshot : next;

@@ -23,12 +23,15 @@ import { HEX_POINTS, HexMark } from "../../components/HexTile";
 import { paletteOf, palettes } from "../../lib/theme";
 import { useToday } from "../../lib/useToday";
 import { isDone, isFinished, statKeys, type GraphModel } from "../../shared/graphModel";
+import { inboxLast } from "../../shared/inbox";
 import { byPriority, derivePriorities } from "../../shared/priority";
 import { nodeLevel } from "../../shared/progression";
 import { packQuests, prerequisitesFirst, type Canvas, type Size } from "../../shared/questPacking";
 import { questColors, type GraphEdge, type GraphNode, type ISODate, type Priority, type QuestColor, type Snapshot, type StatKey, type StatWeights } from "../../shared/types";
+import { MoveTargets, MoveToPicker } from "./Capture";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
+import { SplitSteps } from "./SplitSteps";
 import { usePhonePanZoom } from "./phonePanZoom";
 import Territories from "./territory/Territories";
 import type { TerritoryQuest } from "./territory/territoryGrid";
@@ -97,6 +100,7 @@ type CardData = {
   menuOpen: boolean;
   look: PriorityLook;
   phone: boolean; // view-only placement, and one labelled menu instead of the small buttons
+  sortable: boolean; // a step in the Inbox: offers Move to…
   actions: CardActions;
 };
 
@@ -123,9 +127,13 @@ type QuestGraphProps = {
 };
 
 export function QuestGraph(props: QuestGraphProps) {
+  const { model, snapshot: { inboxId } } = props;
+  const moveTargets = useMemo(() => ({ model, inboxId }), [model, inboxId]);
   return (
     <ReactFlowProvider>
-      <GraphCanvas {...props} />
+      <MoveTargets.Provider value={moveTargets}>
+        <GraphCanvas {...props} />
+      </MoveTargets.Provider>
     </ReactFlowProvider>
   );
 }
@@ -167,7 +175,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // Rendered nodes, parents before their steps (React Flow needs that order), and the links
   // between them; worked out again only when the graph or what is open changes, not per drag move
   const { shown, rendered, depthOf, renderedEdges, structureKey } = useMemo(() => {
-    const shown = byPriority(quests.filter((quest) => quest.active && !isFolded(quest.id)), priorities);
+    const shown = inboxLast(byPriority(quests.filter((quest) => quest.active && !isFolded(quest.id)), priorities), snapshot.inboxId);
     const rendered: Array<{ node: GraphNode; depth: number; questId: string }> = [];
     const visit = (node: GraphNode, depth: number, questId: string) => {
       rendered.push({ node, depth, questId });
@@ -307,6 +315,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         menuOpen: menuFor === node.id,
         look: lookOf(node.id),
         phone,
+        sortable: depth > 0 && questId === snapshot.inboxId,
         actions,
       };
       const kept = previous.get(node.id);
@@ -343,7 +352,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       built.current.set(node.id, next);
       return next;
     });
-  }, [rendered, model, placements, moving, collapsed, opened, today, dayStartHour, unlocked, addingTo, menuFor, priorities, phone, actions]);
+  }, [rendered, model, placements, moving, collapsed, opened, today, dayStartHour, unlocked, addingTo, menuFor, priorities, phone, snapshot.inboxId, actions]);
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -796,12 +805,25 @@ function BoxButtons({ data }: { data: CardData }) {
         </>
       ) : (
         <>
+          {data.sortable ? <MoveButton data={data} /> : null}
           <PriorityButton data={data} />
           <ShelveButton data={data} />
           <DeleteButton data={data} />
         </>
       )}
     </div>
+  );
+}
+
+// The Move to… list opens from an arrow: the select lies invisibly over it
+function MoveButton({ data }: { data: CardData }) {
+  return (
+    <span title="Move to…" className={`nodrag relative ${iconButton} text-muted hover:bg-ink/8 hover:text-ink`}>
+      <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M1 5 H9 M5.5 1.5 L9 5 L5.5 8.5" />
+      </svg>
+      <MoveToPicker step={data.node} act={data.actions.act} className="absolute inset-0 w-full cursor-pointer opacity-0" />
+    </span>
   );
 }
 
@@ -928,6 +950,17 @@ function LockIcon({ open }: { open: boolean }) {
   );
 }
 
+function ListIcon() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <path d="M4.5 3 H10.5 M4.5 6 H10.5 M4.5 9 H10.5" />
+      <circle cx="2" cy="3" r="0.6" fill="currentColor" />
+      <circle cx="2" cy="6" r="0.6" fill="currentColor" />
+      <circle cx="2" cy="9" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
 function PlusIcon() {
   return (
     <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -961,12 +994,44 @@ function HexDot({ className }: { className: string }) {
 function AddRow({ data }: { data: CardData }) {
   const { node, adding } = data;
   const { act, onAdding } = boundActions(data);
+  // A list being split into steps: what was pasted, or "" when opened from the button
+  const [list, setList] = useState<string | null>(null);
   if (!adding) return null;
 
   return (
-    <div className="absolute right-0 bottom-0 left-0 flex items-center px-3" style={{ height: addRowHeight }}>
-      <InlineInput autoFocus placeholder="Step name, Enter to add" onSubmit={(title) => act("createNode", title, node.id)} onEscape={() => onAdding(false)} className="w-full px-2.5 py-1" />
-    </div>
+    <>
+      <div className="absolute right-0 bottom-0 left-0 flex items-center gap-1 px-3" style={{ height: addRowHeight }}>
+        <InlineInput
+          autoFocus
+          placeholder="Step name, Enter to add"
+          onSubmit={(title) => act("createNode", title, node.id)}
+          onEscape={() => onAdding(false)}
+          onPasteList={setList}
+          className="min-w-0 flex-1 px-2.5 py-1"
+        />
+        <button
+          type="button"
+          onClick={() => setList("")}
+          title="Split into steps: type or paste a list"
+          className={`nodrag ${iconButton} text-muted hover:bg-ink/8 hover:text-ink`}
+        >
+          <ListIcon />
+        </button>
+      </div>
+      <NodeToolbar isVisible={list !== null} position={Position.Bottom} align="start" offset={8}>
+        {list !== null ? (
+          <SplitSteps
+            act={act}
+            parentId={node.id}
+            initial={list}
+            onDone={() => {
+              setList(null);
+              onAdding(false);
+            }}
+          />
+        ) : null}
+      </NodeToolbar>
+    </>
   );
 }
 
@@ -1095,6 +1160,11 @@ function PhoneMenu({ data }: { data: CardData }) {
                 }}
                 className="mb-1 min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 font-display text-[15px] font-semibold text-ink/90 focus:border-ember/60 focus:outline-none"
               />
+              {data.sortable ? (
+                <div className={phoneRow}>
+                  <MoveToPicker step={node} act={act} onMoved={() => onMenu(false)} className="min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 text-[14px] text-ink/85" />
+                </div>
+              ) : null}
               <button type="button" onClick={choose(() => onAdding(true))} className={phoneItem}>
                 <PlusIcon /> Add a step inside
               </button>

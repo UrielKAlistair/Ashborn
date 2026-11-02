@@ -28,12 +28,14 @@ test("rail and theme switch", async () => {
     await expect(rail).toBeVisible({ timeout: 15_000 });
   });
 
-  await test.step("the switch sets the light theme, a reload keeps it, and it switches back", async () => {
+  await test.step("the switch goes to the light theme, a reload keeps it, then Meadow and back to Ember", async () => {
     await page.getByTitle(/^Parchment/).click();
     await expect.poll(theme).toBe("light");
     await page.reload();
     await expect(rail).toBeVisible({ timeout: 15_000 });
     expect(await theme()).toBe("light");
+    await page.getByTitle(/^Meadow/).click();
+    await expect.poll(theme).toBe("meadow");
     await page.getByTitle(/^Ember/).click();
     await expect.poll(theme).toBe("dark");
   });

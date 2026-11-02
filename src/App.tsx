@@ -92,14 +92,14 @@ function App() {
       arrived = [];
       try {
         const refused = await sendQueue((at) => createApi(db, () => at));
-        const loaded = replay(await api.getSnapshot());
+        const loaded = replay(await api.getSnapshot(userId));
         confirm(() => loaded);
         setOffline(false);
         setQueued(0);
         setError(refused.length > 0 ? `Not saved from offline: ${refused.join("; ")}` : null);
       } catch (reason) {
         if (!isConnectionError(reason)) return setError((reason as Error).message);
-        const fallback = dataRef.current.confirmed ?? loadCachedSnapshot();
+        const fallback = dataRef.current.confirmed ?? loadCachedSnapshot(userId);
         if (!fallback) return setError("No connection, and no data saved on this device yet.");
         confirm(() => replay(fallback));
         setOffline(true);
@@ -328,11 +328,11 @@ function withPreview(shown: Snapshot, change: Pending): Snapshot {
   }
 }
 
-function loadCachedSnapshot(): Snapshot | null {
+function loadCachedSnapshot(userId: string): Snapshot | null {
   try {
     const cached = JSON.parse(window.localStorage.getItem(snapshotStorageKey) ?? "null") as Snapshot | null;
     // Saved before the Kitchen or the settings existed
-    return cached && { ...cached, kitchen: cached.kitchen ?? emptyKitchen, settings: cached.settings ?? { dayStartHour: DEFAULT_DAY_START_HOUR, timeZone: null } };
+    return cached && { ...cached, kitchen: cached.kitchen ?? emptyKitchen, settings: cached.settings ?? { dayStartHour: DEFAULT_DAY_START_HOUR, timeZone: null }, inboxId: userId };
   } catch {
     return null;
   }

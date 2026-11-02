@@ -166,6 +166,7 @@ export type Snapshot = {
   progressToday: ProgressToday;
   kitchen: Kitchen;
   settings: Settings;
+  inboxId: string; // the Inbox quest's id, which is the user's own; no such quest until the first capture
 };
 
 // dayStartHour 0–23; timeZone an IANA name, written by the user's devices, null until one has
@@ -206,7 +207,7 @@ export type Placement = { id: string; position: Point };
 // Everything the app (and later an agent) can ask of the data store. Reads return data; changes
 // return a Delta.
 export type AshbornApi = {
-  getSnapshot(): Promise<Snapshot>;
+  getSnapshot(userId: string): Promise<Snapshot>;
   createNode(title: string, parentId: string | null, id?: string): Promise<Delta>; // id: made offline
   updateNode(id: string, patch: NodePatch): Promise<Delta>;
   deleteNode(id: string): Promise<Delta>;
