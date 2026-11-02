@@ -32,7 +32,7 @@ import { MoveTargets, MoveToPicker } from "./Capture";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
 import { SplitContext, SplitSteps } from "./SplitSteps";
-import { onShowOnGraph } from "./showOnGraph";
+import { onShowOnGraph, takeWaitingShow } from "./showOnGraph";
 import { usePhonePanZoom } from "./phonePanZoom";
 import Territories from "./territory/Territories";
 import type { TerritoryQuest } from "./territory/territoryGrid";
@@ -75,6 +75,37 @@ function phoneViewport(shown: GraphNode[], placements: Record<string, Box>, pane
   const right = Math.max(...boxes.map((box) => box.position.x + box.size.width));
   const zoom = Math.min(fitOptions.maxZoom, Math.max(PHONE_MIN_ZOOM, (paneWidth - 2 * PHONE_MARGIN) / (right - left)));
   return { x: PHONE_MARGIN - left * zoom, y: PHONE_TOOLBAR_HEIGHT + PHONE_MARGIN - top * zoom, zoom };
+}
+
+// The phone's camera on one node, at the overview's zoom, a third of the way down the pane; a node
+// not laid out (folded away) gives its nearest box that is
+function phoneFocus(id: string, model: GraphModel, placements: Record<string, Box>, zoom: number, paneWidth: number, paneHeight: number) {
+  let target: string | null = id;
+  while (target && !placements[target]) target = model.byId.get(target)?.parentId ?? null;
+  if (!target) return null;
+  // Each box sits relative to its parent box
+  const corner = { x: 0, y: 0 };
+  for (let at: string | null = target; at; at = model.byId.get(at)?.parentId ?? null) {
+    corner.x += placements[at]?.position.x ?? 0;
+    corner.y += placements[at]?.position.y ?? 0;
+  }
+  const { size } = placements[target];
+  return {
+    target,
+    viewport: { x: paneWidth / 2 - (corner.x + size.width / 2) * zoom, y: paneHeight / 3 - (corner.y + size.height / 2) * zoom, zoom },
+  };
+}
+
+const nodeElement = (id: string) => document.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
+
+// Marks a node on screen for a moment
+function flash(id: string) {
+  const element = nodeElement(id);
+  if (!element) return;
+  element.classList.remove("node-flash");
+  void element.offsetWidth; // restarts the animation when asked twice in a row
+  element.classList.add("node-flash");
+  window.setTimeout(() => element.classList.remove("node-flash"), 1600);
 }
 
 // ELK (1.6 MB) is loaded and runs in a worker, so neither holds the main thread
@@ -157,21 +188,20 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   };
 
   // Brings a node into view and marks it a moment, as Focus asks; a node folded away or inside a
-  // hidden box shows its nearest box on screen instead (desktop: the phone's graph is its own tab)
+  // hidden box shows its nearest box on screen instead. The phone's graph is a tab of its own, kept
+  // mounted once built: a request made before it was built waits for it, and one made while it is
+  // hidden is taken when the tab opens.
+  const [asked, setAsked] = useState(() => (phone ? takeWaitingShow() : null));
   useEffect(
     () =>
       onShowOnGraph((id) => {
-        if (phone) return;
-        const onScreen = (at: string) => document.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(at)}"]`);
+        takeWaitingShow();
+        if (phone) return setAsked(id);
         let target: string | null = id;
-        while (target && !onScreen(target)) target = latestModel.current.byId.get(target)?.parentId ?? null;
+        while (target && !nodeElement(target)) target = latestModel.current.byId.get(target)?.parentId ?? null;
         if (!target) return;
         void fitView({ nodes: [{ id: target }], duration: 400, padding: 0.8, maxZoom: 1.1 });
-        const element = onScreen(target)!;
-        element.classList.remove("node-flash");
-        void element.offsetWidth; // restarts the animation when asked twice in a row
-        element.classList.add("node-flash");
-        window.setTimeout(() => element.classList.remove("node-flash"), 1600);
+        flash(target);
       }),
     [phone, fitView],
   );
@@ -259,10 +289,24 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     // not counted as done, so the newer one fits instead
     const frame = window.requestAnimationFrame(() => {
       fittedFor.current = topKey;
-      void (phone ? setViewport(phoneViewport(shown, placements, paneWidth)) : fitView(fitOptions)).then(() => setShownYet(true));
+      const overview = phoneViewport(shown, placements, paneWidth);
+      const focus = phone && asked ? phoneFocus(asked, latestModel.current, placements, overview.zoom, paneWidth, paneHeight) : null;
+      if (focus) setAsked(null);
+      void (phone ? setViewport(focus?.viewport ?? overview) : fitView(fitOptions)).then(() => {
+        setShownYet(true);
+        if (focus) flash(focus.target);
+      });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [placements, paneMeasured, fitView, setViewport, phone, paneWidth]);
+  }, [placements, paneMeasured, fitView, setViewport, phone, paneWidth, paneHeight, asked]);
+
+  // A node asked for after the phone's view was first framed
+  useEffect(() => {
+    if (!asked || fittedFor.current !== topKey) return;
+    setAsked(null);
+    const focus = phoneFocus(asked, latestModel.current, placements, phoneViewport(shown, placements, paneWidth).zoom, paneWidth, paneHeight);
+    if (focus) void setViewport(focus.viewport).then(() => flash(focus.target));
+  }, [asked, placements]);
 
   // Escape closes an open menu before the navbar's hide-to-tray handler sees it
   useEffect(() => {

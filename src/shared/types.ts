@@ -25,6 +25,7 @@ export type GraphNode = {
   shelved: boolean; // greyed, and nothing inside it is ready, until unshelved
   priority: Priority | null; // null: none
   ownXp: number; // level-ups plus the completion credit
+  lastActive: string; // when it was last made, ticked, levelled up or otherwise worked on; layout and looks don't count
   position: Point | null; // where the user put it, relative to its box; null: laid out automatically
 };
 

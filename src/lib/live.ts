@@ -36,7 +36,9 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     const before = snapshot?.nodes.find((node) => node.id === row.id);
     if (!before) return readXp(row.id);
     const loggedXp = before.ownXp - (before.completedAt ? PROGRESS_UNIT : 0);
-    const delta: Delta = { nodes: [toNode({ ...row, logged_xp: loggedXp })] };
+    // Nor their dates, and activity only moves forward, so the later of the two stands
+    const node = toNode({ ...row, logged_xp: loggedXp });
+    const delta: Delta = { nodes: [before.lastActive > node.lastActive ? { ...node, lastActive: before.lastActive } : node] };
     // Ticking or unticking elsewhere moves today's count
     if (before.completedAt !== row.completed_at) {
       return readProgressToday(db).then((progressToday) => ({ ...delta, progressToday }));

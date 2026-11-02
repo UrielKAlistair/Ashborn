@@ -10,10 +10,9 @@ import type { Act } from "./HomePage";
 import { passedOver, storePassedOver, storedTimer, storeTimer, type StartTimer } from "./nowStore";
 import { SplitSteps } from "./SplitSteps";
 import { showOnGraph } from "./showOnGraph";
+import { useTrayNow } from "./trayNow";
 
-const titleClass = "mt-2 block font-display text-[17px] leading-snug font-semibold text-ink/95";
-
-// A started step's time box, and how often a step can be passed over before Now asks why
+// A started step's time box, and on how many days a step can be passed over before Now asks why
 const START_MINUTES = 15;
 const MORE_MINUTES = 5;
 const PASSED_OVER_ASKS = 3;
@@ -36,6 +35,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
   const [timer, setTimer] = useState(storedTimer);
   const [clock, setClock] = useState(Date.now);
   const phone = usePhone();
+  const trayNow = useTrayNow();
   // The notice at the end reads the steps as they are then
   const latestSteps = useRef(steps);
   latestSteps.current = steps;
@@ -60,6 +60,8 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
   useEffect(() => {
     if (!timer) return;
     const tick = window.setInterval(() => setClock(Date.now()), 1000);
+    // A timer that ended before this card mounted has had its notice
+    if (timer.endsAt <= Date.now()) return () => window.clearInterval(tick);
     const end = window.setTimeout(() => {
       const step = latestSteps.current.find(({ id }) => id === timer.stepId);
       if (step && "Notification" in window && Notification.permission === "granted") new Notification(`Time's up: ${step.title}`, { body: "Done, or keep going?" });
@@ -72,6 +74,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
 
   if (steps.length === 0) {
     keys.current = { "/": requestCapture };
+    trayNow.current = null;
     return null;
   }
 
@@ -107,19 +110,21 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
     setTimer(next);
     setClock(Date.now());
   };
-  const setCount = (count: number) => {
+  // Once a day at most, so looking through the steps in one sitting isn't counted as avoiding one
+  const passedToday = counts[step.id]?.last === date;
+  const setPassedDays = (days: number) => {
     const { [step.id]: _, ...rest } = counts;
-    const next = count ? { ...rest, [step.id]: count } : rest;
+    const next = days ? { ...rest, [step.id]: { days, last: date } } : rest;
     storePassedOver(next);
     setCounts(next);
   };
   const running = timed && timer ? timer : null;
   const timeLeft = running ? Math.max(0, running.endsAt - clock) : null;
-  const passedCount = counts[step.id] ?? 0;
+  const passedDays = counts[step.id]?.days ?? 0;
 
   const done = () => {
     if (timed) setTimed(null);
-    if (passedCount) setCount(0);
+    if (passedDays) setPassedDays(0);
     void act("updateNode", step.id, { done: true });
   };
   const box = (minutes: number) => setTimed({ stepId: step.id, startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000 });
@@ -127,10 +132,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
   const more = () => box(MORE_MINUTES);
   const stop = () => setTimed(null);
   const notNow = () => {
-    setCount(passedCount + 1);
+    if (!passedToday) setPassedDays(passedDays + 1);
     setPassed(waiting.length > 1 ? [...passed, step.id] : []);
   };
   const firstStep = needsFirstStep(model, step);
+  trayNow.current = { id: step.id, title: step.title, endsAt: running?.endsAt ?? null, canTick: !firstStep };
   keys.current = splitting
     ? { "/": requestCapture }
     : firstStep
@@ -148,14 +154,14 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
         </span>
       </div>
 
-      {/* The phone's graph is a screen of its own, so there the title is only a title */}
-      {phone ? (
-        <p className={titleClass}>{step.title}</p>
-      ) : (
-        <button type="button" onClick={() => showOnGraph(step.id)} title="Show on the graph" className={`${titleClass} text-left decoration-ember/50 underline-offset-4 hover:underline`}>
-          {step.title}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => showOnGraph(step.id)}
+        title="Show on the graph"
+        className="mt-2 block text-left font-display text-[17px] leading-snug font-semibold text-ink/95 decoration-ember/50 underline-offset-4 hover:underline"
+      >
+        {step.title}
+      </button>
       <p className="mt-1 flex items-center gap-1.5 text-[12px] text-muted">
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
         <span className="truncate">
@@ -182,8 +188,8 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
           </li>
         ) : null}
         {then && then.id !== from?.id ? <li className="text-muted">Then: {then.title}</li> : null}
-        {passedCount >= PASSED_OVER_ASKS && !firstStep ? (
-          <li className="text-amber-200">↷ Passed over {passedCount} times. Too big, or waiting on something?</li>
+        {passedDays >= PASSED_OVER_ASKS && !firstStep ? (
+          <li className="text-amber-200">↷ Passed over on {passedDays} days. Too big, or waiting on something?</li>
         ) : null}
       </ul>
 
@@ -204,9 +210,9 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
 
       {splitting ? (
         <SplitSteps act={act} parentId={step.id} onAdded={() => {
-            setCount(0);
+            setPassedDays(0);
             setSplitFrom(step.id);
-          }} onDone={() => setSplitting(false)} graph={{ model, snapshot }} first={firstStep} className="mt-3 w-full" />
+          }} onDone={() => setSplitting(false)} graph={{ model, snapshot }} heading={firstStep ? "First steps" : undefined} className="mt-3 w-full" />
       ) : (
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
           {firstStep ? (
@@ -249,9 +255,9 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
               type="button"
               onClick={() => setSplitting(true)}
               title="Split it (S)"
-              className={`rounded-lg px-2 py-1.5 hover:bg-ink/6 ${passedCount >= PASSED_OVER_ASKS ? "border border-amber-300/50 text-ink/85" : "text-muted hover:text-ink/85"}`}
+              className={`rounded-lg px-2 py-1.5 hover:bg-ink/6 ${passedDays >= PASSED_OVER_ASKS ? "border border-amber-300/50 text-ink/85" : "text-muted hover:text-ink/85"}`}
             >
-              Too big? Split it
+              {phone ? "Split it" : "Too big? Split it"}
             </button>
           )}
         </div>

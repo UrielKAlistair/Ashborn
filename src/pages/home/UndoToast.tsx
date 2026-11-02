@@ -6,8 +6,8 @@ const TOAST_MS = 6000;
 
 type Undoable = { id: string; label: string; undo: NodePatch };
 
-// Wraps `act` so that ticking a step done or giving it a priority, from anywhere in the app, offers
-// to undo it: both can move the step out of sight. Stays the same function while `act` does, so the
+// Wraps `act` so that ticking a step done, giving it a priority or shelving it, from anywhere in the
+// app, offers to undo it: each can move it out of sight. Stays the same function while `act` does, so the
 // graph's cards don't redraw.
 export function useUndoableChanges(act: Act, snapshot: Snapshot | null) {
   const [undoable, setUndoable] = useState<Undoable | null>(null);
@@ -21,7 +21,8 @@ export function useUndoableChanges(act: Act, snapshot: Snapshot | null) {
         const node = latest.current?.nodes.find((candidate) => candidate.id === id);
         if (node && patch.done) setUndoable({ id, label: `Done: ${node.title}`, undo: { done: false } });
         else if (node && patch.priority && patch.priority !== node.priority) setUndoable({ id, label: `P${patch.priority}: ${node.title}`, undo: { priority: node.priority } });
-        else if (patch.done === false || patch.priority === null) setUndoable((current) => (current?.id === id ? null : current));
+        else if (node && patch.shelved) setUndoable({ id, label: `Shelved: ${node.title}`, undo: { shelved: false } });
+        else if (patch.done === false || patch.priority === null || patch.shelved === false) setUndoable((current) => (current?.id === id ? null : current));
       }
       return act(name, ...args);
     },

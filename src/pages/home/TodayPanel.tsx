@@ -9,7 +9,9 @@ import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
 import { Capture, NodePicker } from "./Capture";
 import { FocusCard } from "./FocusCard";
+import { goneQuiet } from "../../shared/goneQuiet";
 import { inInbox } from "../../shared/inbox";
+import { GoneQuiet } from "./GoneQuiet";
 import { SplitSteps } from "./SplitSteps";
 import { Tick } from "./Tick";
 
@@ -43,14 +45,17 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const todo = prioritisedSteps(model, snapshot, priorities);
   const todoCount = todo.reduce((count, { steps }) => count + steps.length, 0);
   // Ready steps and empty quests nothing covers yet, so a priority can be given here without the
-  // graph; untriaged Inbox items are left to the Inbox
+  // graph; untriaged Inbox items are left to the Inbox, and quiet quests' steps to Gone quiet
+  const quiet = goneQuiet(model, snapshot, priorities, date);
+  const quietIds = new Set(quiet.map(({ quest }) => quest.id));
   const unprioritised = snapshot.nodes.filter(
     (node) =>
       (node.parentId || needsFirstStep(model, node)) &&
       model.ready.has(node.id) &&
       !priorities.effective.has(node.id) &&
       questOf(model.byId, node).active &&
-      !inInbox(model, node, snapshot.inboxId),
+      !inInbox(model, node, snapshot.inboxId) &&
+      !quietIds.has(questOf(model.byId, node).id),
   );
 
   // The count is from the last change; once the next day starts it belongs to yesterday until the next one
@@ -176,6 +181,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       </Section>
 
       {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} /> : null}
+      <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} />
 
       <Section title="Routines" action={<RoutineForm act={act} />}>
         {routines.length === 0 ? (
@@ -417,7 +423,7 @@ function FirstStepRow({ quest, snapshot, model, act }: { quest: GraphNode; snaps
           </p>
         </div>
       </div>
-      {open ? <SplitSteps act={act} parentId={quest.id} onDone={() => setOpen(false)} graph={{ model, snapshot }} first className="mt-1 w-full" /> : null}
+      {open ? <SplitSteps act={act} parentId={quest.id} onDone={() => setOpen(false)} graph={{ model, snapshot }} heading="First steps" className="mt-1 w-full" /> : null}
     </div>
   );
 }

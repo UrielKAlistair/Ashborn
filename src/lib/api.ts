@@ -48,6 +48,8 @@ export type NodeRow = {
   shelved: boolean;
   priority: Priority | null;
   logged_xp?: number; // only from the nodes_with_xp view
+  last_logged_at?: string | null; // likewise
+  changed_at?: Record<string, string>;
   x: number | null;
   y: number | null;
 };
@@ -473,8 +475,18 @@ export function toNode(row: NodeRow): GraphNode {
     shelved: row.shelved,
     priority: row.priority,
     ownXp: (row.logged_xp ?? 0) + (row.completed_at ? PROGRESS_UNIT : 0),
+    lastActive: lastActive(row),
     position: row.x === null || row.y === null ? null : { x: row.x, y: row.y },
   };
+}
+
+// The changes that count as working on a node: moving it on the canvas or recolouring it doesn't.
+// Deleting a step or changing a link leaves no date behind, so neither can count.
+const ACTIVITY_FIELDS = ["title", "parent_id", "completed_at", "priority", "shelved", "active"];
+
+function lastActive(row: NodeRow) {
+  const moments = [row.created_at, row.completed_at, row.last_logged_at, ...ACTIVITY_FIELDS.map((field) => row.changed_at?.[field])];
+  return new Date(Math.max(...moments.flatMap((moment) => (moment ? [Date.parse(moment)] : [])))).toISOString();
 }
 
 // A zero weight trains nothing, so only positive weights are stored

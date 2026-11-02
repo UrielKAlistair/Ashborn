@@ -17,6 +17,7 @@ import { KitchenPage } from "./pages/kitchen/KitchenPage";
 import { AlarmsPage } from "./pages/AlarmsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
+import { onShowOnGraph } from "./pages/home/showOnGraph";
 import { PhoneHome } from "./pages/phone/PhoneHome";
 import { SignInPage } from "./pages/SignInPage";
 import { DEFAULT_DAY_START_HOUR, setDayStartHour } from "./shared/dates";
@@ -242,6 +243,23 @@ function App() {
       }),
     [],
   );
+
+  // On the phone the graph is a tab of its own: asking to show a node opens it there
+  useEffect(
+    () =>
+      phone
+        ? onShowOnGraph(() => {
+            if (routesInAddress && window.location.pathname !== "/graph") window.history.pushState({}, "", "/graph");
+            setCurrentPath("/graph");
+          })
+        : undefined,
+    [phone],
+  );
+
+  // Done chosen on the tray's Now, ticked here so it is undoable like any other tick
+  const latestActing = useRef(acting);
+  latestActing.current = acting;
+  useEffect(() => window.ashborn?.onNowDone((id) => void latestActing.current("updateNode", id, { done: true })), []);
 
   const renderPage = () => {
     if (currentPath === "/atlas" || currentPath.startsWith("/atlas/")) {

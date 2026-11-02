@@ -20,6 +20,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+// The step in the app's Now, mirrored in the tray so it can be seen and ticked without the window
+type NowStep = { id: string; title: string; endsAt: number | null; canTick: boolean } | null;
+let nowStep: NowStep = null;
 // Set once the app is really quitting, so closing the window no longer just hides it
 let quitting = false;
 
@@ -73,13 +76,7 @@ function handleTrayActivation() {
 
 function createTray() {
   tray = new Tray(createTrayImage());
-  tray.setToolTip("Ashborn");
-  // GNOME's AppIndicator extension sends a click only on a double-click; a single click opens
-  // this menu
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Show Ashborn", click: showMainWindow },
-    { label: "Quit Ashborn", click: () => app.quit() },
-  ]));
+  updateTrayMenu();
 
   tray.on("click", () => {
     handleTrayActivation();
@@ -88,6 +85,35 @@ function createTray() {
   tray.on("double-click", () => {
     handleTrayActivation();
   });
+}
+
+// GNOME's AppIndicator extension sends a click only on a double-click; a single click opens this menu
+function updateTrayMenu() {
+  if (!tray) return;
+  const now = nowStep;
+  const title = now && now.title.length > 60 ? `${now.title.slice(0, 59)}…` : now?.title;
+  const nowItems: Electron.MenuItemConstructorOptions[] = now
+    ? [
+        { label: `Now: ${title}`, click: showMainWindow },
+        ...(now.endsAt ? [{ label: `Timer ends at ${new Date(now.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`, enabled: false }] : []),
+        ...(now.canTick ? [{ label: "Done", click: () => mainWindow?.webContents.send("now:done", now.id) }] : []),
+        { type: "separator" },
+      ]
+    : [];
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      ...nowItems,
+      { label: "Capture a thought", click: captureThought },
+      { label: "Show Ashborn", click: showMainWindow },
+      { label: "Quit Ashborn", click: () => app.quit() },
+    ]),
+  );
+  tray.setToolTip(now ? `Ashborn · Now: ${title}` : "Ashborn");
+}
+
+function captureThought() {
+  showMainWindow();
+  mainWindow?.webContents.send("app:capture");
 }
 
 function createWindow() {
@@ -176,6 +202,11 @@ ipcMain.on("app:toggle-maximise", () => {
 
 ipcMain.handle("app:is-maximised", () => mainWindow?.isMaximized() ?? false);
 
+ipcMain.on("now:update", (_event, step: NowStep) => {
+  nowStep = step;
+  updateTrayMenu();
+});
+
 ipcMain.on("app:quit", () => {
   app.quit();
 });
@@ -213,10 +244,7 @@ if (!app.requestSingleInstanceLock()) {
     createTray();
     // From anywhere on the desktop: the window, with its capture field ready for a thought. A key
     // another app already holds is left to it.
-    globalShortcut.register("CommandOrControl+Alt+Space", () => {
-      showMainWindow();
-      mainWindow?.webContents.send("app:capture");
-    });
+    globalShortcut.register("CommandOrControl+Alt+Space", captureThought);
   });
 }
 

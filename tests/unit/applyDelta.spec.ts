@@ -18,6 +18,7 @@ const node = (id: string, overrides: Partial<GraphNode> = {}): GraphNode => ({
   shelved: false,
   priority: null,
   ownXp: 0,
+  lastActive: "2026-01-01T00:00:00.000Z",
   position: null,
   size: null,
   ...overrides,

@@ -3,9 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { today } from "../../src/shared/dates";
 
 // Start on Now: a 15-minute box that holds the step in Now, ends with "Done, or keep going?", and
-// survives a reload; and a step passed over three times asks why.
+// survives a reload; and a step passed over on three days asks why.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
@@ -66,15 +67,18 @@ test("start timer and passing over", async () => {
     expect(await storage("ashborn-now-timer")).toBeNull();
   });
 
-  await test.step("passing a step over is counted, and the third time Now asks why", async () => {
+  await test.step("passing a step over counts once a day, and on the third day Now asks why", async () => {
     await page.evaluate(() => localStorage.removeItem("ashborn-passed-over"));
     await expect(now).toContainText(/of 2/);
     await now.getByRole("button", { name: "Not now" }).click();
-    expect(await storage("ashborn-passed-over")).toEqual({ [id.draft]: 1 });
-    await page.evaluate((stepId) => localStorage.setItem("ashborn-passed-over", JSON.stringify({ [stepId]: 3 })), id.draft);
+    await now.getByRole("button", { name: "Not now" }).click();
+    await expect(now).toContainText("Draft the intro");
+    await now.getByRole("button", { name: "Not now" }).click();
+    expect((await storage("ashborn-passed-over"))[id.draft]).toEqual({ days: 1, last: today() });
+    await page.evaluate((stepId) => localStorage.setItem("ashborn-passed-over", JSON.stringify({ [stepId]: { days: 3, last: "2026-01-01" } })), id.draft);
     await page.reload();
     await expect(now).toContainText("Draft the intro", { timeout: 15_000 });
-    await expect(now).toContainText("Passed over 3 times. Too big, or waiting on something?");
+    await expect(now).toContainText("Passed over on 3 days. Too big, or waiting on something?");
     await now.getByRole("button", { name: "Too big? Split it" }).click();
     await now.getByLabel("Steps, one per line").fill("Write the first sentence");
     await now.getByRole("button", { name: /^Add step/ }).click();

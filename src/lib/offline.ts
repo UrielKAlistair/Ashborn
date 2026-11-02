@@ -52,6 +52,7 @@ const preview: Record<Mutation, Preview> = {
         shelved: false,
         priority: null,
         ownXp: 0,
+        lastActive: at,
         position: null,
       },
     ],
@@ -66,12 +67,13 @@ const preview: Record<Mutation, Preview> = {
       ...definedOnly(fields),
       completedAt: ticked ? (done ? at : null) : node.completedAt,
       ownXp: node.ownXp + step * PROGRESS_UNIT,
+      lastActive: at,
     };
     return { nodes: [updated], progressToday: step ? countedToday(snapshot, step) : undefined };
   },
   deleteNode: (snapshot, [id]) => ({ removedNodeIds: [id, ...descendants(snapshot.nodes, id)] }),
-  moveNode: (snapshot, [id, parentId]) => ({
-    nodes: [{ ...existing(snapshot.nodes, id, "This step"), parentId, position: null }],
+  moveNode: (snapshot, [id, parentId], at) => ({
+    nodes: [{ ...existing(snapshot.nodes, id, "This step"), parentId, position: null, lastActive: at }],
     removedEdges: snapshot.edges.filter((edge) => edge.from === id || edge.to === id),
   }),
   placeNodes: (snapshot, [places]) => ({
@@ -85,9 +87,9 @@ const preview: Record<Mutation, Preview> = {
   }),
   addEdge: (_snapshot, [edge]) => ({ edges: [edge as GraphEdge] }),
   removeEdge: (_snapshot, [edge]) => ({ removedEdges: [edge as GraphEdge] }),
-  levelUp: (snapshot, [nodeId]) => {
+  levelUp: (snapshot, [nodeId], at) => {
     const node = existing(snapshot.nodes, nodeId, "This step");
-    return { nodes: [{ ...node, ownXp: node.ownXp + PROGRESS_UNIT }], progressToday: countedToday(snapshot, 1) };
+    return { nodes: [{ ...node, ownXp: node.ownXp + PROGRESS_UNIT, lastActive: at }], progressToday: countedToday(snapshot, 1) };
   },
   createRoutine: (_snapshot, [routine]) => ({ routines: [routine as Routine] }),
   deleteRoutine: (_snapshot, [id]) => ({ removedRoutineIds: [id] }),

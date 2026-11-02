@@ -15,6 +15,12 @@ contextBridge.exposeInMainWorld("ashborn", {
     ipcRenderer.on("app:capture", handle);
     return () => ipcRenderer.removeListener("app:capture", handle);
   },
+  setNow: (step: { id: string; title: string; endsAt: number | null; canTick: boolean } | null) => ipcRenderer.send("now:update", step),
+  onNowDone: (listener: (id: string) => void) => {
+    const handle = (_event: unknown, id: string) => listener(id);
+    ipcRenderer.on("now:done", handle);
+    return () => ipcRenderer.removeListener("now:done", handle);
+  },
   newestBackup: () => ipcRenderer.invoke("backup:newest"),
   writeBackup: (json: string) => ipcRenderer.invoke("backup:write", json),
 });

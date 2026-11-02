@@ -1,14 +1,15 @@
-// What Now remembers on this device between sittings: how often each step was passed over, and the
+// What Now remembers on this device between sittings: on how many days each step was passed over, and the
 // timer on a started step. Where storage refuses (a private window), it is forgotten.
 
 const passedOverKey = "ashborn-passed-over";
 const timerKey = "ashborn-now-timer";
 
 export type StartTimer = { stepId: string; startedAt: number; endsAt: number };
+export type PassedOver = Record<string, { days: number; last: string }>; // by step: days passed over, the latest
 
-export const passedOver = () => read<Record<string, number>>(passedOverKey, {});
+export const passedOver = () => read<PassedOver>(passedOverKey, {});
 
-export function storePassedOver(counts: Record<string, number>) {
+export function storePassedOver(counts: PassedOver) {
   write(passedOverKey, counts);
 }
 
