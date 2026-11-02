@@ -619,7 +619,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-1 items-start gap-2">
             <HexDot className={palette.hexFill} />
-            <Title node={node} act={act} textSize="text-[14px]" className="line-clamp-2 font-display leading-snug font-semibold text-ink" />
+            <Title node={node} act={act} textSize="text-[14px]" className="truncate font-display leading-snug font-semibold text-ink" />
             {data.phone ? null : (
               <button
                 type="button"

@@ -548,10 +548,10 @@ function describe(snapshot: Snapshot, questId?: string) {
   const lines: string[] = [];
 
   const shownIds = new Set(shown.map((quest) => quest.id));
-  const ready = snapshot.nodes.filter((node) => node.parentId && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id) && !inInbox(model, node, snapshot.inboxId));
+  const ready = snapshot.nodes.filter((node) => (node.parentId || needsFirstStep(model, node)) && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id) && !inInbox(model, node, snapshot.inboxId));
   const priorities = derivePriorities(model, snapshot, today());
   const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) => steps.map((node) => `- P${priority} ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`));
-  const unprioritised = ready.filter((node) => !priorities.effective.has(node.id)).map((node) => `- ${node.title} [${node.id}]`);
+  const unprioritised = ready.filter((node) => !priorities.effective.has(node.id)).map((node) => `- ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet)" : ""}`);
   lines.push("Up next (the user's to-do: ready to do now, with a priority):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
   lines.push("Also ready, no priority (not on the user's to-do):", ...(unprioritised.length ? unprioritised : ["- nothing"]), "");
 

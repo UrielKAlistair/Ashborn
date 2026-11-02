@@ -42,11 +42,11 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const priorities = derivePriorities(model, snapshot, date);
   const todo = prioritisedSteps(model, snapshot, priorities);
   const todoCount = todo.reduce((count, { steps }) => count + steps.length, 0);
-  // Ready steps nothing covers yet, so a priority can be given here without the graph; untriaged
-  // Inbox items are left to the Inbox
+  // Ready steps and empty quests nothing covers yet, so a priority can be given here without the
+  // graph; untriaged Inbox items are left to the Inbox
   const unprioritised = snapshot.nodes.filter(
     (node) =>
-      node.parentId &&
+      (node.parentId || needsFirstStep(model, node)) &&
       model.ready.has(node.id) &&
       !priorities.effective.has(node.id) &&
       questOf(model.byId, node).active &&
@@ -262,7 +262,7 @@ function Unprioritised({ steps, model, act }: { steps: GraphNode[]; model: Graph
                   <p className="text-[13px] leading-snug text-ink/80">{step.title}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
-                    {quest.title}
+                    {needsFirstStep(model, step) ? "A quest with no steps yet" : quest.title}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1" role="group" aria-label={`Priority for ${step.title}`}>

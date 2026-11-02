@@ -90,6 +90,27 @@ test("a quest with a priority and no steps", async () => {
     await expect(list).toContainText("Find a course");
   });
 
+  await test.step("with no priority it waits in Ready, chips and all; an empty Inbox doesn't", async () => {
+    const { error: insertError } = await db.from("graph_nodes").insert([
+      { id: crypto.randomUUID(), title: "Someday idea", parent_id: null },
+      { id: data.user.id, title: "Inbox", parent_id: null },
+    ]);
+    if (insertError) throw insertError;
+    await expect(page.getByRole("button", { name: /Ready, no priority/ })).toContainText("1");
+    await page.getByRole("button", { name: /Ready, no priority/ }).click();
+    const chips = page.getByRole("group", { name: "Priority for Someday idea" });
+    await expect(chips).toBeVisible();
+    await expect(page.getByRole("group", { name: "Priority for Inbox" })).toHaveCount(0);
+    await expect(page.getByText("A quest with no steps yet")).toBeVisible();
+    await page.screenshot({ path: `${shots}/first-step-ready.png` });
+
+    await chips.getByRole("button", { name: "P4" }).click();
+    await expect(chips).toHaveCount(0);
+    const list = page.getByRole("group", { name: "Up next" });
+    await expect(list).toContainText("Someday idea");
+    await expect(list.getByTitle("Add a first step")).toBeVisible();
+  });
+
   await test.step("on the phone too", async () => {
     const { error: insertError } = await db.from("graph_nodes").insert({ title: "Plan the move", parent_id: null, priority: 1 });
     if (insertError) throw insertError;
