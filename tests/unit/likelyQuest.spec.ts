@@ -11,9 +11,16 @@ const pick = (title: string, quests: GraphNode[]) =>
 
 const quests = [quest("bsc", "Online BSc"), quest("ddp", "DDP Work"), quest("errands", "Errands"), quest("inbox", "Inbox")];
 
-test("the quest sharing the most words with the deadline", () => {
+test("the quest whose whole title the deadline names", () => {
   expect(pick("Online BSc quiz", quests)).toBe("bsc");
-  expect(pick("DDP presentation", quests)).toBe("ddp");
+  expect(pick("DDP Work: final presentation", quests)).toBe("ddp");
+  expect(pick("Thesis draft", [quest("a", "Thesis"), quest("b", "Thesis draft")])).toBe("b");
+});
+
+test("one shared ordinary word is no guess", () => {
+  expect(pick("DDP presentation", quests)).toBeNull();
+  expect(pick("Pay electricity bill", [quest("rent", "Pay rent")])).toBeNull();
+  expect(pick("Submit report online", quests)).toBeNull();
 });
 
 test("no shared word, no guess: short and common words don't count", () => {
@@ -22,7 +29,7 @@ test("no shared word, no guess: short and common words don't count", () => {
 });
 
 test("a tie is no guess, and hidden, shelved, done quests and the Inbox are never one", () => {
-  expect(pick("Thesis draft", [quest("a", "Thesis"), quest("b", "Draft letters")])).toBeNull();
+  expect(pick("Thesis draft", [quest("a", "Thesis"), quest("b", "Draft")])).toBeNull();
   expect(pick("Inbox zero", quests)).toBeNull();
   expect(pick("Online BSc quiz", [quest("bsc", "Online BSc", { shelved: true })])).toBeNull();
   expect(pick("Online BSc quiz", [quest("bsc", "Online BSc", { active: false })])).toBeNull();
