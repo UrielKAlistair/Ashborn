@@ -50,7 +50,11 @@ test("make a deadline a quest", async () => {
   await expect(page.getByRole("group", { name: "Priority for Read chapter 2" })).toHaveCount(0);
   await expect.poll(async () => (await db.from("graph_nodes").select("priority").eq("id", quest).single()).data?.priority).toBe(3);
 
+  // Due in 2 days and linked to nothing: it comes up top, with the same ways to link it
+  const dueSoon = page.getByRole("region", { name: "Due soon, linked to nothing" });
+  await expect(dueSoon).toContainText("Judge the science fest due in 2d, linked to nothing");
   await deadlines.getByRole("button", { name: "Make it a quest" }).click();
+  await expect(dueSoon).toHaveCount(0);
   await expect(now).toContainText("Judge the science fest");
   await expect(now).toContainText("Judge the science fest, due in 2d");
   await expect(now.getByRole("button", { name: "Add a first step" })).toBeVisible();

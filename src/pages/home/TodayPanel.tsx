@@ -19,6 +19,8 @@ import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
 const DEADLINE_HORIZON_DAYS = 21;
+// An unlinked deadline this close comes up top, since it raises nothing and Now can't show it
+const UNLINKED_URGENT_DAYS = 2;
 
 export const alarmLabels: Record<AlarmKind, string> = { none: "No alarm", plain: "Alarm", walk: "Alarm, walk to stop", situps: "Alarm, sit-ups to stop" };
 
@@ -77,6 +79,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
     snapshot.routineChecks.filter((check) => check.date === date).map((check) => check.routineId),
   );
   const deadlines = snapshot.deadlines.filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS);
+  const unlinkedUrgent = deadlines.filter((deadline) => !deadline.nodeId && daysBetween(date, deadline.dueDate) <= UNLINKED_URGENT_DAYS);
 
   return (
     <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-ink/8 bg-panel px-4 py-4">
@@ -134,6 +137,21 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       </div>
 
       <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
+      {unlinkedUrgent.length > 0 ? (
+        <section aria-label="Due soon, linked to nothing" className="-mt-2 space-y-1 rounded-xl border border-amber-300/40 bg-[color-mix(in_oklab,var(--color-amber-300)_8%,transparent)] px-3 py-2.5">
+          {unlinkedUrgent.map((deadline) => {
+            const days = daysBetween(date, deadline.dueDate);
+            return (
+              <div key={deadline.id}>
+                <p className="text-[13px] leading-snug text-ink/90">
+                  {deadline.title} <span className="text-[12px] text-amber-200">{days < 0 ? `${-days}d late` : days === 0 ? "due today" : days === 1 ? "due tomorrow" : `due in ${days}d`}, linked to nothing</span>
+                </p>
+                <LinkDeadline deadline={deadline} model={model} act={act} inboxId={snapshot.inboxId} />
+              </div>
+            );
+          })}
+        </section>
+      ) : null}
       {sorting ? null : <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} onBoxed={setBoxed} />}
 
       {boxed ? (
