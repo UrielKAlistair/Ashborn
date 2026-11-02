@@ -50,9 +50,9 @@ const preview: Record<Mutation, Preview> = {
         createdAt: at,
         completedAt: null,
         shelved: false,
+        priority: null,
         ownXp: 0,
         position: null,
-        size: null,
       },
     ],
   }),
@@ -75,13 +75,13 @@ const preview: Record<Mutation, Preview> = {
     removedEdges: snapshot.edges.filter((edge) => edge.from === id || edge.to === id),
   }),
   placeNodes: (snapshot, [places]) => ({
-    nodes: (places as Placement[]).flatMap(({ id, position, size }) => {
+    nodes: (places as Placement[]).flatMap(({ id, position }) => {
       const node = snapshot.nodes.find((candidate) => candidate.id === id);
-      return node ? [{ ...node, position, size: size ?? node.size }] : [];
+      return node ? [{ ...node, position }] : [];
     }),
   }),
   resetLayout: (snapshot, [ids]) => ({
-    nodes: snapshot.nodes.filter((node) => (ids as string[]).includes(node.id)).map((node) => ({ ...node, position: null, size: null })),
+    nodes: snapshot.nodes.filter((node) => (ids as string[]).includes(node.id)).map((node) => ({ ...node, position: null })),
   }),
   addEdge: (_snapshot, [edge]) => ({ edges: [edge as GraphEdge] }),
   removeEdge: (_snapshot, [edge]) => ({ removedEdges: [edge as GraphEdge] }),
@@ -98,6 +98,7 @@ const preview: Record<Mutation, Preview> = {
   createAlarm: (_snapshot, [alarm]) => ({ alarms: [alarm as Alarm] }),
   updateAlarm: (snapshot, [id, patch]) => ({ alarms: [{ ...existing(snapshot.alarms, id, "This alarm"), ...(patch as AlarmPatch) }] }),
   deleteAlarm: (_snapshot, [id]) => ({ removedAlarmIds: [id] }),
+  updateSettings: (snapshot, [patch]) => ({ settings: { ...snapshot.settings, ...definedOnly(patch) } }),
   // The Kitchen
   createStockItem: (snapshot, [item]) => kitchen(snapshot, { items: [...snapshot.kitchen.items, { ...(item as StockItem), onHand: 0, readAt: null }] }),
   updateStockItem: (snapshot, [id, patch]) => {

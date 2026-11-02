@@ -16,6 +16,7 @@ const node = (id: string, overrides: Partial<GraphNode> = {}): GraphNode => ({
   createdAt: "2026-10-20T00:00:00Z",
   completedAt: null,
   shelved: false,
+  priority: null,
   ownXp: 0,
   position: null,
   size: null,
@@ -30,6 +31,7 @@ const snapshot: Snapshot = {
   alarms: [],
   progressToday: { date: "2026-10-20", count: 2 },
   kitchen: emptyKitchen,
+  settings: { dayStartHour: 4, timeZone: null },
 };
 
 test("an echo equal to what is shown returns the snapshot itself", () => {

@@ -22,7 +22,8 @@ import java.util.List;
 import org.json.JSONException;
 
 // The web app's handle on alarms (src/lib/alarms.ts): hand over the schedule, ask which alarm
-// is ringing, stop it, and check the permissions alarms need
+// is ringing, stop or snooze it, check the permissions alarms need, and hand over the session
+// the background refresh signs in with
 @CapacitorPlugin(name = "AshbornAlarm")
 public class AlarmPlugin extends Plugin {
     @PluginMethod
@@ -58,10 +59,29 @@ public class AlarmPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod
+    public void connectBackground(PluginCall call) {
+        String url = call.getString("url"), publishableKey = call.getString("publishableKey"), refreshToken = call.getString("refreshToken");
+        if (url == null || publishableKey == null || refreshToken == null) {
+            call.reject("url, publishableKey and refreshToken are needed");
+            return;
+        }
+        AlarmRefreshWorker.connect(getContext(), url, publishableKey, refreshToken);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void snooze(PluginCall call) {
+        getContext().startService(new Intent(getContext(), AlarmService.class).setAction(AlarmService.ACTION_SNOOZE));
+        getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).showOverLockScreen(false));
+        call.resolve();
+    }
+
     // Notifications must be allowed for an alarm to show; on Android 14+ showing over the lock
     // screen is a separate switch for apps installed outside the Play Store. Battery optimisation
     // can delay or drop alarms, and Xiaomi's phones also stop apps that lack Autostart (which no
-    // app can read, so it is only reported whether the phone is a Xiaomi).
+    // app can read, so it is only reported whether the phone is a Xiaomi). Refreshing alarms while
+    // the app is closed needs the session the app hands over at sign-in.
     @PluginMethod
     public void permissions(PluginCall call) {
         boolean notifications = Build.VERSION.SDK_INT < 33
@@ -73,6 +93,7 @@ public class AlarmPlugin extends Plugin {
         PowerManager power = getContext().getSystemService(PowerManager.class);
         result.put("battery", power.isIgnoringBatteryOptimizations(getContext().getPackageName()));
         result.put("xiaomi", "xiaomi".equalsIgnoreCase(Build.MANUFACTURER));
+        result.put("background", AlarmRefreshWorker.connected(getContext()));
         call.resolve(result);
     }
 

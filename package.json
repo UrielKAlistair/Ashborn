@@ -17,8 +17,12 @@
     "agent:build": "esbuild mcp/server.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=dist-mcp/server.mjs",
     "agent:login": "npm run agent:build && node dist-mcp/server.mjs login",
     "agent": "npm run -s agent:build && node dist-mcp/server.mjs",
+    "connector:build": "esbuild mcp/connector.ts --bundle --platform=neutral --format=esm --packages=external --log-level=warning --outfile=supabase/functions/mcp/connector.js",
+    "connector:consent": "vite build -c vite.consent.config.ts",
+    "connector:deploy": "npm run connector:build && npx supabase functions deploy mcp --no-verify-jwt",
     "android:build": "vite build && cap sync android && cd android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk-21} ./gradlew assembleRelease -q",
-    "android:install": "npm run android:build && $HOME/Android/Sdk/platform-tools/adb install -r android/app/build/outputs/apk/release/app-release.apk"
+    "android:install": "npm run android:build && $HOME/Android/Sdk/platform-tools/adb install -r android/app/build/outputs/apk/release/app-release.apk",
+    "android:test": "cd android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk-21} ./gradlew testDebugUnitTest -q"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
@@ -35,6 +39,8 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.3",
     "@playwright/test": "^1.64.1",
+    "@supabase/middleware": "^1.0.0",
+    "@supabase/server": "^1.9.2",
     "@tailwindcss/vite": "^4.3.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.8",

@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApi } from "../../src/lib/api";
+import { today } from "../../src/shared/dates";
 
 // Two devices on one account: device A is the desktop app, taken offline and back; device B is
 // the API called from here, as the phone or the agent would. Per field the change made later
@@ -49,11 +50,6 @@ const card = (title: string) => page.locator(".react-flow__node").filter({ hasTe
 const stock = (name: string) => page.getByRole("group", { name, exact: true });
 const amountLabel = (name: string) => stock(name).locator("p.text-right");
 const meal = (slot: string) => page.getByRole("group", { name: `${slot} on ${today()}` });
-
-function today() {
-  const at = new Date();
-  return `${at.getFullYear()}-${`${at.getMonth() + 1}`.padStart(2, "0")}-${`${at.getDate()}`.padStart(2, "0")}`;
-}
 
 async function goOffline() {
   await page.context().setOffline(true);

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { alarmsAvailable, connectBackgroundRefresh } from "../lib/alarms";
 import { db } from "../lib/client";
 
 // Email and password sign-in. Accounts are made by invitation (sign-ups are closed in Supabase).
@@ -12,6 +13,8 @@ export function SignInPage() {
     event.preventDefault();
     setBusy(true);
     const { error } = await db.auth.signInWithPassword({ email, password });
+    // A failure here leaves a "!" on the Alarms page, which asks for the password again
+    if (!error && alarmsAvailable) void connectBackgroundRefresh(email, password);
     setBusy(false);
     setMessage(error ? error.message : null);
   };

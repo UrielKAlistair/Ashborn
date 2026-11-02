@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import type { RingingAlarm } from "../../lib/alarms";
 import { SITUPS_TO_STOP, STEPS_TO_STOP, situpCounter, stepCounter } from "../../lib/motion";
 
-// Shown over everything while an alarm rings. A plain alarm stops with a button; a challenge
-// alarm only once the accelerometer has counted enough steps or sit-ups.
-export function AlarmScreen({ alarm, onStop }: { alarm: RingingAlarm; onStop: () => void }) {
+// Shown over everything while an alarm rings. A plain alarm stops or snoozes with a button; a
+// challenge alarm stops only once the accelerometer has counted enough steps or sit-ups.
+export function AlarmScreen({ alarm, onStop, onSnooze }: { alarm: RingingAlarm; onStop: () => void; onSnooze: () => void }) {
   const target = alarm.kind === "walk" ? STEPS_TO_STOP : alarm.kind === "situps" ? SITUPS_TO_STOP : 0;
   const [count, setCount] = useState(0);
 
@@ -31,9 +31,14 @@ export function AlarmScreen({ alarm, onStop }: { alarm: RingingAlarm; onStop: ()
       <p className="text-lg text-white/85">{alarm.title}</p>
 
       {alarm.kind === "plain" ? (
-        <button type="button" onClick={onStop} className="rounded-full border border-white/30 bg-white/10 px-10 py-4 text-sm uppercase tracking-[0.3em]">
-          Stop
-        </button>
+        <div className="flex flex-col items-center gap-4">
+          <button type="button" onClick={onStop} className="rounded-full border border-white/30 bg-white/10 px-10 py-4 text-sm uppercase tracking-[0.3em]">
+            Stop
+          </button>
+          <button type="button" onClick={onSnooze} className="rounded-full px-8 py-3 text-xs uppercase tracking-[0.3em] text-white/60">
+            Snooze 10 min
+          </button>
+        </div>
       ) : (
         <div className="w-full max-w-xs">
           <p className="text-sm tracking-[0.14em] text-white/60">

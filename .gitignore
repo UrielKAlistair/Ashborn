@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-electron
+dist-consent
 dist-ssr
 *.local
 
@@ -45,3 +46,6 @@ release
 
 # Messages between agents, not part of the app
 research/
+
+# The hosted agent server, built from mcp/connector.ts
+supabase/functions/mcp/connector.js

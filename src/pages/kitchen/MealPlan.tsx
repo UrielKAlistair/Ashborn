@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useToday } from "../../lib/useToday";
-import { daysBetween, toISODate, week, weekdayOf } from "../../shared/dates";
+import { addDays, daysBetween, week, weekdayOf } from "../../shared/dates";
 import { mealDeductions, shownMeal, type ShownMeal } from "../../shared/kitchen";
 import { mealDaysAhead, mealDaysBack, mealSlots, mealTimes, type ISODate, type Kitchen, type MealSlot, type Weekday } from "../../shared/types";
 import type { Act } from "../home/HomePage";
@@ -9,14 +9,14 @@ import { Tick } from "../home/Tick";
 // Days the desktop shows at once, today in the middle
 const DESKTOP_DAYS = 5;
 
-type MealPlanProps = { kitchen: Kitchen; act: Act; phone: boolean; onOpenRecipe: (id: string) => void };
+type MealPlanProps = { kitchen: Kitchen; dayStartHour: number; act: Act; phone: boolean; onOpenRecipe: (id: string) => void };
 
 // The days' meals, rolling with today: 2 days back to 6 ahead. The desktop shows five days and
 // shifts with arrows; the phone shows one day per card, swiped sideways. A toggle swaps in the
 // default week, which fills any day not planned.
-export function MealPlan({ kitchen, act, phone, onOpenRecipe }: MealPlanProps) {
+export function MealPlan({ kitchen, dayStartHour, act, phone, onOpenRecipe }: MealPlanProps) {
   const [defaults, setDefaults] = useState(false);
-  const date = useToday();
+  const date = useToday(dayStartHour);
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 rounded-3xl border border-white/10 bg-night-panel p-4">
@@ -335,9 +335,4 @@ function Arrow({ label, disabled, onClick, children }: { label: string; disabled
       {children}
     </button>
   );
-}
-
-function addDays(date: ISODate, days: number): ISODate {
-  const at = new Date(`${date}T00:00:00`);
-  return toISODate(new Date(at.getFullYear(), at.getMonth(), at.getDate() + days));
 }

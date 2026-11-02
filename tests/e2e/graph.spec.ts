@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { phoneWindow } from "../phoneWindow";
 
 // One walk through the home graph in a fresh profile, signed in as the test user: quests,
 // steps, links, ticking, hiding, XP, renaming, deleting, live changes from elsewhere, and state
@@ -50,24 +51,36 @@ const upNext = () => page.locator("section", { hasText: "Up next" }).last();
 const addInput = () => page.getByPlaceholder("Step name, Enter to add");
 const windowVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible());
 
-// Where a dot is once the layout has stopped moving it
+// Where a box or dot is once the layout has left it still for 600 ms: after a reload the layout
+// worker starts cold, so a shorter pause can come before it has placed anything
 async function settledBox(handle: Locator) {
   let previous = await handle.boundingBox();
-  for (;;) {
+  for (let still = 0; still < 4; ) {
     await page.waitForTimeout(150);
     const box = await handle.boundingBox();
-    if (box && previous && box.x === previous.x && box.y === previous.y) return box;
+    const same = box && previous && box.x === previous.x && box.y === previous.y && box.width === previous.width && box.height === previous.height;
+    still = same ? still + 1 : 0;
     previous = box;
   }
+  return previous!;
 }
 
 // Drags from one step's outgoing dot to another's incoming dot in small moves, as a hand would
 async function link(from: string, to: string) {
-  const source = await settledBox(card(from).locator(".react-flow__handle.source"));
-  const target = await settledBox(card(to).locator(".react-flow__handle.target"));
-  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await dragDot(card(from).locator(".react-flow__handle.source"), card(to).locator(".react-flow__handle.target"));
+}
+
+// Drags a link's head, at the incoming dot of `to`, back onto the outgoing dot of `from`
+async function dragHeadBack(from: string, to: string) {
+  await dragDot(card(to).locator(".react-flow__handle.target"), card(from).locator(".react-flow__handle.source"));
+}
+
+async function dragDot(start: Locator, end: Locator) {
+  const a = await settledBox(start);
+  const b = await settledBox(end);
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
-  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 12 });
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
   await page.mouse.up();
 }
 
@@ -105,10 +118,14 @@ test("home graph", async () => {
     expect(await windowVisible()).toBe(true);
   });
 
-  await test.step("dragging links two steps; dragging back removes the link", async () => {
+  await test.step("dragging links two steps; dragging back, from either end, removes the link", async () => {
     await link("Backprop by hand", "Implement an MLP");
     await expect(edges()).toHaveCount(1);
     await link("Implement an MLP", "Backprop by hand");
+    await expect(edges()).toHaveCount(0);
+    await link("Backprop by hand", "Implement an MLP");
+    await expect(edges()).toHaveCount(1);
+    await dragHeadBack("Backprop by hand", "Implement an MLP");
     await expect(edges()).toHaveCount(0);
     await link("Backprop by hand", "Implement an MLP");
     await expect(edges()).toHaveCount(1);
@@ -174,9 +191,14 @@ test("home graph", async () => {
   });
 
   await test.step("ticking a box keeps its inner steps; the eye and + work on nested boxes", async () => {
+    // Both reach the server before the step ends (the tick first, then the untick, which waits
+    // behind it on the same row), so the offline step doesn't catch the untick on its way
+    const boxDone = async () => (await db.from("graph_nodes").select("completed_at").eq("title", "CNN basics").single()).data?.completed_at;
     await card("CNN basics").getByTitle("Mark done").first().click();
     await expect(card("Convolution as a matrix")).toBeVisible();
+    await expect.poll(boxDone).not.toBeNull();
     await card("CNN basics").getByTitle("Mark not done").first().click();
+    await expect.poll(boxDone).toBeNull();
     await card("CNN basics").getByTitle("Hide steps").click();
     await expect(nodes().filter({ hasText: "Convolution as a matrix" })).toHaveCount(0);
     await card("CNN basics").getByTitle("Add a step inside").click();
@@ -204,6 +226,8 @@ test("home graph", async () => {
     await addInput().fill("Offline step");
     await addInput().press("Enter");
     await addInput().press("Escape");
+    // The app learns it is offline when the add fails to send; a tick before that can be lost
+    await expect(page.getByText("1 change will sync when you're back online")).toBeVisible();
     await card("Offline step").getByTitle("Mark done").click();
     await expect(page.getByText("2 changes will sync when you're back online")).toBeVisible();
 
@@ -239,10 +263,10 @@ test("home graph", async () => {
     await expect(card("Deep Learning II")).toBeVisible();
   });
 
-  await test.step("desktop: dragging a quest and resizing a step stick, and survive a reload", async () => {
+  await test.step("desktop: dragging a quest sticks, and survives a reload", async () => {
     await page.locator(".react-flow__pane").click({ position: { x: 5, y: 400 } }); // closes the Quests list over the canvas
     const quest = page.locator(".react-flow__node-quest").first();
-    const before = (await quest.boundingBox())!;
+    const before = await settledBox(quest);
     await page.mouse.move(before.x + 120, before.y + 50);
     await page.mouse.down();
     await page.mouse.move(before.x + 220, before.y + 130, { steps: 8 });
@@ -250,22 +274,37 @@ test("home graph", async () => {
     await expect
       .poll(async () => (await db.from("graph_nodes").select("x").eq("title", "Deep Learning II").single()).data?.x)
       .not.toBeNull();
-
-    const step = card("Added by an agent");
-    const grip = (await step.locator(".react-flow__resize-control").boundingBox())!;
-    const stepBefore = (await step.boundingBox())!;
-    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(grip.x + 80, grip.y + 40, { steps: 8 });
-    await page.mouse.up();
-    await expect
-      .poll(async () => (await db.from("graph_nodes").select("width").eq("title", "Added by an agent").single()).data?.width)
-      .toBeGreaterThan(stepBefore.width);
+    // The canvas position, not the screen one: a reload fits the view again
+    const dropped = await quest.evaluate((element) => element.style.transform);
 
     await page.reload();
-    await expect(card("Added by an agent")).toBeVisible();
-    const after = (await card("Added by an agent").boundingBox())!;
-    expect(after.width).toBeGreaterThan(stepBefore.width + 20);
+    await expect(card("Deep Learning II")).toBeVisible();
+    expect(await page.locator(".react-flow__node-quest").first().evaluate((element) => element.style.transform)).toBe(dropped);
+  });
+
+  await test.step("a quest's steps stay put until it is unlocked; its Reset layout leaves the quest in place", async () => {
+    const x = async (title: string) => (await db.from("graph_nodes").select("x").eq("title", title).single()).data?.x;
+    const dragStep = async () => {
+      const box = await settledBox(card("Added by an agent"));
+      await page.mouse.move(box.x + 60, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 100, box.y + box.height / 2 + 40, { steps: 8 });
+      await page.mouse.up();
+    };
+
+    await dragStep();
+    await page.waitForTimeout(1000);
+    expect(await x("Added by an agent")).toBeNull();
+
+    await card("Deep Learning II").getByTitle(/^Unlock/).click();
+    await dragStep();
+    await expect.poll(() => x("Added by an agent")).not.toBeNull();
+
+    await card("Deep Learning II").getByTitle("Options").click();
+    await page.getByRole("button", { name: /Reset layout: arrange its steps/ }).click();
+    await expect.poll(() => x("Added by an agent")).toBeNull();
+    expect(await x("Deep Learning II")).not.toBeNull();
+    await card("Deep Learning II").getByTitle(/^Lock/).click();
   });
 
   await test.step("Reset layout asks first, then puts every box back to automatic placement", async () => {
@@ -273,7 +312,7 @@ test("home graph", async () => {
     expect(await placed()).toBeGreaterThan(0);
     await page.getByRole("button", { name: "Reset layout" }).click();
     expect(await placed()).toBeGreaterThan(0);
-    await page.getByRole("button", { name: "Reset every box?" }).click();
+    await page.getByRole("button", { name: "Also steps in every box" }).click();
     await expect.poll(placed).toBe(0);
   });
 
@@ -317,12 +356,9 @@ test("home graph", async () => {
   });
 
   await test.step("a phone-sized window opens on today's list; Home's menu holds the graph and the character", async () => {
-    await app.evaluate(({ BrowserWindow }) => {
-      const window = BrowserWindow.getAllWindows()[0];
-      window.unmaximize();
-      window.setSize(400, 860);
-    });
-    await expect(page.locator(".react-flow")).toHaveCount(0);
+    await phoneWindow(app, page);
+    // The graph may already be built, but only hidden and inert over the list (decision 91)
+    await expect(page.locator(".react-flow:not([inert] *)")).toHaveCount(0);
     await expect(upNext()).toBeVisible();
 
     const openScreen = async (section: string, screen: string) => {

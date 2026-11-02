@@ -19,7 +19,9 @@ type TodayPanelProps = {
 };
 
 export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
-  const date = useToday();
+  const { dayStartHour } = snapshot.settings;
+  const date = useToday(dayStartHour);
+  const [dayStartOpen, setDayStartOpen] = useState(false);
   const weekday = weekdayOf(date);
 
   // Steps you can do now: in a shown quest, nothing unfinished before or inside them
@@ -27,7 +29,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
     (node) => node.parentId && model.ready.has(node.id) && questOf(model.byId, node).active,
   );
 
-  // The count is from the last change; after midnight it belongs to yesterday until the next one
+  // The count is from the last change; once the next day starts it belongs to yesterday until the next one
   const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
 
   const routines = snapshot.routines.filter((routine) => routine.weekdays.includes(weekday)).sort(byTime);
@@ -40,10 +42,31 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
     <section className="panel-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-3xl border border-white/10 bg-night-panel p-4">
       <div className="flex items-baseline justify-between">
         <h2 className="text-[11px] uppercase tracking-[0.26em] text-white/55">Today</h2>
-        <p className="text-[11px] tracking-[0.14em] text-white/40">
+        <button
+          type="button"
+          onClick={() => setDayStartOpen((open) => !open)}
+          title="When the day starts"
+          className="text-[11px] tracking-[0.14em] text-white/40 hover:text-white/70"
+        >
           {weekday} {date}
-        </p>
+        </button>
       </div>
+      {dayStartOpen ? (
+        <label className="-mt-3 flex items-center justify-end gap-2 text-[10px] tracking-[0.12em] text-white/45">
+          The day starts at
+          <select
+            value={dayStartHour}
+            onChange={(event) => void act("updateSettings", { dayStartHour: Number(event.target.value) })}
+            className="rounded-md border border-white/10 bg-night/70 px-1.5 py-0.5 text-white/80"
+          >
+            {Array.from({ length: 24 }, (_, hour) => (
+              <option key={hour} value={hour}>
+                {`${hour}`.padStart(2, "0")}:00
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {progressToday > 0 ? (
         <p className="-mt-3 text-[10px] tracking-[0.14em] text-emerald-200/60">
           {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today

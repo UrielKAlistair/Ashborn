@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, nativeImage, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -20,6 +20,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+// Set once the app is really quitting, so closing the window no longer just hides it
+let quitting = false;
 
 function resolveAppPath(...segments: string[]) {
   return path.join(app.getAppPath(), ...segments);
@@ -72,6 +74,12 @@ function handleTrayActivation() {
 function createTray() {
   tray = new Tray(createTrayImage());
   tray.setToolTip("Ashborn");
+  // GNOME's AppIndicator extension sends a click only on a double-click; a single click opens
+  // this menu
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Show Ashborn", click: showMainWindow },
+    { label: "Quit Ashborn", click: () => app.quit() },
+  ]));
 
   tray.on("click", () => {
     handleTrayActivation();
@@ -96,6 +104,19 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
     },
   });
+
+  // Minimising or closing the window (the desktop's shortcuts, as the window has no frame) hides it
+  // to the tray, which also takes it out of the window switcher. Only Quit ends the app.
+  mainWindow.on("minimize", hideMainWindowToTray);
+  mainWindow.on("close", (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    hideMainWindowToTray();
+  });
+
+  // The page's maximise button shows the restore glyph while the window is maximised
+  mainWindow.on("maximize", () => mainWindow?.webContents.send("app:maximised", true));
+  mainWindow.on("unmaximize", () => mainWindow?.webContents.send("app:maximised", false));
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -148,6 +169,13 @@ ipcMain.on("app:hide-to-tray", () => {
   hideMainWindowToTray();
 });
 
+ipcMain.on("app:toggle-maximise", () => {
+  if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+  else mainWindow?.maximize();
+});
+
+ipcMain.handle("app:is-maximised", () => mainWindow?.isMaximized() ?? false);
+
 ipcMain.on("app:quit", () => {
   app.quit();
 });
@@ -157,12 +185,16 @@ ipcMain.handle("backup:newest", () => {
   return times.length > 0 ? Math.max(...times) : null;
 });
 
-// Writes today's backup (replacing one written earlier today), then drops all but the newest
+// Writes today's backup (replacing one written earlier today), then drops all but the newest.
+// The backups hold all the user's data, so only the user can read them.
 ipcMain.handle("backup:write", (_event, json: string) => {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  fs.chmodSync(BACKUP_DIR, 0o700);
   const now = new Date();
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  fs.writeFileSync(path.join(BACKUP_DIR, `${date}.json`), json);
+  const file = path.join(BACKUP_DIR, `${date}.json`);
+  fs.writeFileSync(file, json);
+  fs.chmodSync(file, 0o600);
   for (const name of backupFiles().sort().slice(0, -BACKUPS_KEPT)) fs.unlinkSync(path.join(BACKUP_DIR, name));
 });
 
@@ -189,6 +221,10 @@ app.on("activate", () => {
   }
 
   showMainWindow();
+});
+
+app.on("before-quit", () => {
+  quitting = true;
 });
 
 app.on("window-all-closed", () => {

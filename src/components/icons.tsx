@@ -92,31 +92,6 @@ m-645 -20 c10 -10 15 -22 10 -25 -9 -6 -40 21 -40 36 0 14 8 11 30 -11z m690
   );
 }
 
-export function QuitIcon({ className }: IconProps) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={withDefaultClasses("h-6 w-6", className)}
-      viewBox="0 0 70 70"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M62.666 32.316L57.758 21.53C57.301 20.523 56.112 20.081 55.11 20.538C54.104 20.995 53.66 22.182 54.118 23.186L57.483 30.583H44.481C43.377 30.583 42.481 31.479 42.481 32.583C42.481 33.687 43.377 34.583 44.481 34.583H58.171L54.116 43.495C53.658 44.499 54.102 45.686 55.108 46.143C55.377 46.264 55.658 46.323 55.935 46.323C56.695 46.323 57.421 45.887 57.756 45.151L62.695 34.296C62.799 34.1 62.867 33.889 62.901 33.671C62.988 33.207 62.901 32.726 62.666 32.316Z"
-        fill="currentColor"
-      />
-      <path
-        d="M51.583 47.577C50.479 47.577 49.583 48.472 49.583 49.577V57.583H38.583V15.269C38.583 13.547 37.773 12.019 36.138 11.474L24.536 7.583H49.583V17.577C49.583 18.681 50.479 19.577 51.583 19.577C52.687 19.577 53.583 18.681 53.583 17.577V5.577C53.583 4.473 53.586 3.583 52.481 3.583H12.609L12.284 3.474C11.871 3.336 11.59 3.269 11.165 3.269C10.336 3.269 9.225 3.527 8.535 4.024C7.492 4.776 6.583 5.983 6.583 7.269V54.841C6.583 56.562 7.976 58.091 9.609 58.636L33.755 66.636C34.168 66.773 34.668 66.841 35.092 66.841C35.922 66.841 36.487 66.583 37.176 66.085C38.219 65.333 38.583 64.126 38.583 62.841V61.583H52.481C53.585 61.583 53.583 60.681 53.583 59.577V49.577C53.583 48.472 52.688 47.577 51.583 47.577ZM34.583 62.841L10.583 54.841V7.583V7.504L10.8 7.345L34.583 15.269V62.841Z"
-        fill="currentColor"
-      />
-      <path
-        d="M30.583 47.577C31.136 47.577 31.583 47.13 31.583 46.577V40.577C31.583 40.024 31.136 39.577 30.583 39.577C30.03 39.577 29.583 40.024 29.583 40.577V46.577C29.583 47.13 30.03 47.577 30.583 47.577Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 export function KitchenIcon({ className }: IconProps) {
   return (
     <svg
@@ -188,6 +163,39 @@ function LucideIcon({ className, children }: IconProps & { children: ReactNode }
     >
       {children}
     </svg>
+  );
+}
+
+export function MinimiseIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <path d="M5 12h14" />
+    </LucideIcon>
+  );
+}
+
+export function MaximiseIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </LucideIcon>
+  );
+}
+
+export function RestoreIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <rect x="4" y="8" width="12" height="12" rx="2" />
+      <path d="M8 8V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2" />
+    </LucideIcon>
+  );
+}
+
+export function CloseIcon({ className }: IconProps) {
+  return (
+    <LucideIcon className={className}>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </LucideIcon>
   );
 }
 

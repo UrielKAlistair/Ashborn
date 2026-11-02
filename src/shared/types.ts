@@ -23,13 +23,13 @@ export type GraphNode = {
   createdAt: string;
   completedAt: string | null; // a step is done when this is set
   shelved: boolean; // greyed, and nothing inside it is ready, until unshelved
+  priority: Priority | null; // null: none
   ownXp: number; // level-ups plus the completion credit
   position: Point | null; // where the user put it, relative to its box; null: laid out automatically
-  size: Extent | null; // the size the user gave it; null: as small as its content allows
 };
 
 export type Point = { x: number; y: number };
-export type Extent = { width: number; height: number };
+export type Priority = 1 | 2 | 3 | 4; // 1 is the most urgent
 
 // `from` is a prerequisite of `to`; both have the same parent
 export type GraphEdge = {
@@ -164,7 +164,11 @@ export type Snapshot = {
   alarms: Alarm[]; // recurring ones, and one-offs still to ring
   progressToday: ProgressToday;
   kitchen: Kitchen;
+  settings: Settings;
 };
+
+// dayStartHour 0–23; timeZone an IANA name, written by the user's devices, null until one has
+export type Settings = { dayStartHour: number; timeZone: string | null };
 
 // What a change returns: only the rows it touched. Upserts replace by id; removals drop by id.
 // Edges touching a removed node are dropped along with it.
@@ -182,19 +186,21 @@ export type Delta = {
   removedAlarmIds?: string[];
   progressToday?: ProgressToday;
   kitchen?: Kitchen; // replaces the whole Kitchen
+  settings?: Settings;
 };
 
 export type NodePatch = {
   title?: string;
   statWeights?: StatWeights;
   shelved?: boolean;
+  priority?: Priority | null;
   color?: QuestColor | null;
   active?: boolean;
   done?: boolean;
 };
 
-// Where the user put a node on the desktop canvas, and (when they resized it) its size
-export type Placement = { id: string; position: Point; size?: Extent };
+// Where the user put a node on the desktop canvas
+export type Placement = { id: string; position: Point };
 
 // Everything the app (and later an agent) can ask of the data store. Reads return data; changes
 // return a Delta.
@@ -205,7 +211,7 @@ export type AshbornApi = {
   deleteNode(id: string): Promise<Delta>;
   moveNode(id: string, parentId: string | null): Promise<Delta>; // drops the node's links
   placeNodes(places: Placement[]): Promise<Delta>;
-  resetLayout(ids: string[]): Promise<Delta>; // back to automatic placement and size
+  resetLayout(ids: string[]): Promise<Delta>; // back to automatic placement
   addEdge(edge: GraphEdge): Promise<Delta>;
   removeEdge(edge: GraphEdge): Promise<Delta>;
   levelUp(nodeId: string, id: string): Promise<Delta>; // ids made by the caller, so a resend counts once
@@ -218,6 +224,7 @@ export type AshbornApi = {
   createAlarm(alarm: Alarm): Promise<Delta>; // the id is made by the caller, so it works offline
   updateAlarm(id: string, patch: AlarmPatch): Promise<Delta>;
   deleteAlarm(id: string): Promise<Delta>;
+  updateSettings(patch: Partial<Settings>): Promise<Delta>;
 
   // The Kitchen. Cooking, uncooking and adjusting stock work offline; the rest needs a connection.
   createStockItem(item: Omit<StockItem, "onHand" | "readAt">): Promise<Delta>; // id made by the caller

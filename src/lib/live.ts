@@ -2,7 +2,7 @@ import type { RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/s
 import { today } from "../shared/dates";
 import { PROGRESS_UNIT } from "../shared/progression";
 import type { Delta, Snapshot } from "../shared/types";
-import { readKitchen, readProgressToday, toAlarm, toDeadline, toEdge, toNode, toRoutine, type AlarmRow, type DeadlineRow, type NodeRow, type RoutineRow } from "./api";
+import { readKitchen, readProgressToday, readSettings, toAlarm, toDeadline, toEdge, toNode, toRoutine, type AlarmRow, type DeadlineRow, type NodeRow, type RoutineRow } from "./api";
 
 type Row = Record<string, unknown>;
 type EdgeRow = { from_id: string; to_id: string };
@@ -127,6 +127,7 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
       );
     }),
     ...kitchenTables.map((table) => on(table, kitchenChanged)),
+    on("user_settings", () => emit(readSettings(db).then((settings) => ({ settings })))),
   ];
 
   const channel = handlers.reduce(

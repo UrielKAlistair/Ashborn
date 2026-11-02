@@ -86,6 +86,16 @@ test("agent tools", async () => {
     expect(body).not.toMatch(/Support vector machines.*after/);
   });
 
+  await test.step("a priority is set, shown, stored, refused out of range, and removed", async () => {
+    expect((await call("set_priority", { ids: [id("kpca")], priority: 2 })).ok).toBe(true);
+    let { body } = await call("overview", { quest_id: id("dl") });
+    expect(body).toMatch(/Kernel PCA \[[^\]]+\] P2/);
+    expect((await call("set_priority", { ids: [id("kpca")], priority: 5 })).ok).toBe(false);
+    expect((await call("set_priority", { ids: [id("kpca")], priority: null })).ok).toBe(true);
+    ({ body } = await call("overview", { quest_id: id("dl") }));
+    expect(body).not.toMatch(/Kernel PCA \[[^\]]+\] P/);
+  });
+
   await test.step("a shelved step is marked, and nothing inside it is up next until it is unshelved", async () => {
     expect((await call("shelve", { ids: [id("kpca")] })).ok).toBe(true);
     let { body } = await call("overview", { quest_id: id("dl") });
@@ -95,6 +105,35 @@ test("agent tools", async () => {
     ({ body } = await call("overview", { quest_id: id("dl") }));
     expect(body).not.toContain("(shelved)");
     expect(body.split("\n\n")[0]).toContain("Kernel trick");
+  });
+
+  await test.step("finished before today: a box is one line, a quest moves to Completed, and asking for it shows it whole", async () => {
+    const added = await call("add_plan", {
+      parent_id: null,
+      steps: [
+        { ref: "errands", title: "Errands" },
+        { ref: "cv", title: "Send CV", parent: "errands" },
+        { ref: "admin", title: "Admin" },
+        { ref: "papers", title: "Paperwork", parent: "admin" },
+        { ref: "form", title: "Fill the form", parent: "papers" },
+        { ref: "post", title: "Post the form", parent: "papers" },
+        { ref: "stamps", title: "Buy stamps", parent: "admin" },
+      ],
+    });
+    const ref = (name: string) => added.body.match(new RegExp(`^${name}: .*\\[([0-9a-f-]+)\\]`, "m"))![1];
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    await db.from("graph_nodes").update({ completed_at: twoDaysAgo }).in("id", ["cv", "papers", "form", "post"].map(ref));
+
+    let { body } = await call("overview");
+    expect(body).not.toContain("# Errands");
+    expect(body).toMatch(/^Completed quests.*\n- Errands \[/m);
+    expect(body).toMatch(/Paperwork \[[^\]]+\] \(finished: 2 steps folded\)/);
+    expect(body).not.toContain("Fill the form");
+    ({ body } = await call("overview", { quest_id: ref("errands") }));
+    expect(body).toContain("# Errands");
+    expect(body).toContain("- [x] Send CV");
+    expect((await call("delete", { id: ref("errands") })).ok).toBe(true);
+    expect((await call("delete", { id: ref("admin") })).ok).toBe(true);
   });
 
   await test.step("alarms: in some minutes, or recurring with a challenge", async () => {

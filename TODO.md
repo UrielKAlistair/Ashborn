@@ -7,20 +7,21 @@ routines feed into the same picture of what to do now.
 Only open work is listed here. What is built, and why it is built that way, is in
 `docs/design.md`.
 
-## Next: try sync across real devices
+## Now: daily use, in this order
 
-- [ ] Change something on the phone offline and the same thing on the desktop, and see the
-      later change kept.
-
-## Phone
-
-- [ ] Try it on the phone: allow the permissions, test each alarm kind, and tune the walk and
-      sit-up thresholds (docs/design.md, decision 36).
-- [ ] Refresh the phone's alarms in the background, so a meal or routine changed on the desktop
-      rings correctly without opening the phone app. Options in
-      `research/alarm-refresh/options.md`; three decisions open: a second, background sign-in
-      on the phone; the schedule in embedded QuickJS (one source of truth, recommended) or ported
-      to Java; hourly or another interval.
+- [ ] Install the release build again (`npm run android:install`) and check it is fast enough to
+      keep. The first install was uninstalled for being slow; that is probably fixed.
+- [ ] Try it on the phone, in one sitting: `research/daily-use/phone-checks.md`. Allow the
+      permissions; find why an alarm showed only as a notification (the ringing screen exists:
+      time, title, Stop, Snooze on plain alarms, the walk or sit-up count; Android 14+ shows it
+      only once "full screen notifications" is allowed, and never over an unlocked phone in use);
+      ring one alarm of each kind; tune the walk and sit-up thresholds (decision 36); and, with
+      the phone app closed, change a meal on the desktop and see its alarm move within the hour
+      (decision 96).
+- [ ] Try sync across real devices: change something on the phone offline and the same thing on
+      the desktop, and see the later change kept.
+- [ ] Check the AppImage starts at login: run `scripts/install-appimage.sh`, log out and in,
+      and see the tray icon (GNOME needs the AppIndicator extension for it).
 
 ## Security review
 
@@ -28,20 +29,10 @@ Only open work is listed here. What is built, and why it is built that way, is i
       key, the agent's saved session (`~/.config/ashborn/agent-session.json`), and the sign-in a
       hosted phone connector would need. Before the connector below.
 
-## Phone release build
-
-- [ ] Make the release key and install the release build once (README, "Android app"): let the
-      phone sync, uninstall the debug app, then `npm run android:install`.
-
 ## Agent access
 
 - [ ] Claude on the phone: host the MCP tools (for example as a Supabase Edge Function) with a
       sign-in, and add them as a custom connector in the Claude app.
-
-## Desktop
-
-- [ ] Check the AppImage starts at login: run `scripts/install-appimage.sh`, log out and in,
-      and see the tray icon (GNOME needs the AppIndicator extension for it).
 
 ## Atlas
 

@@ -49,10 +49,15 @@ console.log("Restored. Rows now:");
 for (const { table } of backupTables) console.log(`${table}: ${await count(table)}`);
 process.exit(0);
 
-// A backup row as it can be inserted into this account: the owner is whoever is signed in, and
-// progress_log's id is made by the database
+// A backup row as it can be inserted into this account: the owner is whoever is signed in,
+// progress_log's id is made by the database, and backups from before 2026-10-22 hold node sizes
+// the table no longer has
 function restorable(table, { user_id: _owner, ...row }) {
   if (table === "progress_log") delete row.id;
+  if (table === "graph_nodes") {
+    delete row.width;
+    delete row.height;
+  }
   return row;
 }
 

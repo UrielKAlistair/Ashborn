@@ -20,10 +20,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 // Rings an alarm until the app stops it: loops the alarm sound at alarm volume, vibrates, and
-// shows the app over the lock screen. A plain alarm can also be dismissed from its
-// notification; one with a challenge only from the app, once the challenge is done.
+// shows the app over the lock screen. A plain alarm can also be dismissed or snoozed from its
+// notification; one with a challenge only stopped from the app, once the challenge is done.
 public class AlarmService extends Service {
     static final String ACTION_STOP = "dev.ashborn.app.STOP_ALARM";
+    static final String ACTION_SNOOZE = "dev.ashborn.app.SNOOZE_ALARM";
     private static final String CHANNEL = "alarms";
     private static final int NOTIFICATION_ID = 1;
 
@@ -34,6 +35,10 @@ public class AlarmService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null || ACTION_STOP.equals(intent.getAction())) {
             stopRinging();
+            return START_NOT_STICKY;
+        }
+        if (ACTION_SNOOZE.equals(intent.getAction())) {
+            snooze();
             return START_NOT_STICKY;
         }
 
@@ -75,6 +80,8 @@ public class AlarmService extends Service {
         if ("plain".equals(alarm.kind)) {
             Intent stop = new Intent(this, AlarmService.class).setAction(ACTION_STOP);
             builder.addAction(0, "Dismiss", PendingIntent.getService(this, 1, stop, PendingIntent.FLAG_IMMUTABLE));
+            Intent snooze = new Intent(this, AlarmService.class).setAction(ACTION_SNOOZE);
+            builder.addAction(0, "Snooze", PendingIntent.getService(this, 2, snooze, PendingIntent.FLAG_IMMUTABLE));
         }
         return builder.build();
     }
@@ -100,6 +107,19 @@ public class AlarmService extends Service {
             player = null;
         }
         if (vibrator != null) vibrator.cancel();
+    }
+
+    // Only a plain alarm snoozes: a challenge alarm is meant to get the user up
+    private void snooze() {
+        Alarm alarm = AlarmScheduler.ringing(this);
+        if (alarm != null && "plain".equals(alarm.kind)) {
+            try {
+                AlarmScheduler.snooze(this, alarm);
+            } catch (JSONException e) {
+                Log.e("Ashborn", "Could not snooze the alarm", e);
+            }
+        }
+        stopRinging();
     }
 
     private void stopRinging() {

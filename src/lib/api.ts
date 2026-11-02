@@ -1,5 +1,5 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { toISODate, today } from "../shared/dates";
+import { addDays, dayOf, DEFAULT_DAY_START_HOUR, startOfDay, today } from "../shared/dates";
 import { recipeProblems, sameKind } from "../shared/kitchen";
 import { PROGRESS_UNIT } from "../shared/progression";
 import {
@@ -15,12 +15,14 @@ import {
   type Kitchen,
   type MealSlot,
   type MealStatus,
+  type Priority,
   type ProgressToday,
   type Routine,
   type Snapshot,
   type StatWeights,
   type StockUnit,
   type QuestColor,
+  type Settings,
   type Weekday,
 } from "../shared/types";
 
@@ -44,11 +46,10 @@ export type NodeRow = {
   created_at: string;
   completed_at: string | null;
   shelved: boolean;
+  priority: Priority | null;
   logged_xp?: number; // only from the nodes_with_xp view
   x: number | null;
   y: number | null;
-  width: number | null;
-  height: number | null;
 };
 export type RoutineRow = { id: string; title: string; cue: string; weekdays: Weekday[]; time: string | null; alarm: AlarmKind };
 export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean };
@@ -83,15 +84,19 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
 
   return inRowOrder(db, {
     async getSnapshot() {
-      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, progressToday, kitchen] = await Promise.all([
+      // Which day it is depends on the day-start hour, so the reads of today's data wait for it
+      const settings = readSettings(db);
+      const date = settings.then(({ dayStartHour }) => dayOf(new Date(), dayStartHour));
+      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, progressToday, kitchen, settingsRow] = await Promise.all([
         nodes().select().order("created_at"),
         db.from("graph_edges").select("from_id, to_id"),
         db.from("routines").select().order("created_at"),
-        db.from("routine_checks").select("routine_id, date").eq("date", today()).eq("checked", true),
+        date.then((day) => db.from("routine_checks").select("routine_id, date").eq("date", day).eq("checked", true)),
         db.from("deadlines").select().is("done_at", null).order("due_date"),
         db.from("alarms").select().or(`at.is.null,at.gt.${new Date().toISOString()}`).order("created_at"),
-        readProgressToday(db),
-        readKitchen(db),
+        settings.then(({ dayStartHour }) => readProgressToday(db, dayStartHour)),
+        date.then((day) => readKitchen(db, day)),
+        settings,
       ]);
 
       return {
@@ -103,6 +108,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         alarms: must(alarmRows).map(toAlarm),
         progressToday,
         kitchen,
+        settings: settingsRow,
       };
     },
 
@@ -111,11 +117,11 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { nodes: [await readNode(id)] };
     },
 
-    async updateNode(id, { title, statWeights, color, active, done, shelved }) {
+    async updateNode(id, { title, statWeights, color, active, done, shelved, priority }) {
       const at = clock().toISOString();
       const completed_at = done === undefined ? undefined : done ? at : null;
       const stat_weights = statWeights && positiveWeights(statWeights);
-      const fields = { title, stat_weights, color, active, completed_at, shelved };
+      const fields = { title, stat_weights, color, active, completed_at, shelved, priority };
       const row = must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).eq("id", id).select().maybeSingle());
       if (!row) throw new Error("This step was deleted on another device.");
 
@@ -135,14 +141,14 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     },
 
     async placeNodes(places) {
-      const rows = places.map(({ id, position, size }) => ({ id, ...position, ...size }));
+      const rows = places.map(({ id, position }) => ({ id, ...position }));
       const placed = must(await db.rpc("place_nodes", { places: rows })) as string[];
 
       return { nodes: (must(await nodes().select().in("id", placed)) as NodeRow[]).map(toNode) };
     },
 
     async resetLayout(ids) {
-      const fields = { x: null, y: null, width: null, height: null };
+      const fields = { x: null, y: null };
       const rows = must(await nodes().update({ ...fields, changed_at: stamps(fields, clock().toISOString()) }).in("id", ids).select()) as NodeRow[];
 
       return { nodes: rows.map(toNode) };
@@ -225,6 +231,14 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       must(await db.from("alarms").delete().eq("id", id));
 
       return { removedAlarmIds: [id] };
+    },
+
+    async updateSettings({ dayStartHour, timeZone }) {
+      const at = clock().toISOString();
+      const fields = { day_start_hour: dayStartHour, time_zone: timeZone };
+      must(await db.from("user_settings").upsert({ ...fields, changed_at: stamps(fields, at) }, { onConflict: "user_id" }));
+
+      return { settings: await readSettings(db) };
     },
 
     // Every Kitchen change returns the whole Kitchen, read again
@@ -336,6 +350,7 @@ const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string
   cookMeal: () => ["kitchen"],
   uncookMeal: () => ["kitchen"],
   setDefaultMeal: () => ["kitchen"],
+  updateSettings: () => ["settings"],
 };
 
 // Sends changes to the same row one after another, in the order they were made, so a later change
@@ -370,13 +385,9 @@ export function keyedQueue() {
   };
 }
 
-// The Kitchen, with meals from mealDaysBack ago to mealDaysAhead ahead
-export async function readKitchen(db: SupabaseClient): Promise<Kitchen> {
-  const day = (offset: number) => {
-    const date = new Date();
-    date.setDate(date.getDate() + offset);
-    return toISODate(date);
-  };
+// The Kitchen, with meals from mealDaysBack before `date` to mealDaysAhead after it
+export async function readKitchen(db: SupabaseClient, date = today()): Promise<Kitchen> {
+  const day = (offset: number) => addDays(date, offset);
   const [itemRows, recipeRows, defaultRows, mealRows] = await Promise.all([
     db.from("stock_on_hand").select().order("created_at"),
     db
@@ -420,19 +431,22 @@ function toStockItem(row: StockRow) {
 }
 
 // Level-ups and completed steps today. Times are stored in UTC, so the local day becomes a range.
-export async function readProgressToday(db: SupabaseClient): Promise<ProgressToday> {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  const [from, to] = [start.toISOString(), end.toISOString()];
+export async function readProgressToday(db: SupabaseClient, dayStartHour?: number): Promise<ProgressToday> {
+  const date = dayOf(new Date(), dayStartHour);
+  const [from, to] = [startOfDay(date, dayStartHour).toISOString(), startOfDay(addDays(date, 1), dayStartHour).toISOString()];
 
   const [levelUps, completions] = await Promise.all([
     db.from("progress_log").select("*", { count: "exact", head: true }).gte("logged_at", from).lt("logged_at", to),
     db.from("graph_nodes").select("*", { count: "exact", head: true }).gte("completed_at", from).lt("completed_at", to),
   ]);
 
-  return { date: today(), count: countOf(levelUps) + countOf(completions) };
+  return { date, count: countOf(levelUps) + countOf(completions) };
+}
+
+// A user with no settings row has the defaults
+export async function readSettings(db: SupabaseClient): Promise<Settings> {
+  const row = must(await db.from("user_settings").select("day_start_hour, time_zone").maybeSingle()) as { day_start_hour: number; time_zone: string | null } | null;
+  return { dayStartHour: row?.day_start_hour ?? DEFAULT_DAY_START_HOUR, timeZone: row?.time_zone ?? null };
 }
 
 // A node's own XP: what level-ups logged on it, plus the completion credit once it is done
@@ -447,9 +461,9 @@ export function toNode(row: NodeRow): GraphNode {
     createdAt: row.created_at,
     completedAt: row.completed_at,
     shelved: row.shelved,
+    priority: row.priority,
     ownXp: (row.logged_xp ?? 0) + (row.completed_at ? PROGRESS_UNIT : 0),
     position: row.x === null || row.y === null ? null : { x: row.x, y: row.y },
-    size: row.width === null || row.height === null ? null : { width: row.width, height: row.height },
   };
 }
 
@@ -544,6 +558,7 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
     alarms: merge(snapshot.alarms, (alarm) => alarm.id, delta.alarms, new Set(delta.removedAlarmIds)),
     progressToday: delta.progressToday && !same(delta.progressToday, snapshot.progressToday) ? delta.progressToday : snapshot.progressToday,
     kitchen: delta.kitchen && !same(delta.kitchen, snapshot.kitchen) ? delta.kitchen : snapshot.kitchen,
+    settings: delta.settings && !same(delta.settings, snapshot.settings) ? delta.settings : snapshot.settings,
   };
 
   return (Object.keys(next) as (keyof Snapshot)[]).every((key) => next[key] === snapshot[key]) ? snapshot : next;

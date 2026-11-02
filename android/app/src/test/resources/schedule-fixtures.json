@@ -1,0 +1,742 @@
+{
+  "timeZone": "Asia/Calcutta",
+  "cases": [
+    {
+      "name": "routines: weekdays, no alarm, untimed, ticked, past, and one before the day-start hour",
+      "input": {
+        "settings": {
+          "dayStartHour": 4,
+          "timeZone": null
+        },
+        "routines": [
+          {
+            "id": "wake",
+            "title": "Wake",
+            "cue": "",
+            "weekdays": [
+              "Mon",
+              "Wed"
+            ],
+            "time": "07:00",
+            "alarm": "situps"
+          },
+          {
+            "id": "prep",
+            "title": "Prep",
+            "cue": "",
+            "weekdays": [
+              "Mon"
+            ],
+            "time": "06:30",
+            "alarm": "plain"
+          },
+          {
+            "id": "silent",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Mon"
+            ],
+            "time": "07:00",
+            "alarm": "none"
+          },
+          {
+            "id": "untimed",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Mon"
+            ],
+            "time": null,
+            "alarm": "plain"
+          },
+          {
+            "id": "ticked",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Mon",
+              "Tue"
+            ],
+            "time": "07:00",
+            "alarm": "walk"
+          },
+          {
+            "id": "past",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Mon"
+            ],
+            "time": "05:00",
+            "alarm": "plain"
+          },
+          {
+            "id": "late",
+            "title": "Late",
+            "cue": "",
+            "weekdays": [
+              "Mon",
+              "Wed"
+            ],
+            "time": "02:00",
+            "alarm": "plain"
+          }
+        ],
+        "routineChecks": [
+          {
+            "routineId": "ticked",
+            "date": "2026-10-19"
+          }
+        ],
+        "alarms": [],
+        "deadlines": [],
+        "kitchen": {
+          "recipes": [],
+          "defaultWeek": [],
+          "meals": []
+        }
+      },
+      "from": "2026-10-19T06:00:00",
+      "days": 3,
+      "expected": [
+        {
+          "key": "routine:prep@2026-10-19",
+          "at": "2026-10-19T06:30:00",
+          "title": "Prep",
+          "kind": "plain"
+        },
+        {
+          "key": "routine:wake@2026-10-19",
+          "at": "2026-10-19T07:00:00",
+          "title": "Wake",
+          "kind": "situps"
+        },
+        {
+          "key": "routine:late@2026-10-19",
+          "at": "2026-10-20T02:00:00",
+          "title": "Late",
+          "kind": "plain"
+        },
+        {
+          "key": "routine:ticked@2026-10-20",
+          "at": "2026-10-20T07:00:00",
+          "title": "Routine",
+          "kind": "walk"
+        },
+        {
+          "key": "routine:wake@2026-10-21",
+          "at": "2026-10-21T07:00:00",
+          "title": "Wake",
+          "kind": "situps"
+        },
+        {
+          "key": "routine:late@2026-10-21",
+          "at": "2026-10-22T02:00:00",
+          "title": "Late",
+          "kind": "plain"
+        }
+      ]
+    },
+    {
+      "name": "in the night after Monday it is still Monday: Monday's tick silences its late routine",
+      "input": {
+        "settings": {
+          "dayStartHour": 4,
+          "timeZone": null
+        },
+        "routines": [
+          {
+            "id": "late",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Mon"
+            ],
+            "time": "02:00",
+            "alarm": "plain"
+          },
+          {
+            "id": "later",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Mon"
+            ],
+            "time": "03:00",
+            "alarm": "walk"
+          }
+        ],
+        "routineChecks": [
+          {
+            "routineId": "late",
+            "date": "2026-10-19"
+          }
+        ],
+        "alarms": [],
+        "deadlines": [],
+        "kitchen": {
+          "recipes": [],
+          "defaultWeek": [],
+          "meals": []
+        }
+      },
+      "from": "2026-10-20T01:30:00",
+      "days": 1,
+      "expected": [
+        {
+          "key": "routine:later@2026-10-19",
+          "at": "2026-10-20T03:00:00",
+          "title": "Routine",
+          "kind": "walk"
+        }
+      ]
+    },
+    {
+      "name": "the day starts at 6",
+      "input": {
+        "settings": {
+          "dayStartHour": 6,
+          "timeZone": null
+        },
+        "routines": [
+          {
+            "id": "early",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Mon"
+            ],
+            "time": "05:00",
+            "alarm": "plain"
+          }
+        ],
+        "routineChecks": [],
+        "alarms": [],
+        "deadlines": [],
+        "kitchen": {
+          "recipes": [],
+          "defaultWeek": [],
+          "meals": []
+        }
+      },
+      "from": "2026-10-19T06:00:00",
+      "days": 1,
+      "expected": [
+        {
+          "key": "routine:early@2026-10-19",
+          "at": "2026-10-20T05:00:00",
+          "title": "Routine",
+          "kind": "plain"
+        }
+      ]
+    },
+    {
+      "name": "the day starts at midnight",
+      "input": {
+        "settings": {
+          "dayStartHour": 0,
+          "timeZone": null
+        },
+        "routines": [
+          {
+            "id": "early",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Tue"
+            ],
+            "time": "00:30",
+            "alarm": "plain"
+          }
+        ],
+        "routineChecks": [],
+        "alarms": [],
+        "deadlines": [],
+        "kitchen": {
+          "recipes": [],
+          "defaultWeek": [],
+          "meals": []
+        }
+      },
+      "from": "2026-10-19T23:00:00",
+      "days": 2,
+      "expected": [
+        {
+          "key": "routine:early@2026-10-20",
+          "at": "2026-10-20T00:30:00",
+          "title": "Routine",
+          "kind": "plain"
+        }
+      ]
+    },
+    {
+      "name": "standalone alarms: recurring, one-off as Postgres writes it, switched off, beyond the window, past",
+      "input": {
+        "settings": {
+          "dayStartHour": 4,
+          "timeZone": null
+        },
+        "routines": [],
+        "routineChecks": [],
+        "alarms": [
+          {
+            "id": "wake",
+            "label": "Wake up",
+            "kind": "situps",
+            "at": null,
+            "time": "06:00",
+            "weekdays": [
+              "Tue",
+              "Wed"
+            ],
+            "enabled": true
+          },
+          {
+            "id": "nap",
+            "label": "",
+            "kind": "plain",
+            "at": "2026-10-19T10:00:00+00:00",
+            "time": null,
+            "weekdays": [],
+            "enabled": true
+          },
+          {
+            "id": "precise",
+            "label": "Precise",
+            "kind": "plain",
+            "at": "2026-10-20T01:30:00.123456+00:00",
+            "time": null,
+            "weekdays": [],
+            "enabled": true
+          },
+          {
+            "id": "zulu",
+            "label": "",
+            "kind": "plain",
+            "at": "2026-10-20T04:00:00Z",
+            "time": null,
+            "weekdays": [],
+            "enabled": true
+          },
+          {
+            "id": "off",
+            "label": "",
+            "kind": "plain",
+            "at": null,
+            "time": "07:00",
+            "weekdays": [
+              "Tue"
+            ],
+            "enabled": false
+          },
+          {
+            "id": "offOnce",
+            "label": "",
+            "kind": "plain",
+            "at": "2026-10-20T03:00:00+00:00",
+            "time": null,
+            "weekdays": [],
+            "enabled": false
+          },
+          {
+            "id": "far",
+            "label": "",
+            "kind": "plain",
+            "at": "2026-11-30T09:00:00+00:00",
+            "time": null,
+            "weekdays": [],
+            "enabled": true
+          },
+          {
+            "id": "gone",
+            "label": "",
+            "kind": "plain",
+            "at": "2026-10-19T00:00:00+00:00",
+            "time": null,
+            "weekdays": [],
+            "enabled": true
+          }
+        ],
+        "deadlines": [],
+        "kitchen": {
+          "recipes": [],
+          "defaultWeek": [],
+          "meals": []
+        }
+      },
+      "from": "2026-10-19T06:00:00",
+      "days": 3,
+      "expected": [
+        {
+          "key": "alarm:nap",
+          "at": "2026-10-19T15:30:00",
+          "title": "Alarm",
+          "kind": "plain"
+        },
+        {
+          "key": "alarm:wake@2026-10-20",
+          "at": "2026-10-20T06:00:00",
+          "title": "Wake up",
+          "kind": "situps"
+        },
+        {
+          "key": "alarm:precise",
+          "at": "2026-10-20T07:00:00",
+          "title": "Precise",
+          "kind": "plain"
+        },
+        {
+          "key": "alarm:zulu",
+          "at": "2026-10-20T09:30:00",
+          "title": "Alarm",
+          "kind": "plain"
+        },
+        {
+          "key": "alarm:wake@2026-10-21",
+          "at": "2026-10-21T06:00:00",
+          "title": "Wake up",
+          "kind": "situps"
+        }
+      ]
+    },
+    {
+      "name": "deadlines: inside the window, beyond it, without an alarm time",
+      "input": {
+        "settings": {
+          "dayStartHour": 4,
+          "timeZone": null
+        },
+        "routines": [],
+        "routineChecks": [],
+        "alarms": [],
+        "deadlines": [
+          {
+            "id": "soon",
+            "title": "Essay",
+            "dueDate": "2026-10-20",
+            "alarmTime": "09:00"
+          },
+          {
+            "id": "edge",
+            "title": "Deadline",
+            "dueDate": "2026-10-25",
+            "alarmTime": "23:30"
+          },
+          {
+            "id": "later",
+            "title": "Deadline",
+            "dueDate": "2026-10-26",
+            "alarmTime": "09:00"
+          },
+          {
+            "id": "quiet",
+            "title": "Deadline",
+            "dueDate": "2026-10-20",
+            "alarmTime": null
+          },
+          {
+            "id": "overdue",
+            "title": "Deadline",
+            "dueDate": "2026-10-18",
+            "alarmTime": "09:00"
+          }
+        ],
+        "kitchen": {
+          "recipes": [],
+          "defaultWeek": [],
+          "meals": []
+        }
+      },
+      "from": "2026-10-19T06:00:00",
+      "days": 7,
+      "expected": [
+        {
+          "key": "deadline:soon",
+          "at": "2026-10-20T09:00:00",
+          "title": "Due today: Essay",
+          "kind": "plain"
+        },
+        {
+          "key": "deadline:edge",
+          "at": "2026-10-25T23:30:00",
+          "title": "Due today: Deadline",
+          "kind": "plain"
+        }
+      ]
+    },
+    {
+      "name": "meal reminders: anchors, a loop, a missing anchor, the default week, cancelled, cooked and emptied meals",
+      "input": {
+        "settings": {
+          "dayStartHour": 4,
+          "timeZone": null
+        },
+        "routines": [],
+        "routineChecks": [],
+        "alarms": [],
+        "deadlines": [],
+        "kitchen": {
+          "recipes": [
+            {
+              "id": "dal",
+              "title": "Dal",
+              "body": "",
+              "ingredients": [],
+              "reminders": [
+                {
+                  "id": "prep",
+                  "label": "prep",
+                  "offsetMinutes": -45,
+                  "anchorId": null
+                },
+                {
+                  "id": "soak",
+                  "label": "soak",
+                  "offsetMinutes": -60,
+                  "anchorId": "prep"
+                },
+                {
+                  "id": "serve",
+                  "label": "serve",
+                  "offsetMinutes": 0,
+                  "anchorId": null
+                }
+              ]
+            },
+            {
+              "id": "loop",
+              "title": "Loop",
+              "body": "",
+              "ingredients": [],
+              "reminders": [
+                {
+                  "id": "a",
+                  "label": "a",
+                  "offsetMinutes": -10,
+                  "anchorId": "b"
+                },
+                {
+                  "id": "b",
+                  "label": "b",
+                  "offsetMinutes": -10,
+                  "anchorId": "a"
+                }
+              ]
+            },
+            {
+              "id": "lost",
+              "title": "Lost",
+              "body": "",
+              "ingredients": [],
+              "reminders": [
+                {
+                  "id": "orphan",
+                  "label": "orphan",
+                  "offsetMinutes": -30,
+                  "anchorId": "nowhere"
+                }
+              ]
+            }
+          ],
+          "defaultWeek": [
+            {
+              "weekday": "Mon",
+              "slot": "dinner",
+              "description": "dal",
+              "recipeIds": [
+                "dal"
+              ]
+            },
+            {
+              "weekday": "Tue",
+              "slot": "breakfast",
+              "description": "dal",
+              "recipeIds": [
+                "dal"
+              ]
+            },
+            {
+              "weekday": "Wed",
+              "slot": "dinner",
+              "description": "dal",
+              "recipeIds": [
+                "dal"
+              ]
+            }
+          ],
+          "meals": [
+            {
+              "id": "m1",
+              "date": "2026-10-19",
+              "slot": "lunch",
+              "description": "",
+              "status": "planned",
+              "recipeIds": [
+                "loop",
+                "dal",
+                "lost"
+              ]
+            },
+            {
+              "id": "m2",
+              "date": "2026-10-20",
+              "slot": "breakfast",
+              "description": "",
+              "status": "cancelled",
+              "recipeIds": [
+                "dal"
+              ]
+            },
+            {
+              "id": "m3",
+              "date": "2026-10-20",
+              "slot": "lunch",
+              "description": "",
+              "status": "cooked",
+              "recipeIds": [
+                "dal"
+              ]
+            },
+            {
+              "id": "m4",
+              "date": "2026-10-21",
+              "slot": "dinner",
+              "description": "",
+              "status": "planned",
+              "recipeIds": []
+            }
+          ]
+        }
+      },
+      "from": "2026-10-19T08:00:00",
+      "days": 3,
+      "expected": [
+        {
+          "key": "meal:2026-10-19:lunch:soak",
+          "at": "2026-10-19T11:15:00",
+          "title": "soak (lunch: Dal)",
+          "kind": "plain"
+        },
+        {
+          "key": "meal:2026-10-19:lunch:prep",
+          "at": "2026-10-19T12:15:00",
+          "title": "prep (lunch: Dal)",
+          "kind": "plain"
+        },
+        {
+          "key": "meal:2026-10-19:lunch:orphan",
+          "at": "2026-10-19T12:30:00",
+          "title": "orphan (lunch: Lost)",
+          "kind": "plain"
+        },
+        {
+          "key": "meal:2026-10-19:lunch:serve",
+          "at": "2026-10-19T13:00:00",
+          "title": "serve (lunch: Dal)",
+          "kind": "plain"
+        },
+        {
+          "key": "meal:2026-10-19:lunch:a",
+          "at": "2026-10-19T13:00:00",
+          "title": "a (lunch: Loop)",
+          "kind": "plain"
+        },
+        {
+          "key": "meal:2026-10-19:lunch:b",
+          "at": "2026-10-19T13:00:00",
+          "title": "b (lunch: Loop)",
+          "kind": "plain"
+        },
+        {
+          "key": "meal:2026-10-19:dinner:soak",
+          "at": "2026-10-19T18:15:00",
+          "title": "soak (dinner: Dal)",
+          "kind": "plain"
+        },
+        {
+          "key": "meal:2026-10-19:dinner:prep",
+          "at": "2026-10-19T19:15:00",
+          "title": "prep (dinner: Dal)",
+          "kind": "plain"
+        },
+        {
+          "key": "meal:2026-10-19:dinner:serve",
+          "at": "2026-10-19T20:00:00",
+          "title": "serve (dinner: Dal)",
+          "kind": "plain"
+        }
+      ]
+    },
+    {
+      "name": "equal times keep the order of their sources",
+      "input": {
+        "settings": {
+          "dayStartHour": 4,
+          "timeZone": null
+        },
+        "routines": [
+          {
+            "id": "seven",
+            "title": "Seven",
+            "cue": "",
+            "weekdays": [
+              "Mon"
+            ],
+            "time": "07:00",
+            "alarm": "walk"
+          }
+        ],
+        "routineChecks": [],
+        "alarms": [
+          {
+            "id": "seven",
+            "label": "",
+            "kind": "plain",
+            "at": null,
+            "time": "07:00",
+            "weekdays": [
+              "Mon"
+            ],
+            "enabled": true
+          }
+        ],
+        "deadlines": [
+          {
+            "id": "seven",
+            "title": "Deadline",
+            "dueDate": "2026-10-19",
+            "alarmTime": "07:00"
+          }
+        ],
+        "kitchen": {
+          "recipes": [],
+          "defaultWeek": [],
+          "meals": []
+        }
+      },
+      "from": "2026-10-19T06:00:00",
+      "days": 1,
+      "expected": [
+        {
+          "key": "alarm:seven@2026-10-19",
+          "at": "2026-10-19T07:00:00",
+          "title": "Alarm",
+          "kind": "plain"
+        },
+        {
+          "key": "routine:seven@2026-10-19",
+          "at": "2026-10-19T07:00:00",
+          "title": "Seven",
+          "kind": "walk"
+        },
+        {
+          "key": "deadline:seven",
+          "at": "2026-10-19T07:00:00",
+          "title": "Due today: Deadline",
+          "kind": "plain"
+        }
+      ]
+    }
+  ]
+}

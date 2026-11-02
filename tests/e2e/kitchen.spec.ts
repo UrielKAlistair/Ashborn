@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { addDays, today as appToday } from "../../src/shared/dates";
+import { phoneWindow } from "../phoneWindow";
 
 // One walk through the Kitchen in a fresh profile, signed in as the test user: tracking staples,
 // correcting stock by hand, writing a recipe, planning, ticking and unticking meals against stock,
@@ -41,10 +43,9 @@ test.afterAll(async () => {
   rmSync(profile, { recursive: true, force: true });
 });
 
+// The app's day, which turns over at the day-start hour (the test user's is the default), not at midnight
 function dayFromToday(days: number) {
-  const at = new Date();
-  at.setDate(at.getDate() + days);
-  return `${at.getFullYear()}-${`${at.getMonth() + 1}`.padStart(2, "0")}-${`${at.getDate()}`.padStart(2, "0")}`;
+  return addDays(appToday(), days);
 }
 
 const today = dayFromToday(0);
@@ -191,11 +192,7 @@ test("kitchen", async () => {
   });
 
   await test.step("on a phone-sized window the Kitchen is three screens", async () => {
-    await app.evaluate(({ BrowserWindow }) => {
-      const window = BrowserWindow.getAllWindows()[0];
-      window.unmaximize();
-      window.setSize(400, 860);
-    });
+    await phoneWindow(app, page);
     await openScreen("Kitchen", "Stocks");
     await expect(amountLabel("Rice")).toBeVisible();
     await openScreen("Kitchen", "Meal plan");

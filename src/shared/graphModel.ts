@@ -9,11 +9,17 @@ export type GraphModel = {
   totalXp: Map<string, number>; // a node's own XP and its steps', plus that of everything upstream
   ready: Set<string>; // not done, not shelved, with no unfinished prerequisite or step
   shelved: Set<string>; // shelved itself, or inside a shelved box
+  finishedAt: Map<string, number>; // boxes whose steps at any depth are all done, and the box too if a step: when the last was ticked (ms)
   statXp: Record<StatKey, number>;
   totalStatXp: number;
 };
 
 export const isDone = (node: GraphNode) => node.completedAt !== null;
+
+// A finished box folds: to one line inside a quest, or, for a quest, out of the graph into Completed
+export function isFinished(model: GraphModel, id: string) {
+  return model.finishedAt.has(id);
+}
 
 export function buildGraphModel(snapshot: Snapshot): GraphModel {
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
@@ -67,6 +73,25 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
       .map((node) => node.id),
   );
 
+  // The latest tick in a node and its steps, or null while any of them is open. A quest is never
+  // ticked itself, so only its steps count.
+  const lastTick = new Map<string, number | null>();
+  const lastTickOf = (node: GraphNode): number | null => {
+    if (lastTick.has(node.id)) return lastTick.get(node.id)!;
+    let latest: number | null = node.parentId === null ? 0 : node.completedAt ? Date.parse(node.completedAt) : null;
+    for (const child of children.get(node.id) ?? []) {
+      const tick = lastTickOf(child);
+      latest = latest === null || tick === null ? null : Math.max(latest, tick);
+    }
+    lastTick.set(node.id, latest);
+    return latest;
+  };
+  const finishedAt = new Map<string, number>();
+  snapshot.nodes.forEach((node) => {
+    const tick = lastTickOf(node);
+    if (tick !== null && children.has(node.id)) finishedAt.set(node.id, tick);
+  });
+
   // All work in a quest trains each of the quest's stats, scaled by that stat's weight
   const statXp = Object.fromEntries(statKeys.map((key) => [key, 0])) as Record<StatKey, number>;
   let totalStatXp = 0;
@@ -77,7 +102,7 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
     });
   });
 
-  return { byId, children, totalXp, ready, shelved, statXp, totalStatXp };
+  return { byId, children, totalXp, ready, shelved, finishedAt, statXp, totalStatXp };
 }
 
 // The stats a quest trains with their weights, in statKeys order

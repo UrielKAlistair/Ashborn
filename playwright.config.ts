@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import "./tests/headlessDisplay.ts";
 
 // Supabase keys and the test user's credentials (E2E_EMAIL, E2E_PASSWORD)
 process.loadEnvFile(".env");
@@ -12,6 +13,7 @@ export default defineConfig({
   timeout: 180_000,
   expect: { timeout: 5_000 },
   workers: 1,
+  globalSetup: "./tests/headlessDisplay.ts",
   outputDir: "test-results",
   webServer: {
     command: "npm run dev",

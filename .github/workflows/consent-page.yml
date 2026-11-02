@@ -1,0 +1,41 @@
+# Publishes the connector's consent page (consent.html) to GitHub Pages. Run by hand only
+# (Actions → "Consent page" → Run workflow). Needs Pages set to "GitHub Actions" in the repository
+# settings, and the repository variables VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY
+# (both public: the same values ship in every app build).
+name: Consent page
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}consent.html
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run connector:consent
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-consent
+      - id: deployment
+        uses: actions/deploy-pages@v4

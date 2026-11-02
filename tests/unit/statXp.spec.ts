@@ -15,6 +15,7 @@ const node = (id: string, overrides: Partial<GraphNode>): GraphNode => ({
   createdAt: "2026-10-20T00:00:00Z",
   completedAt: null,
   shelved: false,
+  priority: null,
   ownXp: 0,
   position: null,
   size: null,
@@ -29,6 +30,7 @@ const snapshot = (nodes: GraphNode[]): Snapshot => ({
   alarms: [],
   progressToday: { date: "2026-10-20", count: 0 },
   kitchen: emptyKitchen,
+  settings: { dayStartHour: 4, timeZone: null },
 });
 const quest = (statWeights: StatWeights, ownXp = 10) => node("quest", { statWeights, ownXp });
 

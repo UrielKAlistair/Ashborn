@@ -1,5 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { createClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState } from "react";
+import { publishableKey, url } from "./client";
 import { upcomingAlarms } from "../shared/schedule";
 import type { AlarmKind, Snapshot } from "../shared/types";
 
@@ -8,7 +10,7 @@ const SCHEDULE_DAYS = 7;
 // How often the open app checks whether an alarm has started ringing
 const RINGING_POLL_MS = 2000;
 
-export type AlarmPermissions = { notifications: boolean; fullScreen: boolean; battery: boolean; xiaomi: boolean };
+export type AlarmPermissions = { notifications: boolean; fullScreen: boolean; battery: boolean; xiaomi: boolean; background: boolean };
 
 export type RingingAlarm = { key: string; at: number; title: string; kind: Exclude<AlarmKind, "none"> };
 
@@ -17,11 +19,13 @@ type AlarmPlugin = {
   schedule(options: { alarms: RingingAlarm[] }): Promise<void>;
   ringing(): Promise<{ alarm: RingingAlarm | null }>;
   stop(): Promise<void>;
+  snooze(): Promise<void>;
   permissions(): Promise<AlarmPermissions>;
   requestNotifications(): Promise<void>;
   openFullScreenSettings(): Promise<void>;
   requestBatteryExemption(): Promise<void>;
   openAutostart(): Promise<void>;
+  connectBackground(options: { url: string; publishableKey: string; refreshToken: string }): Promise<void>;
 };
 
 // Alarms exist only in the Android app
@@ -40,7 +44,7 @@ export function useAlarmSchedule(snapshot: Snapshot | null) {
   }, [signature]);
 }
 
-// The alarm ringing now, if any, and a way to stop it
+// The alarm ringing now, if any, and ways to stop or snooze it
 export function useRingingAlarm() {
   const [alarm, setAlarm] = useState<RingingAlarm | null>(null);
 
@@ -61,7 +65,13 @@ export function useRingingAlarm() {
     setAlarm(null);
   }, []);
 
-  return [alarm, stop] as const;
+  // The native side rings a plain alarm again ten minutes on
+  const snooze = useCallback(() => {
+    void plugin.snooze();
+    setAlarm(null);
+  }, []);
+
+  return [alarm, stop, snooze] as const;
 }
 
 // What alarms need from the phone, re-checked whenever the app comes back to the front (the
@@ -87,3 +97,18 @@ export const fixPermission = {
   battery: () => void plugin.requestBatteryExemption(),
   autostart: () => void plugin.openAutostart(),
 };
+
+// Gives the phone's background alarm refresh (AlarmRefreshWorker.java) a session of its own, by
+// signing in a second time: Supabase refresh tokens are single-use, so it cannot share the app's.
+// Returns the sign-in error's message, or null.
+export async function connectBackgroundRefresh(email: string, password: string) {
+  const second = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false, storageKey: "ashborn-alarm-refresh" } });
+  const { data, error } = await second.auth.signInWithPassword({ email, password });
+  if (error) return error.message;
+  try {
+    await plugin.connectBackground({ url, publishableKey, refreshToken: data.session.refresh_token });
+  } catch (failure) {
+    return failure instanceof Error ? failure.message : String(failure);
+  }
+  return null;
+}

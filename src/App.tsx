@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navbar } from "./components/Navbar";
+import { WindowControls } from "./components/WindowControls";
 import { PhoneTabs } from "./components/PhoneTabs";
 import { fixPermission, useAlarmPermissions, useAlarmSchedule, useRingingAlarm } from "./lib/alarms";
 import { applyDelta, createApi } from "./lib/api";
@@ -15,6 +16,7 @@ import { AlarmsPage } from "./pages/AlarmsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { PhoneHome } from "./pages/phone/PhoneHome";
 import { SignInPage } from "./pages/SignInPage";
+import { DEFAULT_DAY_START_HOUR, setDayStartHour } from "./shared/dates";
 import { emptyKitchen } from "./shared/kitchen";
 import type { Delta, Snapshot } from "./shared/types";
 
@@ -42,11 +44,13 @@ function App() {
   // A preview is made again over every newer confirmed snapshot, so a change made elsewhere
   // meanwhile is kept; one that no longer applies is left out until the server answers.
   const snapshot = useMemo(() => data.confirmed && data.pending.reduce(withPreview, data.confirmed), [data]);
+  // today() reads the hour from dates.ts; set it here, before anything below renders with it
+  if (snapshot) setDayStartHour(snapshot.settings.dayStartHour);
   const [offline, setOffline] = useState(false);
   const [queued, setQueued] = useState(queuedCount);
   const [error, setError] = useState<string | null>(null);
   const phone = usePhone();
-  const [ringing, stopRinging] = useRingingAlarm();
+  const [ringing, stopRinging, snoozeRinging] = useRingingAlarm();
   const permissions = useAlarmPermissions();
   // Without these two an alarm cannot show at all, so they are asked for everywhere
   const missingPermission = !permissions ? null : !permissions.notifications ? "notifications" : !permissions.fullScreen ? "fullScreen" : null;
@@ -209,6 +213,13 @@ function App() {
     [],
   );
 
+  // The device tells the hosted agent server, which runs in UTC, which time zone the user is in
+  const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const storedZone = snapshot?.settings.timeZone;
+  useEffect(() => {
+    if (snapshot && storedZone !== deviceZone) void act("updateSettings", { timeZone: deviceZone });
+  }, [Boolean(snapshot), storedZone, deviceZone]);
+
   const navigate = (path: string) => {
     if (path === currentPath) return;
 
@@ -261,7 +272,8 @@ function App() {
 
       {phone ? (
         <div className="relative flex h-full min-h-0 flex-col">
-          <div className="flex min-h-0 flex-1 overflow-hidden p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">{renderPage()}</div>
+          {/* On the desktop's phone view, the content starts below the window's title strip */}
+          <div className={`flex min-h-0 flex-1 overflow-hidden p-3 ${window.ashborn ? "pt-7" : "pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>{renderPage()}</div>
           <PhoneTabs currentPath={currentPath} onNavigate={navigate} />
         </div>
       ) : (
@@ -272,9 +284,11 @@ function App() {
         </div>
       )}
 
-      {ringing ? <AlarmScreen alarm={ringing} onStop={stopRinging} /> : null}
+      {window.ashborn ? <WindowControls /> : null}
 
-      <div className="pointer-events-none absolute top-3 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2 [&>*]:pointer-events-auto">
+      {ringing ? <AlarmScreen alarm={ringing} onStop={stopRinging} onSnooze={snoozeRinging} /> : null}
+
+      <div className="pointer-events-none absolute top-3 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2 [&>*]:pointer-events-auto [&>*]:[-webkit-app-region:no-drag]">
         {missingPermission ? (
           <button
             type="button"
@@ -316,8 +330,8 @@ function withPreview(shown: Snapshot, change: Pending): Snapshot {
 function loadCachedSnapshot(): Snapshot | null {
   try {
     const cached = JSON.parse(window.localStorage.getItem(snapshotStorageKey) ?? "null") as Snapshot | null;
-    // Saved before the Kitchen existed
-    return cached && { ...cached, kitchen: cached.kitchen ?? emptyKitchen };
+    // Saved before the Kitchen or the settings existed
+    return cached && { ...cached, kitchen: cached.kitchen ?? emptyKitchen, settings: cached.settings ?? { dayStartHour: DEFAULT_DAY_START_HOUR, timeZone: null } };
   } catch {
     return null;
   }

@@ -19,6 +19,7 @@ export const backupTables: { table: string; key: string[] }[] = [
   { table: "default_meals", key: ["id"] },
   { table: "default_meal_recipes", key: ["default_meal_id", "recipe_id"] },
   { table: "stock_changes", key: ["id"] },
+  { table: "user_settings", key: ["user_id"] },
 ];
 
 // Pages of this many rows, under the server's cap on rows per request

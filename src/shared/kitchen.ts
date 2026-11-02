@@ -1,4 +1,4 @@
-import { toISODate, weekdayOf } from "./dates.js";
+import { addDays, atTime, toISODate, weekdayOf } from "./dates.js";
 import {
   mealSlots,
   mealTimes,
@@ -147,11 +147,11 @@ export type MealReminder = { key: string; at: Date; title: string };
 export function mealReminders(kitchen: Kitchen, from: Date, days: number): MealReminder[] {
   const reminders: MealReminder[] = [];
   for (let offset = 0; offset < days; offset++) {
-    const date = toISODate(new Date(from.getFullYear(), from.getMonth(), from.getDate() + offset));
+    const date = addDays(toISODate(from), offset);
     for (const slot of mealSlots) {
       const meal = shownMeal(kitchen, date, slot);
       if (meal.status !== "planned") continue;
-      const mealAt = new Date(`${date}T${mealTimes[slot]}:00`);
+      const mealAt = atTime(date, mealTimes[slot]);
       for (const recipe of kitchen.recipes.filter((candidate) => meal.recipeIds.includes(candidate.id))) {
         const offsets = reminderOffsets(recipe.reminders) ?? new Map<string, number>();
         for (const reminder of recipe.reminders) {

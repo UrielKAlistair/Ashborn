@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { alarmsAvailable, fixPermission, type AlarmPermissions } from "../lib/alarms";
+import { useState, type FormEvent } from "react";
+import { alarmsAvailable, connectBackgroundRefresh, fixPermission, type AlarmPermissions } from "../lib/alarms";
+import { db } from "../lib/client";
 import { SITUPS_TO_STOP, STEPS_TO_STOP } from "../lib/motion";
 import { week } from "../shared/dates";
 import { nextOccurrence, upcomingAlarms } from "../shared/schedule";
@@ -93,13 +94,18 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
 }
 
 // What the phone must allow for alarms to ring on time, each with a button to its setting.
-// Xiaomi's Autostart cannot be read, so it is offered on Xiaomi phones without a tick.
+// Xiaomi's Autostart cannot be read, so it is offered on Xiaomi phones without a tick. The
+// background refresh needs a sign-in of its own, so it asks for the password.
 function Reliability({ permissions }: { permissions: AlarmPermissions }) {
+  const [connected, setConnected] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const background = permissions.background || connected;
   const items = [
     { label: "Notifications allowed", done: permissions.notifications, fix: fixPermission.notifications },
     { label: "Alarms show over the lock screen", done: permissions.fullScreen, fix: fixPermission.fullScreen },
     { label: "Battery optimisation off for Ashborn", done: permissions.battery, fix: fixPermission.battery },
     ...(permissions.xiaomi ? [{ label: "Autostart on (Xiaomi)", done: null, fix: fixPermission.autostart }] : []),
+    { label: "Alarms refresh while the app is closed", done: background, fix: () => setAsking(true) },
   ];
 
   return (
@@ -112,7 +118,32 @@ function Reliability({ permissions }: { permissions: AlarmPermissions }) {
           {item.done ? null : <span className="ml-auto text-white/40">Open →</span>}
         </button>
       ))}
+      {asking && !background ? <BackgroundSignIn onConnected={() => setConnected(true)} /> : null}
     </div>
+  );
+}
+
+function BackgroundSignIn({ onConnected }: { onConnected: () => void }) {
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const { data } = await db.auth.getSession();
+    const email = data.session?.user.email;
+    const error = email ? await connectBackgroundRefresh(email, password) : "Not signed in.";
+    if (error) setMessage(error);
+    else onConnected();
+  };
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-center gap-2 px-1 pt-1">
+      <input type="password" required autoFocus placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-white/10 bg-night/70 px-3 py-2 text-xs text-white/90 placeholder:text-white/40 focus:border-white/30 focus:outline-none" />
+      <button type="submit" className="rounded-lg border border-emerald-300/35 bg-emerald-400/15 px-3 py-2 text-xs uppercase tracking-[0.18em] text-emerald-100">
+        Connect
+      </button>
+      {message ? <p className="w-full text-xs text-white/60">{message}</p> : null}
+    </form>
   );
 }
 

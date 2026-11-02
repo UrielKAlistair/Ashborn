@@ -1,4 +1,4 @@
-import { toISODate, weekdayOf } from "./dates.js";
+import { addDays, atTime, dayOf, startOfDay, toISODate, weekdayOf } from "./dates.js";
 import { mealReminders } from "./kitchen.js";
 import type { AlarmKind, ISODate, Routine, Snapshot } from "./types.js";
 
@@ -19,29 +19,36 @@ export function byTime(a: Routine, b: Routine) {
 
 // The alarms due from `from` over the next `days` days, soonest first: standalone alarms that are
 // on, timed routines, deadlines with an alarm, and meal reminders. A routine already ticked that
-// day does not ring.
+// day does not ring. Alarms keep the calendar; a routine belongs to a day as the app counts days, so
+// one timed before the day-start hour rings in the night after its day.
 export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): AlarmInstance[] {
   const alarms: AlarmInstance[] = [];
   const checked = new Set(snapshot.routineChecks.map((check) => `${check.routineId}@${check.date}`));
 
+  const firstDate = toISODate(from);
   for (let offset = 0; offset < days; offset++) {
-    const date = toISODate(new Date(from.getFullYear(), from.getMonth(), from.getDate() + offset));
+    const date = addDays(firstDate, offset);
     for (const alarm of snapshot.alarms) {
       if (!alarm.enabled || !alarm.time || !alarm.weekdays.includes(weekdayOf(date))) continue;
       alarms.push({ key: `alarm:${alarm.id}@${date}`, at: atTime(date, alarm.time), title: alarm.label || "Alarm", kind: alarm.kind });
     }
+  }
+  const { dayStartHour } = snapshot.settings;
+  const firstDay = dayOf(from, dayStartHour);
+  for (let offset = 0; offset < days; offset++) {
+    const date = addDays(firstDay, offset);
     for (const routine of snapshot.routines) {
       if (routine.alarm === "none" || !routine.time || !routine.weekdays.includes(weekdayOf(date))) continue;
       if (checked.has(`${routine.id}@${date}`)) continue;
-      alarms.push({ key: `routine:${routine.id}@${date}`, at: atTime(date, routine.time), title: routine.title, kind: routine.alarm });
+      alarms.push({ key: `routine:${routine.id}@${date}`, at: routineAt(date, routine.time, dayStartHour), title: routine.title, kind: routine.alarm });
     }
   }
-  const end = new Date(from.getFullYear(), from.getMonth(), from.getDate() + days);
+  const end = startOfDay(addDays(firstDate, days), 0);
   for (const alarm of snapshot.alarms) {
     if (!alarm.enabled || !alarm.at || new Date(alarm.at) >= end) continue;
     alarms.push({ key: `alarm:${alarm.id}`, at: new Date(alarm.at), title: alarm.label || "Alarm", kind: alarm.kind });
   }
-  const lastDate = toISODate(new Date(from.getFullYear(), from.getMonth(), from.getDate() + days - 1));
+  const lastDate = addDays(firstDate, days - 1);
   for (const deadline of snapshot.deadlines) {
     if (!deadline.alarmTime || deadline.dueDate > lastDate) continue;
     alarms.push({ key: `deadline:${deadline.id}`, at: atTime(deadline.dueDate, deadline.alarmTime), title: `Due today: ${deadline.title}`, kind: "plain" });
@@ -54,13 +61,12 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
 
 // The next moment the clock shows `time`: today if it is still ahead, else tomorrow
 export function nextOccurrence(time: string, now = new Date()) {
-  const [hours, minutes] = time.split(":").map(Number);
-  const at = new Date(now);
-  at.setHours(hours, minutes, 0, 0);
-  if (at <= now) at.setDate(at.getDate() + 1);
-  return at;
+  const at = atTime(toISODate(now), time);
+  return at > now ? at : atTime(addDays(toISODate(now), 1), time);
 }
 
-function atTime(date: ISODate, time: string) {
-  return new Date(`${date}T${time}:00`);
+// When a routine timed `time` rings on its day `date`: within the day, which may run past midnight
+function routineAt(date: ISODate, time: string, dayStartHour: number) {
+  const at = atTime(date, time);
+  return at < startOfDay(date, dayStartHour) ? atTime(addDays(date, 1), time) : at;
 }
