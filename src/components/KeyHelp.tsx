@@ -5,6 +5,7 @@ const keys: Array<[string, string]> = [
   ["D", "Done: tick the step in Now"],
   ["N", "Not now: pass to the next"],
   ["S", "Split the step in Now"],
+  ["T", "Start 15 minutes on the step in Now, or stop"],
   ["/", "Capture a thought"],
   ["M Q S", "Sorting the Inbox: move it, make it its own quest, split it"],
   ["1–4", "Sorting: give it a priority (again to remove)"],
