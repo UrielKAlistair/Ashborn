@@ -75,6 +75,9 @@ test("start timer and passing over", async () => {
     await page.evaluate(() => localStorage.removeItem("ashborn-passed-over"));
     await expect(now).toContainText(/of 2/);
     await now.getByRole("button", { name: "Not now" }).click();
+    await expect(now).toContainText("Tidy the notes");
+    await page.reload(); // a step put off stays put off for the day
+    await expect(now).toContainText("Tidy the notes", { timeout: 15_000 });
     await now.getByRole("button", { name: "Not now" }).click();
     await expect(now).toContainText("Draft the intro");
     await now.getByRole("button", { name: "Not now" }).click();

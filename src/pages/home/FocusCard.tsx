@@ -18,7 +18,7 @@ const MORE_MINUTES = 5;
 const PASSED_OVER_ASKS = 3;
 
 // One step to do now: the most urgent ready one, with why it is here. Done ticks it; Start boxes
-// it into 15 minutes; Not now passes to the next for this sitting; Split turns it into smaller steps.
+// it into 15 minutes; Not now passes to the next for the day; Split turns it into smaller steps.
 export function FocusCard({ steps, priorities, snapshot, model, act, date, onBoxed }: {
   steps: GraphNode[]; // the to-do, most urgent first
   priorities: Priorities;
@@ -28,7 +28,8 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   date: ISODate;
   onBoxed?: (boxed: boolean) => void; // hears whether a started step's timer is running, so the panel can fold the rest
 }) {
-  const [passed, setPassed] = useState<string[]>([]);
+  // Passed over today, kept through a reload (the phone reloads often), so a deferred step stays deferred
+  const [passed, setPassed] = useState(() => Object.entries(passedOver()).flatMap(([id, { last }]) => (last === date ? [id] : [])));
   const [splitting, setSplitting] = useState(false);
   // The step last split here: its new steps come up next, ahead of the to-do's order
   const [splitFrom, setSplitFrom] = useState<string | null>(null);
