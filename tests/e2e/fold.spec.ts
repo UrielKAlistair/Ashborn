@@ -143,6 +143,8 @@ test("finished chains fold", async () => {
     await page.locator("section", { hasText: "Up next" }).last().getByTitle("When the day starts").click();
     await page.getByLabel("The day starts at").selectOption("5");
     await expect.poll(async () => (await db.from("user_settings").select("day_start_hour").single()).data?.day_start_hour).toBe(5);
+    // Set back, as later suites count days from the default hour
+    await must(db.from("user_settings").upsert({ day_start_hour: DAY_START_HOUR }, { onConflict: "user_id" }));
   });
 
   expect(pageErrors).toEqual([]);
