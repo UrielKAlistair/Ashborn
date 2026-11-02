@@ -48,13 +48,13 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           type="button"
           onClick={() => setDayStartOpen((open) => !open)}
           title="When the day starts"
-          className="font-mono text-[11px] text-ink/40 tabular-nums hover:text-ink/70"
+          className="font-mono text-[11px] text-muted tabular-nums hover:text-ink/70"
         >
           {weekday} {date}
         </button>
       </div>
       {dayStartOpen ? (
-        <label className="-mt-4 flex items-center justify-end gap-2 px-1 text-[11.5px] text-ink/45">
+        <label className="-mt-4 flex items-center justify-end gap-2 px-1 text-[11.5px] text-muted">
           The day starts at
           <select
             value={dayStartHour}
@@ -70,7 +70,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         </label>
       ) : null}
       {progressToday > 0 ? (
-        <p className="-mt-5 flex items-center gap-1.5 px-1 text-[12px] text-ink/50">
+        <p className="-mt-5 flex items-center gap-1.5 px-1 text-[12px] text-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-ember" />
           {progressToday} {progressToday === 1 ? "step of progress" : "steps of progress"} today
         </p>
@@ -98,7 +98,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                   <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] leading-snug text-ink/90">{step.title}</p>
-                    <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-ink/42">
+                    <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
                       {quest.title}
                       {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
@@ -118,11 +118,11 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           routines.map((routine) => (
             <div key={routine.id} className={`group ${rowClass}`}>
               <Tick done={checked.has(routine.id)} onClick={() => void act("setRoutineCheck", routine.id, date, !checked.has(routine.id))} className="mt-0.5" />
-              {timed ? <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-ink/45 tabular-nums">{routine.time}</span> : null}
+              {timed ? <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-muted tabular-nums">{routine.time}</span> : null}
               <div className="min-w-0 flex-1">
-                <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-ink/40 line-through decoration-ink/25" : "text-ink/90"}`}>{routine.title}</p>
+                <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-muted line-through decoration-ink/25" : "text-ink/90"}`}>{routine.title}</p>
                 {routine.alarm !== "none" || routine.cue ? (
-                  <p className="mt-0.5 text-[11.5px] text-ink/42">
+                  <p className="mt-0.5 text-[11.5px] text-muted">
                     {[routine.alarm !== "none" ? alarmLabels[routine.alarm] : null, routine.cue ? `if ${routine.cue}` : null]
                       .filter(Boolean)
                       .join(" · ")}
@@ -149,17 +149,17 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink/90">{deadline.title}</p>
                     <span
                       className={`shrink-0 rounded-md px-1.5 py-px font-mono text-[11px] tabular-nums ${
-                        days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-ink/6 text-ink/55"
+                        days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-ink/6 text-muted"
                       }`}
                     >
                       {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
                     </span>
                   </div>
-                  <p className="mt-0.5 font-mono text-[11px] text-ink/40 tabular-nums">
+                  <p className="mt-0.5 font-mono text-[11px] text-muted tabular-nums">
                     {deadline.dueDate}
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
-                  <NodePicker model={model} value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-ink/45 hover:bg-ink/6" />
+                  <NodePicker model={model} value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
@@ -201,7 +201,7 @@ function RoutineForm({ act }: { act: Act }) {
             key={day}
             type="button"
             onClick={() => setDays((current) => (current.includes(day) ? current.filter((d) => d !== day) : [...current, day]))}
-            className={`flex-1 rounded-md border py-1 text-[10.5px] ${days.includes(day) ? "border-ember/50 bg-ember/12 text-ink/90" : "border-ink/10 text-ink/40"}`}
+            className={`flex-1 rounded-md border py-1 text-[10.5px] ${days.includes(day) ? "border-ember/50 bg-ember/12 text-ink/90" : "border-ink/10 text-muted"}`}
           >
             {day.slice(0, 2)}
           </button>
@@ -292,7 +292,7 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
 }
 
 function Empty({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg border border-dashed border-ink/10 px-3 py-2.5 text-[12px] leading-relaxed text-ink/40">{children}</p>;
+  return <p className="rounded-lg border border-dashed border-ink/10 px-3 py-2.5 text-[12px] leading-relaxed text-muted">{children}</p>;
 }
 
 // Escape closes a popover form; preventDefault keeps the navbar from also hiding the window
@@ -307,7 +307,7 @@ function closeOnEscape(close: () => void) {
 
 function AddButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} title="Add" className="flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-ink/45 hover:bg-ink/8 hover:text-ink/85">
+    <button type="button" onClick={onClick} title="Add" className="flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-muted hover:bg-ink/8 hover:text-ink/85">
       +
     </button>
   );
@@ -333,7 +333,7 @@ function DeleteButton({ warning, onDelete }: { warning: string; onDelete: () => 
       type="button"
       onClick={() => setConfirming(true)}
       title="Delete"
-      className="shrink-0 text-xs text-ink/0 group-hover:text-ink/40 hover:!text-red-300 pointer-coarse:text-ink/40"
+      className="shrink-0 text-xs text-ink/0 group-hover:text-muted hover:!text-red-300 pointer-coarse:text-muted"
     >
       ×
     </button>

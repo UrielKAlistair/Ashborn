@@ -16,7 +16,7 @@ export function StockPanel({ kitchen, act }: { kitchen: Kitchen; act: Act }) {
   return (
     <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
       <h2 className="font-display text-sm font-semibold text-ink/85">Stocks</h2>
-      {items.length === 0 ? <p className="text-[12px] text-ink/40">Track a staple below and its bar shows here.</p> : null}
+      {items.length === 0 ? <p className="text-[12px] text-muted">Track a staple below and its bar shows here.</p> : null}
       {items.map((item) => (
         <StockBar key={item.id} item={item} act={act} />
       ))}
@@ -35,7 +35,7 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
     <div role="group" aria-label={item.name} className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
         <p className="truncate text-[13px] text-ink/85">{item.name}</p>
-        <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 text-[11.5px] text-ink/40 hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
+        <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
           {editing ? "Done" : "Edit"}
         </button>
       </div>
@@ -48,7 +48,7 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
         {tip > 0 ? <div className="absolute top-0 left-full h-full rounded-r-full bg-red-400/85" style={{ width: `${tip * 100}%` }} title="More than you usually keep" /> : null}
       </div>
 
-      <p className="text-right font-mono text-[11px] tabular-nums text-ink/45">
+      <p className="text-right font-mono text-[11px] tabular-nums text-muted">
         {shown(item.onHand, item.unit)} / {shown(item.target, item.unit)}
       </p>
 
@@ -107,10 +107,10 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
           onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
           className="w-16 rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-0.5 text-right font-mono tabular-nums"
         />
-        <span className="text-[11.5px] text-ink/45">{item.unit}</span>
+        <span className="text-[11.5px] text-muted">{item.unit}</span>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-ink/45">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-muted">
         <label className="flex items-center gap-1.5">
           Keep
           <input
@@ -182,7 +182,7 @@ function NewItemForm({ act }: { act: Act }) {
       <button type="submit" disabled={!valid} className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
         Add
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-ink/45 hover:bg-ink/8 hover:text-ink/85 max-sm:h-11 max-sm:w-11">
+      <button type="button" onClick={() => setOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-ink/8 hover:text-ink/85 max-sm:h-11 max-sm:w-11">
         ×
       </button>
     </form>

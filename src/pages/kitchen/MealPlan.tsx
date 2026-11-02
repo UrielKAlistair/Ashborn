@@ -101,7 +101,7 @@ function Day({ kitchen, act, day, today: date, onOpenRecipe }: { kitchen: Kitche
     >
       <p className="flex items-baseline justify-between px-1 pb-0.5">
         <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{name}</span>
-        <span className="font-mono text-[11px] tabular-nums text-ink/40">{day.slice(5)}</span>
+        <span className="font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
       </p>
       {mealSlots.map((slot) => (
         <MealCell key={slot} kitchen={kitchen} act={act} meal={shownMeal(kitchen, day, slot)} onOpenRecipe={onOpenRecipe} />
@@ -146,7 +146,7 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
     <div role="group" aria-label={`${meal.slot} on ${meal.date}`} className={`group relative rounded-lg px-2.5 py-2 ${empty ? "border border-dashed border-ink/8" : "bg-ink/[0.035] hover:bg-ink/[0.055]"} ${cooked ? "opacity-55" : ""}`}>
       <div className="flex items-center gap-2">
         {empty || cancelled ? null : <Tick done={cooked} onClick={tick} />}
-        <p className="min-w-0 flex-1 truncate text-[11.5px] capitalize text-ink/50">
+        <p className="min-w-0 flex-1 truncate text-[11.5px] capitalize text-muted">
           {meal.slot} <span className="font-mono text-[10.5px] tabular-nums text-ink/35">{mealTimes[meal.slot]}</span>
         </p>
         {/* Over the slot's name until hovered on the desktop, where a day's column has no room for both */}
@@ -155,14 +155,14 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
           <button
             type="button"
             onClick={() => void act("setMeal", { id: id(), date: meal.date, slot: meal.slot, description: meal.description, recipeIds: meal.recipeIds, status: cancelled ? "planned" : "cancelled" })}
-            className="text-[11.5px] text-ink/40 hover:text-ink/85 max-sm:min-h-11 max-sm:px-2"
+            className="text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2"
             title={cancelled ? "Bring this meal back" : "Cancel this meal and its alarms"}
           >
             {cancelled ? "Restore" : "Cancel"}
           </button>
         ) : null}
         {!cooked ? (
-          <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-ink/40 hover:text-ink/85 max-sm:min-h-11 max-sm:px-2" title="Change this meal">
+          <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2" title="Change this meal">
             Edit
           </button>
         ) : null}
@@ -234,7 +234,7 @@ function MealEditor({
         onSave(text.trim(), chosen);
       }}
     >
-      <p className="text-[11.5px] capitalize text-ink/50">{slot}</p>
+      <p className="text-[11.5px] capitalize text-muted">{slot}</p>
       <input
         autoFocus
         value={text}
@@ -254,7 +254,7 @@ function MealEditor({
                 type="button"
                 aria-pressed={on}
                 onClick={() => setChosen(on ? chosen.filter((other) => other !== recipe.id) : [...chosen, recipe.id])}
-                className={`rounded-md border px-1.5 py-0.5 text-[11px] max-sm:px-2 max-sm:py-1 ${on ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-ink/55 hover:bg-ink/6"}`}
+                className={`rounded-md border px-1.5 py-0.5 text-[11px] max-sm:px-2 max-sm:py-1 ${on ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
               >
                 {recipe.title}
               </button>
@@ -263,7 +263,7 @@ function MealEditor({
         </div>
       ) : null}
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={onCancel} className="text-[12px] text-ink/50 hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
+        <button type="button" onClick={onCancel} className="text-[12px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
           Cancel
         </button>
         <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
@@ -315,8 +315,8 @@ function DefaultCell({ kitchen, act, weekday, slot, onOpenRecipe }: { kitchen: K
   return (
     <div role="group" aria-label={`Default ${slot} on ${weekday}`} className="rounded-lg bg-ink/[0.035] px-2.5 py-2 hover:bg-ink/[0.055]">
       <div className="flex items-center justify-between">
-        <p className="text-[11.5px] capitalize text-ink/50">{slot}</p>
-        <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-ink/40 hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
+        <p className="text-[11.5px] capitalize text-muted">{slot}</p>
+        <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
           Edit
         </button>
       </div>
@@ -333,7 +333,7 @@ function Arrow({ label, disabled, onClick, children }: { label: string; disabled
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex w-7 shrink-0 items-center justify-center rounded-lg text-lg text-ink/45 hover:bg-ink/6 hover:text-ink/85 disabled:opacity-20"
+      className="flex w-7 shrink-0 items-center justify-center rounded-lg text-lg text-muted hover:bg-ink/6 hover:text-ink/85 disabled:opacity-20"
     >
       {children}
     </button>

@@ -13,7 +13,7 @@ export function AtlasEntryLayout({
 }: AtlasEntryLayoutProps) {
   return (
     <section className="mx-auto min-h-full w-full max-w-3xl">
-      <p className="text-[11.5px] text-ink/45">
+      <p className="text-[11.5px] text-muted">
         {eyebrow}
       </p>
       <h1 className="mt-1 font-display text-3xl font-semibold text-ink/90">

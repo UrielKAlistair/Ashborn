@@ -45,7 +45,7 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
         return (
           <div key={key} title={`${Math.round(model.statXp[key])} xp`}>
             <div className="flex items-baseline justify-between">
-              <dt className={`font-display font-medium tracking-[0.08em] text-ink/55 ${card ? "text-xs" : "text-[11px]"}`}>{key}</dt>
+              <dt className={`font-display font-medium tracking-[0.08em] text-muted ${card ? "text-xs" : "text-[11px]"}`}>{key}</dt>
               <dd className={`font-mono text-ink/90 ${card ? "text-base" : "text-[13px]"}`}>{level}</dd>
             </div>
             <div className={`mt-1 overflow-hidden rounded-full bg-ink/8 ${card ? "h-1.5" : "h-1"}`}>

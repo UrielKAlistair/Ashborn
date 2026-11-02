@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { CloseIcon, MaximiseIcon, MinimiseIcon, RestoreIcon } from "./icons";
 
 const buttonClass =
-  "flex h-6 w-9 items-center justify-center rounded-md bg-transparent text-ink/45 transition-colors [-webkit-app-region:no-drag]";
+  "flex h-6 w-9 items-center justify-center rounded-md bg-transparent text-muted transition-colors [-webkit-app-region:no-drag]";
 
 // The desktop window's own title bar, as the window has no frame: a strip along the top edge
 // that drags the window, over the page's top padding, with minimise (to the tray), maximise and
@@ -63,7 +63,7 @@ export function WindowControls() {
                 >
                   Quit Ashborn?
                 </h2>
-                <p className="mt-2 text-[13px] text-ink/50">
+                <p className="mt-2 text-[13px] text-muted">
                   This will close the application.
                 </p>
                 <div className="mt-4 flex gap-2">

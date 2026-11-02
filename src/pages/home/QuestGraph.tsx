@@ -472,7 +472,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
               onClick={() => setQuestsOpen((open) => !open)}
               className={`${toolbarPill} ${questsOpen ? "border-ink/25 text-ink" : ""}`}
             >
-              Quests <span className="ml-1 font-mono text-ink/45 tabular-nums">{shown.length}/{quests.length}</span>
+              Quests <span className="ml-1 font-mono text-muted tabular-nums">{shown.length}/{quests.length}</span>
             </button>
             {phone ? null : (
               <ResetLayoutButton
@@ -543,7 +543,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
           ) : (
             <>
               <HexMark className="h-10 w-12 text-ink/15" />
-              <p className="text-[13px] text-ink/50">
+              <p className="text-[13px] text-muted">
               {completed.length > 0 ? "Every shown quest is done. Reopen one under Quests." : "All quests are hidden. Pick some under Quests."}
               </p>
             </>
@@ -592,7 +592,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
           <BoxButtons data={data} />
         </div>
         <div>
-          <span className="font-mono text-[10.5px] text-ink/45">
+          <span className="font-mono text-[10.5px] text-muted">
             Lv {level.level}
             {node.shelved ? <span className="ml-2 font-sans text-ink/60">· Shelved</span> : null}
           </span>
@@ -632,7 +632,7 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
           className={`truncate ${done ? "text-ink/35 line-through decoration-ink/25" : holdsSteps ? "font-medium text-ink/80" : "text-ink/88"}`}
         />
         <span className="flex-1" />
-        {node.priority && !data.phone ? <span className="shrink-0 font-mono text-[10px] text-ink/45 group-hover:invisible">P{node.priority}</span> : null}
+        {node.priority && !data.phone ? <span className="shrink-0 font-mono text-[10px] text-muted group-hover:invisible">P{node.priority}</span> : null}
         <BoxButtons data={data} />
       </div>
       <AddRow data={data} />
@@ -649,7 +649,7 @@ function FoldedCard({ data, steps }: { data: CardData; steps: number }) {
         type="button"
         onClick={() => data.actions.open(data.node.id)}
         title="Show its steps"
-        className="nodrag flex w-full items-center gap-2 px-3 text-left text-xs text-ink/40 hover:text-ink/65"
+        className="nodrag flex w-full items-center gap-2 px-3 text-left text-xs text-muted hover:text-ink/65"
         style={{ height: stepRow.height }}
       >
         <span className="text-emerald-300/60">✓</span>
@@ -763,7 +763,7 @@ function BoxButtons({ data }: { data: CardData }) {
             onToggleCollapsed();
           }}
           title={collapsed ? "Show steps" : "Hide steps"}
-          className={`nodrag ${iconButton} text-ink/40 hover:bg-ink/8 hover:text-ink/80`}
+          className={`nodrag ${iconButton} text-muted hover:bg-ink/8 hover:text-ink/80`}
         >
           <EyeIcon crossed={collapsed} />
         </button>
@@ -775,7 +775,7 @@ function BoxButtons({ data }: { data: CardData }) {
           onAdding(!adding);
         }}
         title="Add a step inside"
-        className={`nodrag ${iconButton} text-ink/50 hover:bg-ink/8 hover:text-ink`}
+        className={`nodrag ${iconButton} text-muted hover:bg-ink/8 hover:text-ink`}
       >
         <PlusIcon />
       </button>
@@ -788,7 +788,7 @@ function BoxButtons({ data }: { data: CardData }) {
               onToggleLocked();
             }}
             title={locked ? "Unlock: let its steps be moved" : "Lock: keep its steps where they are"}
-            className={`nodrag ${iconButton} hover:bg-ink/8 ${locked ? "text-ink/40 hover:text-ink/80" : "text-ember"}`}
+            className={`nodrag ${iconButton} hover:bg-ink/8 ${locked ? "text-muted hover:text-ink/80" : "text-ember"}`}
           >
             <LockIcon open={!locked} />
           </button>
@@ -818,7 +818,7 @@ function PriorityButton({ data }: { data: CardData }) {
           onMenu(!menuOpen);
         }}
         title="Priority"
-        className={`nodrag ${iconButton} font-mono text-[10px] font-semibold text-ink/50 hover:bg-ink/8 hover:text-ink`}
+        className={`nodrag ${iconButton} font-mono text-[10px] font-semibold text-muted hover:bg-ink/8 hover:text-ink`}
       >
         {node.priority ? `P${node.priority}` : "P"}
       </button>
@@ -844,7 +844,7 @@ function PriorityPicker({ node, act }: { node: GraphNode; act: Act }) {
           aria-label={priority ? `Priority ${priority}` : "No priority"}
           onClick={() => void act("updateNode", node.id, { priority })}
           data-priority={priority ?? "none"}
-          className={`flex-1 rounded-md border px-1 py-1 font-mono text-[11px] max-sm:min-h-11 ${node.priority === priority ? "border-[var(--mark,var(--color-ink))] bg-[color-mix(in_oklab,var(--mark,var(--color-ink))_14%,transparent)] text-ink" : "border-ink/10 text-ink/50 hover:border-ink/25"}`}
+          className={`flex-1 rounded-md border px-1 py-1 font-mono text-[11px] max-sm:min-h-11 ${node.priority === priority ? "border-[var(--mark,var(--color-ink))] bg-[color-mix(in_oklab,var(--mark,var(--color-ink))_14%,transparent)] text-ink" : "border-ink/10 text-muted hover:border-ink/25"}`}
         >
           {priority ? `P${priority}` : "–"}
         </button>
@@ -865,7 +865,7 @@ function ShelveButton({ data }: { data: CardData }) {
         void act("updateNode", node.id, { shelved: !node.shelved });
       }}
       title={node.shelved ? "Unshelve: pursue it again" : "Shelve: keep it, but not now"}
-      className={`nodrag ${iconButton} text-ink/50 hover:bg-ink/8 hover:text-ink/90`}
+      className={`nodrag ${iconButton} text-muted hover:bg-ink/8 hover:text-ink/90`}
     >
       <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="currentColor">
         <rect x="2" y="1.5" width="2" height="7" rx="0.6" />
@@ -897,7 +897,7 @@ function DeleteButton({ data }: { data: CardData }) {
       }}
       title={confirming ? "Click again to delete" : "Delete"}
       className={`nodrag ${iconButton} ${
-        confirming ? "w-auto bg-red-500/20 px-2 text-[11px] leading-none text-red-200" : "text-ink/45 hover:bg-red-500/15 hover:text-red-300"
+        confirming ? "w-auto bg-red-500/20 px-2 text-[11px] leading-none text-red-200" : "text-muted hover:bg-red-500/15 hover:text-red-300"
       }`}
     >
       {confirming ? (
@@ -1000,7 +1000,7 @@ function MenuButton({ data }: { data: CardData }) {
           onMenu(!menuOpen);
         }}
         title="Options"
-        className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-sm leading-none text-ink/40 hover:bg-ink/8 hover:text-ink/80"
+        className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-sm leading-none text-muted hover:bg-ink/8 hover:text-ink/80"
       >
         ⋯
       </button>
@@ -1008,11 +1008,11 @@ function MenuButton({ data }: { data: CardData }) {
       <NodeToolbar isVisible={menuOpen} position={side} align={side === Position.Top || side === Position.Bottom ? "end" : align} offset={6}>
         <div className="nodrag nopan w-64 space-y-3 rounded-xl border border-ink/10 bg-card p-3 text-[12px] text-ink/75 shadow-[var(--card-shadow)]">
           <div>
-            <p className="mb-1 text-[11.5px] text-ink/45">Priority</p>
+            <p className="mb-1 text-[11.5px] text-muted">Priority</p>
             <PriorityPicker node={node} act={act} />
           </div>
           <div>
-            <p className="mb-1 text-[11.5px] text-ink/45">Colour</p>
+            <p className="mb-1 text-[11.5px] text-muted">Colour</p>
             <ColorPicker node={node} act={act} />
           </div>
           <StatWeightsEditor node={node} act={act} />
@@ -1072,7 +1072,7 @@ function PhoneMenu({ data }: { data: CardData }) {
           onMenu(!menuOpen);
         }}
         aria-label="Actions"
-        className="nodrag relative flex h-6 w-8 shrink-0 items-center justify-center rounded-lg text-base leading-none text-ink/55 before:absolute before:-inset-x-1.5 before:-inset-y-2.5 before:content-[''] active:bg-ink/10"
+        className="nodrag relative flex h-6 w-8 shrink-0 items-center justify-center rounded-lg text-base leading-none text-muted before:absolute before:-inset-x-1.5 before:-inset-y-2.5 before:content-[''] active:bg-ink/10"
       >
         ⋯
       </button>
@@ -1104,7 +1104,7 @@ function PhoneMenu({ data }: { data: CardData }) {
                 </button>
               ) : null}
               <div className={phoneRow}>
-                <p className="mb-1 text-[11.5px] text-ink/45">Priority</p>
+                <p className="mb-1 text-[11.5px] text-muted">Priority</p>
                 <PriorityPicker node={node} act={act} />
               </div>
               {isQuest ? (
@@ -1113,7 +1113,7 @@ function PhoneMenu({ data }: { data: CardData }) {
                     <span className="text-[11px] font-semibold text-red-300">++</span> Level up
                   </button>
                   <div className={phoneRow}>
-                    <p className="mb-1 text-[11.5px] text-ink/45">Colour</p>
+                    <p className="mb-1 text-[11.5px] text-muted">Colour</p>
                     <ColorPicker node={node} act={act} />
                   </div>
                   <div className={phoneRow}>
@@ -1192,7 +1192,7 @@ function FinishedQuests({ title, quests, buttons }: { title: string; quests: Gra
         className="mt-3 flex w-full items-center gap-1.5 font-display text-[12px] font-semibold text-ink/60 hover:text-ink/85"
       >
         <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>›</span>
-        {title} <span className="font-mono font-normal text-ink/40 tabular-nums">{quests.length}</span>
+        {title} <span className="font-mono font-normal text-muted tabular-nums">{quests.length}</span>
       </button>
       {open ? (
         <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
@@ -1269,11 +1269,11 @@ function StatWeightsEditor({ node, act }: { node: GraphNode; act: Act }) {
 
   return (
     <div className="w-full">
-      <span className="text-[11.5px] text-ink/45">Trains (XP × weight)</span>
+      <span className="text-[11.5px] text-muted">Trains (XP × weight)</span>
       <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
         {statKeys.map((key) => (
           <label key={key} className="flex items-center justify-between gap-1.5">
-            <span className="font-mono text-[11px] text-ink/55">{key}</span>
+            <span className="font-mono text-[11px] text-muted">{key}</span>
             <input
               type="number"
               min={0}

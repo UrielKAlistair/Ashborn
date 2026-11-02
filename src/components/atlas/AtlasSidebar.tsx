@@ -54,7 +54,7 @@ export function AtlasSidebarSection({
         <span className="font-display text-[13px] font-semibold text-ink/80">
           {label}
         </span>
-        <span className={`inline-block text-ink/45 transition-transform ${isOpen ? "rotate-90" : ""}`}>›</span>
+        <span className={`inline-block text-muted transition-transform ${isOpen ? "rotate-90" : ""}`}>›</span>
       </button>
 
       {isOpen ? (

@@ -69,7 +69,7 @@ export function Navbar({
                 type="button"
                 onClick={() => choose(section)}
                 aria-expanded={section.desktop.length > 1 ? openSection === section : undefined}
-                className={`group flex flex-col items-center gap-1.5 bg-transparent ${isActive ? "text-ink" : "text-ink/50 hover:text-ink/80"}`}
+                className={`group flex flex-col items-center gap-1.5 bg-transparent ${isActive ? "text-ink" : "text-muted hover:text-ink/80"}`}
               >
                 <HexTile active={isActive} className="h-12 w-14">
                   <Icon className={isActive ? "text-ember" : ""} />
@@ -97,7 +97,7 @@ export function Navbar({
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         title={theme === "dark" ? "Parchment: the light theme" : "Ember: the dark theme"}
-        className="flex h-9 w-9 items-center justify-center rounded-full text-ink/45 hover:bg-ink/8 hover:text-ink/85"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-ink/8 hover:text-ink/85"
       >
         {theme === "dark" ? <SunIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
       </button>
@@ -134,7 +134,7 @@ function ScreenMenu({
               tabIndex={open ? 0 : -1}
               onClick={() => onChoose(screen.path)}
               className={`flex w-full flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-colors ${index === 0 ? "mt-3" : ""} ${
-                active ? "bg-ember/12 text-ink" : "text-ink/50 hover:bg-ink/6 hover:text-ink/80"
+                active ? "bg-ember/12 text-ink" : "text-muted hover:bg-ink/6 hover:text-ink/80"
               }`}
             >
               <Icon className="h-5 w-5" />

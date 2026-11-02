@@ -237,7 +237,7 @@ function App() {
 
     if (!snapshot) {
       return (
-        <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-3xl border border-ink/10 bg-panel text-sm tracking-[0.16em] text-ink/50">
+        <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-3xl border border-ink/10 bg-panel text-sm tracking-[0.16em] text-muted">
           {error ?? "Loading..."}
         </section>
       );

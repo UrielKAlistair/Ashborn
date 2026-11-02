@@ -34,7 +34,7 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
       <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 w-full max-w-xl flex-col gap-6 overflow-y-auto p-5 max-sm:max-w-none max-sm:shrink-0 max-sm:overflow-visible">
         <div className="flex items-baseline justify-between">
           <h1 className="font-display text-base font-semibold text-ink/90">Alarms</h1>
-          {alarmsAvailable ? null : <p className="text-[11.5px] text-ink/45">They ring on your phone.</p>}
+          {alarmsAvailable ? null : <p className="text-[11.5px] text-muted">They ring on your phone.</p>}
         </div>
 
         {permissions ? <Reliability permissions={permissions} /> : null}
@@ -56,20 +56,20 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
 
         <div>
           <p className="mb-2 font-display text-[13px] font-semibold text-ink/80">Your alarms</p>
-          {mine.length === 0 ? <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-ink/40">None set.</p> : null}
+          {mine.length === 0 ? <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">None set.</p> : null}
           <div className="space-y-2">
             {mine.map((alarm) => (
               <div key={alarm.id} className={`flex items-center gap-4 rounded-xl bg-ink/[0.03] px-4 py-3 hover:bg-ink/[0.05] ${alarm.enabled ? "" : "opacity-50"}`}>
                 <p className="font-mono text-2xl tabular-nums text-ink/90">{alarm.time ?? clock(new Date(alarm.at!))}</p>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] text-ink/85">{alarm.label || "Alarm"}</p>
-                  <p className="mt-0.5 text-[11.5px] text-ink/45">
+                  <p className="mt-0.5 text-[11.5px] text-muted">
                     {alarm.at ? `once, ${day(new Date(alarm.at))}` : daysText(alarm.weekdays)}
                     {alarm.kind === "plain" ? "" : ` · ${kindLabels[alarm.kind].toLowerCase()}`}
                   </p>
                 </div>
                 <Switch label={`${alarm.label || "Alarm"} on`} on={alarm.enabled} onChange={(enabled) => void act("updateAlarm", alarm.id, { enabled })} />
-                <button type="button" onClick={() => void act("deleteAlarm", alarm.id)} aria-label="Delete alarm" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-lg leading-none text-ink/40 hover:bg-ink/8 hover:text-red-300 max-sm:h-11 max-sm:w-11">
+                <button type="button" onClick={() => void act("deleteAlarm", alarm.id)} aria-label="Delete alarm" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-lg leading-none text-muted hover:bg-ink/8 hover:text-red-300 max-sm:h-11 max-sm:w-11">
                   ×
                 </button>
               </div>
@@ -80,14 +80,14 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
 
       <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 w-full max-w-sm flex-col gap-4 overflow-y-auto p-5 max-sm:max-w-none max-sm:shrink-0 max-sm:overflow-visible">
         <h2 className="font-display text-[13px] font-semibold text-ink/80">From your schedule, next {SCHEDULE_DAYS} days</h2>
-        {days.length === 0 ? <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-ink/40">Routines and deadlines with an alarm time show here.</p> : null}
+        {days.length === 0 ? <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">Routines and deadlines with an alarm time show here.</p> : null}
         {days.map(({ label, alarms }) => (
           <div key={label}>
-            <p className="mb-1 text-[11.5px] text-ink/45">{label}</p>
+            <p className="mb-1 text-[11.5px] text-muted">{label}</p>
             <div className="space-y-1">
               {alarms.map((alarm) => (
                 <p key={alarm.key} className="flex gap-3 text-[13px] text-ink/70">
-                  <span className="shrink-0 font-mono text-[12px] leading-5 tabular-nums text-ink/45">{clock(alarm.at)}</span>
+                  <span className="shrink-0 font-mono text-[12px] leading-5 tabular-nums text-muted">{clock(alarm.at)}</span>
                   <span className="min-w-0 truncate">{alarm.title}</span>
                 </p>
               ))}
@@ -119,9 +119,9 @@ function Reliability({ permissions }: { permissions: AlarmPermissions }) {
       <p className="px-1 pb-1 font-display text-[13px] font-semibold text-ink/80">Alarm reliability</p>
       {items.map((item) => (
         <button key={item.label} type="button" onClick={item.fix} disabled={item.done === true} className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left text-[13px] max-sm:min-h-11">
-          <span className={item.done ? "text-emerald-300" : item.done === false ? "text-amber-300" : "text-ink/40"}>{item.done ? "✓" : item.done === false ? "!" : "?"}</span>
-          <span className={item.done ? "text-ink/50" : "text-ink/85"}>{item.label}</span>
-          {item.done ? null : <span className="ml-auto text-[12px] text-ink/45">Open →</span>}
+          <span className={item.done ? "text-emerald-300" : item.done === false ? "text-amber-300" : "text-muted"}>{item.done ? "✓" : item.done === false ? "!" : "?"}</span>
+          <span className={item.done ? "text-muted" : "text-ink/85"}>{item.label}</span>
+          {item.done ? null : <span className="ml-auto text-[12px] text-muted">Open →</span>}
         </button>
       ))}
       {asking && !background ? <BackgroundSignIn onConnected={() => setConnected(true)} /> : null}
@@ -144,7 +144,7 @@ function BackgroundSignIn({ onConnected }: { onConnected: () => void }) {
 
   return (
     <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-center gap-2 px-1 pt-1">
-      <input type="password" required autoFocus placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-canvas/70 px-3 py-2 text-xs text-ink/90 placeholder:text-ink/40 focus:border-ink/30 focus:outline-none" />
+      <input type="password" required autoFocus placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-canvas/70 px-3 py-2 text-xs text-ink/90 placeholder:text-muted focus:border-ink/30 focus:outline-none" />
       <button type="submit" className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 max-sm:min-h-11">
         Connect
       </button>
@@ -180,7 +180,7 @@ function NewAlarm({ onCreate }: { onCreate: (alarm: Omit<Alarm, "id" | "enabled"
             key={weekday}
             type="button"
             onClick={() => setDays((current) => (current.includes(weekday) ? current.filter((d) => d !== weekday) : [...current, weekday]))}
-            className={`flex-1 rounded-md border py-1.5 text-[11.5px] max-sm:min-h-11 ${days.includes(weekday) ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-ink/45 hover:bg-ink/6"}`}
+            className={`flex-1 rounded-md border py-1.5 text-[11.5px] max-sm:min-h-11 ${days.includes(weekday) ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
           >
             {weekday.slice(0, 2)}
           </button>

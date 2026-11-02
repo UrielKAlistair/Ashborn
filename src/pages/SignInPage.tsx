@@ -33,7 +33,7 @@ export function SignInPage() {
         <button type="submit" disabled={busy} className="rounded-lg bg-ember px-3 py-2 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 max-sm:min-h-11">
           Sign in
         </button>
-        <p className="text-center text-[11.5px] text-ink/45">No account? Ashborn is invite-only right now.</p>
+        <p className="text-center text-[11.5px] text-muted">No account? Ashborn is invite-only right now.</p>
         {message ? <p className="text-center text-[12px] leading-relaxed text-red-300">{message}</p> : null}
       </form>
     </section>

@@ -52,7 +52,7 @@ export function ConsentPage() {
     <main className="flex min-h-screen items-center justify-center bg-canvas p-4 text-ink">
       <section className="w-full max-w-sm panel-lift rounded-2xl border border-ink/8 bg-panel p-6">
         <h1 className="mb-5 text-center font-display text-lg font-semibold text-ink/90">Ashborn</h1>
-        {state.step === "loading" || state.step === "leaving" ? <p className="text-center text-[13px] text-ink/55">One moment…</p> : null}
+        {state.step === "loading" || state.step === "leaving" ? <p className="text-center text-[13px] text-muted">One moment…</p> : null}
         {state.step === "signIn" ? <SignIn onSignedIn={() => void load()} /> : null}
         {state.step === "failed" ? <p className="text-center text-[13px] leading-relaxed text-red-300">{state.message}</p> : null}
         {state.step === "ask" ? <Ask details={state.details} onDecide={(allow) => void decide(allow)} onSignOut={() => void signOut()} /> : null}
@@ -98,12 +98,12 @@ function Ask({ details, onDecide, onSignOut }: { details: OAuthAuthorizationDeta
         <span className="font-semibold">{details.client.name || "An agent"}</span> wants to use Ashborn as you.
       </p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 rounded-xl bg-ink/[0.03] p-3">
-        <dt className="text-ink/45">Signed in as</dt>
+        <dt className="text-muted">Signed in as</dt>
         <dd className="truncate">{details.user.email}</dd>
-        <dt className="text-ink/45">Answer goes to</dt>
+        <dt className="text-muted">Answer goes to</dt>
         <dd className="truncate">{new URL(details.redirect_uri).host}</dd>
       </dl>
-      <p className="text-ink/55">It can read and change everything in Ashborn, including deleting. You can sign it out from the connector's settings in the agent.</p>
+      <p className="text-muted">It can read and change everything in Ashborn, including deleting. You can sign it out from the connector's settings in the agent.</p>
       <div className="flex gap-2">
         <button type="button" onClick={() => onDecide(false)} className="flex-1 rounded-lg border border-ink/12 px-3 py-2 text-ink/75 hover:bg-ink/6">
           Deny
@@ -112,7 +112,7 @@ function Ask({ details, onDecide, onSignOut }: { details: OAuthAuthorizationDeta
           Allow
         </button>
       </div>
-      <button type="button" onClick={onSignOut} className="text-center text-[11.5px] text-ink/45 hover:text-ink/75">
+      <button type="button" onClick={onSignOut} className="text-center text-[11.5px] text-muted hover:text-ink/75">
         Not you? Sign out
       </button>
     </div>

@@ -26,7 +26,7 @@ export function AtlasPage({
     }
     if (currentPath === "/atlas/progress") return <ProgressPage eyebrow="Design" />;
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-[13px] text-ink/40">
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-[13px] text-muted">
         <HexMark className="h-10 w-12 text-ink/15" />
         Choose an entry.
       </div>

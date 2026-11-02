@@ -57,7 +57,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
           + New recipe
         </button>
       </div>
-      {recipes.length === 0 ? <p className="text-[12px] text-ink/40">No recipes yet.</p> : null}
+      {recipes.length === 0 ? <p className="text-[12px] text-muted">No recipes yet.</p> : null}
       {recipes.map((recipe) => (
         <button
           key={recipe.id}
@@ -83,7 +83,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
             setDraft(null);
             onOpenRecipe(null);
           }}
-          className="self-start text-[13px] text-ink/55 max-sm:min-h-11 max-sm:pr-3"
+          className="self-start text-[13px] text-muted max-sm:min-h-11 max-sm:pr-3"
         >
           ‹ Recipes
         </button>
@@ -99,7 +99,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
       <div className="flex min-h-0 w-[30%] min-w-[16rem] max-w-[22rem] flex-col">{list}</div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {detail ?? (
-          <section className="panel-lift rounded-2xl border border-ink/8 bg-panel flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-ink/40">
+          <section className="panel-lift rounded-2xl border border-ink/8 bg-panel flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-muted">
             <HexMark className="h-10 w-12 text-ink/15" />
             Choose a recipe, or write a new one.
           </section>
@@ -133,14 +133,14 @@ function RecipeView({ kitchen, recipe, onEdit, onDelete }: { kitchen: Kitchen; r
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink/80">{recipe.body || <span className="text-ink/30">No method written yet.</span>}</p>
 
       <Part title="Tracked ingredients">
-        {recipe.ingredients.length === 0 ? <p className="text-[12px] text-ink/40">None: cooking it deducts nothing.</p> : null}
+        {recipe.ingredients.length === 0 ? <p className="text-[12px] text-muted">None: cooking it deducts nothing.</p> : null}
         {recipe.ingredients.map((ingredient) => (
           <p key={ingredient.id} className="flex justify-between gap-3 text-[13px] text-ink/75">
             <span>
               {ingredient.name}
               {ingredient.itemId && kitchen.items.some((item) => item.id === ingredient.itemId) ? null : <span className="ml-2 text-[11px] text-amber-200">not in stocks</span>}
             </span>
-            <span className="font-mono tabular-nums text-ink/55">
+            <span className="font-mono tabular-nums text-muted">
               {round(fromBase(ingredient.amount, ingredient.unit))} {ingredient.unit}
             </span>
           </p>
@@ -148,11 +148,11 @@ function RecipeView({ kitchen, recipe, onEdit, onDelete }: { kitchen: Kitchen; r
       </Part>
 
       <Part title="Reminders">
-        {recipe.reminders.length === 0 ? <p className="text-[12px] text-ink/40">None.</p> : null}
+        {recipe.reminders.length === 0 ? <p className="text-[12px] text-muted">None.</p> : null}
         {recipe.reminders.map((reminder) => (
           <p key={reminder.id} className="flex justify-between gap-3 text-[13px] text-ink/75">
             <span>{reminder.label}</span>
-            <span className="text-right text-[12px] text-ink/50">{timing(reminder, recipe.reminders)}</span>
+            <span className="text-right text-[12px] text-muted">{timing(reminder, recipe.reminders)}</span>
           </p>
         ))}
       </Part>
@@ -266,7 +266,7 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
         {items.length > 0 ? (
           <AddButton onClick={addIngredient}>+ Ingredient</AddButton>
         ) : (
-          <p className="text-[12px] text-ink/40">Track a staple under Stocks to deduct it here.</p>
+          <p className="text-[12px] text-muted">Track a staple under Stocks to deduct it here.</p>
         )}
       </Part>
 
@@ -299,7 +299,7 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
       ) : null}
 
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-lg px-2.5 py-1 text-[12px] text-ink/55 hover:text-ink/85 max-sm:min-h-11">
+        <button type="button" onClick={onCancel} className="rounded-lg px-2.5 py-1 text-[12px] text-muted hover:text-ink/85 max-sm:min-h-11">
           Cancel
         </button>
         <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
@@ -370,7 +370,7 @@ function Part({ title, hint, children }: { title: string; hint?: string; childre
   return (
     <div className="space-y-2">
       <h3 className="font-display text-[13px] font-semibold text-ink/80">{title}</h3>
-      {hint ? <p className="-mt-1 text-[11.5px] text-ink/40">{hint}</p> : null}
+      {hint ? <p className="-mt-1 text-[11.5px] text-muted">{hint}</p> : null}
       {children}
     </div>
   );
@@ -386,7 +386,7 @@ function AddButton({ onClick, children }: { onClick: () => void; children: strin
 
 function Remove({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} title="Remove" className="flex h-7 w-7 items-center justify-center rounded-md text-ink/40 hover:bg-ink/8 hover:text-red-300 max-sm:h-11 max-sm:w-11">
+    <button type="button" onClick={onClick} title="Remove" className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-ink/8 hover:text-red-300 max-sm:h-11 max-sm:w-11">
       ×
     </button>
   );
