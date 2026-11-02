@@ -3,7 +3,7 @@ import { requestCapture } from "./Capture";
 import { paletteOf } from "../../lib/theme";
 import { daysBetween } from "../../shared/dates";
 import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
-import type { Priorities } from "../../shared/priority";
+import { needsFirstStep, type Priorities } from "../../shared/priority";
 import type { GraphNode, ISODate, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { SplitSteps } from "./SplitSteps";
@@ -71,9 +71,10 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
 
   const done = () => void act("updateNode", step.id, { done: true });
   const notNow = () => setPassed(waiting.length > 1 ? [...passed, step.id] : []);
+  const firstStep = needsFirstStep(model, step);
   keys.current = splitting
     ? { "/": requestCapture }
-    : { d: done, n: steps.length > 1 ? notNow : () => {}, s: () => setSplitting(true), "/": requestCapture };
+    : { ...(firstStep ? {} : { d: done }), n: steps.length > 1 ? notNow : () => {}, s: () => setSplitting(true), "/": requestCapture };
 
   return (
     <section data-priority={priority} aria-label="Now" className="rounded-xl border border-[color-mix(in_oklab,var(--mark)_40%,transparent)] bg-card p-4">
@@ -97,8 +98,12 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
       <p className="mt-1 flex items-center gap-1.5 text-[12px] text-muted">
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
         <span className="truncate">
-          {quest.title}
-          {parent ? ` · ${parent.title}` : ""}
+          {firstStep ? "A quest with no steps yet" : (
+            <>
+              {quest.title}
+              {parent ? ` · ${parent.title}` : ""}
+            </>
+          )}
         </span>
       </p>
 
@@ -122,9 +127,15 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
         <SplitSteps act={act} parentId={step.id} onDone={() => setSplitting(false)} graph={{ model, snapshot }} className="mt-3 w-full" />
       ) : (
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
-          <button type="button" onClick={done} title="Done (D)" className="rounded-lg bg-ember px-3.5 py-1.5 font-medium text-canvas hover:brightness-110">
-            Done
-          </button>
+          {firstStep ? (
+            <button type="button" onClick={() => setSplitting(true)} title="Add a first step (S)" className="rounded-lg bg-ember px-3.5 py-1.5 font-medium text-canvas hover:brightness-110">
+              Add a first step
+            </button>
+          ) : (
+            <button type="button" onClick={done} title="Done (D)" className="rounded-lg bg-ember px-3.5 py-1.5 font-medium text-canvas hover:brightness-110">
+              Done
+            </button>
+          )}
           {steps.length > 1 ? (
             <button
               type="button"
@@ -135,9 +146,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
               Not now
             </button>
           ) : null}
-          <button type="button" onClick={() => setSplitting(true)} title="Split it (S)" className="rounded-lg px-2 py-1.5 text-muted hover:bg-ink/6 hover:text-ink/85">
-            Too big? Split it
-          </button>
+          {firstStep ? null : (
+            <button type="button" onClick={() => setSplitting(true)} title="Split it (S)" className="rounded-lg px-2 py-1.5 text-muted hover:bg-ink/6 hover:text-ink/85">
+              Too big? Split it
+            </button>
+          )}
         </div>
       )}
     </section>

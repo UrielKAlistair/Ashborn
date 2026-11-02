@@ -66,9 +66,21 @@ export function byPriority<T extends { id: string }>(nodes: T[], { best }: Prior
   return [...nodes].sort((a, b) => rank(a) - rank(b));
 }
 
-// The to-do: the steps of shown quests ready now that a priority covers, most urgent first
+// A quest nothing has been added to: its next move is a first step, not ticking it done
+export function needsFirstStep(model: GraphModel, node: GraphNode) {
+  return !node.parentId && !model.children.has(node.id);
+}
+
+// The to-do: what shown quests have ready now that a priority covers, most urgent first: steps, and
+// quests that need a first step (a finished quest has steps; an empty Inbox waits for captures)
 export function prioritisedSteps(model: GraphModel, snapshot: Snapshot, { effective }: Priorities): Array<{ priority: Priority; steps: GraphNode[] }> {
-  const steps = snapshot.nodes.filter((node) => node.parentId && model.ready.has(node.id) && effective.has(node.id) && questOf(model.byId, node).active);
+  const steps = snapshot.nodes.filter(
+    (node) =>
+      (node.parentId || (needsFirstStep(model, node) && node.id !== snapshot.inboxId)) &&
+      model.ready.has(node.id) &&
+      effective.has(node.id) &&
+      questOf(model.byId, node).active,
+  );
   return ([1, 2, 3, 4] as const).flatMap((priority) => {
     const inGroup = steps.filter((step) => effective.get(step.id) === priority);
     return inGroup.length ? [{ priority, steps: inGroup }] : [];

@@ -2,7 +2,7 @@ import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { questOf, type GraphModel } from "../../shared/graphModel";
-import { derivePriorities, prioritisedSteps } from "../../shared/priority";
+import { derivePriorities, needsFirstStep, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
 import type { AlarmKind, GraphNode, Snapshot, Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
@@ -10,6 +10,7 @@ import { paletteOf } from "../../lib/theme";
 import { Capture, NodePicker } from "./Capture";
 import { FocusCard } from "./FocusCard";
 import { inInbox } from "../../shared/inbox";
+import { SplitSteps } from "./SplitSteps";
 import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
@@ -148,6 +149,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                   <span className="h-px flex-1 bg-[color-mix(in_oklab,var(--mark)_25%,transparent)]" />
                 </p>
                 {steps.map((step) => {
+                  if (needsFirstStep(model, step)) return <FirstStepRow key={step.id} quest={step} snapshot={snapshot} model={model} act={act} />;
                   const quest = questOf(model.byId, step);
                   const parent = model.byId.get(step.parentId!);
                   return (
@@ -392,6 +394,33 @@ const fieldClass =
 const popoverClass = "absolute right-0 top-8 z-10 w-72 space-y-2 rounded-xl border border-ink/10 bg-card p-3 shadow-[var(--card-shadow)]";
 // A list row: quiet until hovered
 const rowClass = "flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-ink/[0.04]";
+
+// A quest in the to-do with nothing in it yet: instead of a tick, its first steps
+function FirstStepRow({ quest, snapshot, model, act }: { quest: GraphNode; snapshot: Snapshot; model: GraphModel; act: Act }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <div className={rowClass}>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          title="Add a first step"
+          className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-dashed border-ink/30 text-[12px] leading-none text-muted hover:border-ember hover:text-ember"
+        >
+          +
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] leading-snug text-ink/90">{quest.title}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />A quest with no steps yet
+          </p>
+        </div>
+      </div>
+      {open ? <SplitSteps act={act} parentId={quest.id} onDone={() => setOpen(false)} graph={{ model, snapshot }} className="mt-1 w-full" /> : null}
+    </div>
+  );
+}
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (

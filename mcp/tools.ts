@@ -12,7 +12,7 @@ import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, shownMeal, toBase
 import { nodeLevel } from "../src/shared/progression";
 import { byTime, nextOccurrence } from "../src/shared/schedule";
 import { inboxLast, inInbox } from "../src/shared/inbox";
-import { derivePriorities, prioritisedSteps } from "../src/shared/priority";
+import { derivePriorities, needsFirstStep, prioritisedSteps } from "../src/shared/priority";
 import { mealSlots, questColors, stockUnits, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
 // The tools, acting as whoever `db` is signed in as, `userId`. `blocked` gives a reason every tool refuses
@@ -550,7 +550,7 @@ function describe(snapshot: Snapshot, questId?: string) {
   const shownIds = new Set(shown.map((quest) => quest.id));
   const ready = snapshot.nodes.filter((node) => node.parentId && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id) && !inInbox(model, node, snapshot.inboxId));
   const priorities = derivePriorities(model, snapshot, today());
-  const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) => steps.map((node) => `- P${priority} ${node.title} [${node.id}]`));
+  const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) => steps.map((node) => `- P${priority} ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`));
   const unprioritised = ready.filter((node) => !priorities.effective.has(node.id)).map((node) => `- ${node.title} [${node.id}]`);
   lines.push("Up next (the user's to-do: ready to do now, with a priority):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
   lines.push("Also ready, no priority (not on the user's to-do):", ...(unprioritised.length ? unprioritised : ["- nothing"]), "");

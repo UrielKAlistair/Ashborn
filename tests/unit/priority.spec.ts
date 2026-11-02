@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { buildGraphModel } from "../../src/shared/graphModel";
 import { emptyKitchen } from "../../src/shared/kitchen";
-import { byPriority, deadlinePriority, derivePriorities, prioritisedSteps } from "../../src/shared/priority";
+import { byPriority, deadlinePriority, derivePriorities, needsFirstStep, prioritisedSteps } from "../../src/shared/priority";
 import type { Deadline, GraphEdge, GraphNode, Priority, Snapshot } from "../../src/shared/types";
 
 const today = "2026-11-02";
@@ -96,6 +96,21 @@ test("the to-do holds only ready covered steps, grouped most urgent first", () =
   );
   const todo = prioritisedSteps(model, snapshot, priorities);
   expect(todo.map(({ priority, steps }) => [priority, steps.map(({ id }) => id)])).toEqual([[1, ["urgent"]], [2, ["a"]]]);
+});
+
+test("a quest with a priority and no steps is on the to-do; a finished one and an empty Inbox are not", () => {
+  const { model, snapshot, priorities } = setup([
+    node("idea", null, { priority: 2 }),
+    node("finished", null, { priority: 1 }),
+    node("doneStep", "finished", { completedAt: today }),
+    node("user", null, { priority: 1 }), // the Inbox: its id is the user's
+    node("hidden", null, { priority: 1, active: false }),
+    node("unset", null),
+  ]);
+  const todo = prioritisedSteps(model, snapshot, priorities);
+  expect(todo.map(({ priority, steps }) => [priority, steps.map(({ id }) => id)])).toEqual([[2, ["idea"]]]);
+  expect(needsFirstStep(model, model.byId.get("idea")!)).toBe(true);
+  expect(needsFirstStep(model, model.byId.get("finished")!)).toBe(false);
 });
 
 test("a hidden quest's steps stay off the to-do", () => {
