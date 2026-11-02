@@ -3,6 +3,7 @@ import { useStoreApi } from "@xyflow/react";
 import { buildGrid, computeOwners, gridExtent } from "./territoryGrid";
 import type { TerritoryQuest } from "./territoryGrid";
 import { TerritoryRenderer } from "./territoryRenderer";
+import { inkRgb, useTheme } from "../../../lib/useTheme";
 import type { CameraFeed } from "../phonePanZoom";
 
 // The hex fabric behind the quest graph, and the territories coloured into it (see
@@ -14,6 +15,7 @@ function Territories({ quests, camera }: { quests: TerritoryQuest[]; camera?: Ca
   const store = useStoreApi();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<TerritoryRenderer | null>(null);
+  const theme = useTheme();
 
   // The grid only changes when quests move into a new block of cells
   const gridKey = quests.length === 0 ? "" : Object.values(gridExtent(quests)).flat().join(",");
@@ -38,6 +40,8 @@ function Territories({ quests, camera }: { quests: TerritoryQuest[]; camera?: Ca
       rendererRef.current = null;
     };
   }, [store]);
+
+  useLayoutEffect(() => rendererRef.current?.setInk(inkRgb()), [theme]);
 
   useLayoutEffect(() => camera?.subscribe((next) => rendererRef.current?.setCamera(next)), [camera]);
 

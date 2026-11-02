@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { setTheme, useTheme } from "../lib/useTheme";
+import { MoonIcon, SunIcon } from "./icons";
 import { desktopSections, screenAt, sectionAt, type Section } from "./sections";
 
 type NavbarProps = {
@@ -51,12 +53,13 @@ export function Navbar({
     };
   }, [openSection]);
 
+  const theme = useTheme();
+
   return (
-    <aside className="relative z-10 flex h-full min-h-0 w-24 shrink-0 flex-col items-center border-r border-white/10 bg-night-panel px-3 py-6">
-      <div className="flex flex-1 flex-col items-center gap-4">
+    <aside className="relative z-10 flex h-full min-h-0 w-[5.5rem] shrink-0 flex-col items-center border-r border-white/8 bg-night-panel/80 px-2 pt-10 pb-5">
+      <div className="flex flex-1 flex-col items-center gap-3">
         {desktopSections.map((section) => {
           const isActive = section === currentSection;
-          const labelColorClass = isActive ? "text-white/80" : "text-white/45";
           const Icon = section.icon;
 
           return (
@@ -65,28 +68,12 @@ export function Navbar({
                 type="button"
                 onClick={() => choose(section)}
                 aria-expanded={section.desktop.length > 1 ? openSection === section : undefined}
-                className="group flex flex-col items-center gap-3 bg-transparent text-white/70"
+                className={`group flex flex-col items-center gap-1.5 bg-transparent ${isActive ? "text-white" : "text-white/50 hover:text-white/80"}`}
               >
-                <span
-                  className={`flex h-14 w-14 items-center justify-center transition-colors ${
-                    isActive ? "text-white/80" : "text-white/45"
-                  }`}
-                >
-                  <span
-                    className={`flex h-12 w-12 rotate-45 items-center justify-center rounded-[12px] border transition-colors ${
-                      isActive
-                        ? "border-white/30 bg-white/10"
-                        : "border-white/12 bg-white/6 group-hover:border-white/22 group-hover:bg-white/10"
-                    }`}
-                  >
-                    <Icon className={`-rotate-45 ${labelColorClass}`} />
-                  </span>
-                </span>
-                <span
-                  className={`text-[10px] uppercase tracking-[0.24em] ${labelColorClass}`}
-                >
-                  {section.label}
-                </span>
+                <HexTile active={isActive}>
+                  <Icon className={isActive ? "text-ember" : ""} />
+                </HexTile>
+                <span className={`text-[10.5px] font-medium tracking-[0.06em] ${isActive ? "text-white/90" : ""}`}>{section.label}</span>
               </button>
 
               {section.desktop.length > 1 ? (
@@ -104,7 +91,37 @@ export function Navbar({
           );
         })}
       </div>
+
+      <button
+        type="button"
+        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        title={theme === "dark" ? "Parchment: the light theme" : "Ember: the dark theme"}
+        className="flex h-9 w-9 items-center justify-center rounded-full text-white/45 hover:bg-white/8 hover:text-white/85"
+      >
+        {theme === "dark" ? <SunIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
+      </button>
     </aside>
+  );
+}
+
+// A flat-topped hexagon, the canvas's cell shape, behind a section's icon
+function HexTile({ active, children }: { active: boolean; children: ReactNode }) {
+  return (
+    <span className="relative flex h-12 w-14 items-center justify-center">
+      <svg viewBox="0 0 56 48" className="absolute inset-0 h-full w-full" aria-hidden="true">
+        <polygon
+          points="14,1.5 42,1.5 55,24 42,46.5 14,46.5 1,24"
+          strokeLinejoin="round"
+          className={
+            active
+              ? "fill-ember/15 stroke-ember/60"
+              : "fill-white/[0.04] stroke-white/12 transition-colors group-hover:fill-white/[0.07] group-hover:stroke-white/25"
+          }
+          strokeWidth="1.2"
+        />
+      </svg>
+      <span className="relative">{children}</span>
+    </span>
   );
 }
 
@@ -137,11 +154,11 @@ function ScreenMenu({
               tabIndex={open ? 0 : -1}
               onClick={() => onChoose(screen.path)}
               className={`flex w-full flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-colors ${index === 0 ? "mt-3" : ""} ${
-                active ? "bg-white/10 text-white/85" : "text-white/50 hover:bg-white/6 hover:text-white/80"
+                active ? "bg-ember/12 text-white" : "text-white/50 hover:bg-white/6 hover:text-white/80"
               }`}
             >
               <Icon className="h-5 w-5" />
-              <span className="text-[9px] uppercase tracking-[0.18em]">{screen.label}</span>
+              <span className="text-[10px] font-medium tracking-[0.04em]">{screen.label}</span>
             </button>
           );
         })}

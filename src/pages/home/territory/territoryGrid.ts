@@ -111,5 +111,5 @@ export function cellPaint(color: Hue, look: CellLook) {
 
 // The bare fabric: every cell's outline, faintly, everywhere. It fades out when zoomed far out,
 // where the cells would shrink to a few pixels and shimmer.
-export const fabric = { rgb: [255, 255, 255], alpha: 0.055 } as const;
+export const fabricAlpha = 0.055;
 export const fabricOpacity = (zoom: number) => Math.min(1, Math.max(0, (zoom - 0.2) / 0.25));

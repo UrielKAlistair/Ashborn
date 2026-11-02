@@ -39,6 +39,9 @@ const stepRow = { width: 248, height: 40 };
 const addRowHeight = 40;
 const padding = 16;
 const questGap = 40;
+// Links in the theme's ink: a met prerequisite fades
+const linkOpen = "color-mix(in oklab, var(--color-white) 34%, transparent)";
+const linkDone = "color-mix(in oklab, var(--color-white) 15%, transparent)";
 const collapsedStorageKey = "ashborn-collapsed";
 // Quests are locked unless the user unlocked them, so only the unlocked ones are kept
 const unlockedStorageKey = "ashborn-unlocked";
@@ -341,9 +344,9 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
           target: edge.to,
           deletable: false,
           zIndex: depth * 10 - 5,
-          markerEnd: { type: MarkerType.ArrowClosed, color: met ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.32)" },
+          markerEnd: { type: MarkerType.ArrowClosed, color: met ? linkDone : linkOpen },
           style: {
-            stroke: isSelected ? "rgba(125,211,252,0.9)" : met ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.32)",
+            stroke: isSelected ? "var(--color-ember)" : met ? linkDone : linkOpen,
             strokeWidth: isSelected ? 2 : 1.25,
             strokeDasharray: met && !isSelected ? "4 4" : undefined,
           },
@@ -542,7 +545,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
 
       {/* A frosted sheet in the quest's colour, as the trail's chapters are */}
       <div
-        className={`absolute inset-0 overflow-hidden rounded-3xl border bg-night-card/90 shadow-[0_30px_80px_-24px_rgba(0,0,0,0.9)] ${palette.border}`}
+        className={`absolute inset-0 overflow-hidden rounded-3xl border bg-night-card/90 shadow-[var(--card-shadow)] ${palette.border}`}
       >
         <div className={`pointer-events-none absolute inset-0 bg-linear-to-b to-transparent to-60% ${palette.tint}`} />
       </div>
@@ -973,7 +976,7 @@ function PhoneMenu({ data }: { data: CardData }) {
           <div className="fixed inset-0 z-[60] flex items-end bg-night/60" onClick={() => onMenu(false)}>
             <div
               onClick={(event) => event.stopPropagation()}
-              className="w-full rounded-t-3xl border-t border-white/12 bg-night-card p-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-white/85 shadow-[0_-20px_60px_rgba(0,0,0,0.6)]"
+              className="w-full rounded-t-3xl border-t border-white/12 bg-night-card p-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-white/85 shadow-[var(--sheet-shadow)]"
             >
               <input
                 defaultValue={node.title}

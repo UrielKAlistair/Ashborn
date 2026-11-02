@@ -266,9 +266,9 @@ function App() {
 
   return (
     <main className="relative h-screen overflow-hidden bg-transparent text-white">
-      {/* The night sky of the homepage's trail: deep blue glowing faintly at the centre */}
+      {/* The canvas, glowing faintly at the centre in the theme's light */}
       <div className="absolute inset-0 bg-night" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_52%,rgba(20,36,125,0.28),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_45%,var(--glow),transparent_70%)]" />
 
       {phone ? (
         <div className="relative flex h-full min-h-0 flex-col">

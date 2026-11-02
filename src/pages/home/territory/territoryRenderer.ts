@@ -1,5 +1,5 @@
 import { hexCellScale } from "./hexgrid";
-import { cellPaint, fabric, fabricOpacity, territoryCellRadius } from "./territoryGrid";
+import { cellPaint, fabricAlpha, fabricOpacity, territoryCellRadius } from "./territoryGrid";
 import type { CellLook, Grid } from "./territoryGrid";
 
 // The fabric and the territories, drawn by the GPU (WebGL 1) in one pass over the canvas.
@@ -105,6 +105,7 @@ export class TerritoryRenderer {
   private dirty = true;
 
   private camera: Camera = { x: 0, y: 0, zoom: 1 };
+  private ink: [number, number, number] = [255, 255, 255];
 
   // Cell state, by texel (row-major over the grid's columns and rows)
   private grid: Grid | null = null;
@@ -144,6 +145,12 @@ export class TerritoryRenderer {
     const { gl } = this;
     if (this.textures) Object.values(this.textures).forEach((texture) => gl.deleteTexture(texture));
     if (this.program) gl.deleteProgram(this.program);
+  }
+
+  // The fabric's colour: the theme's ink
+  setInk(ink: [number, number, number]) {
+    this.ink = ink;
+    this.invalidate();
   }
 
   setCamera(camera: Camera) {
@@ -266,7 +273,8 @@ export class TerritoryRenderer {
     gl.uniform3f(u.camera, this.camera.x, this.camera.y, this.camera.zoom);
     gl.uniform1f(u.radius, territoryCellRadius);
     gl.uniform1f(u.cellScale, hexCellScale);
-    gl.uniform4f(u.fabric, fabric.rgb[0] / 255, fabric.rgb[1] / 255, fabric.rgb[2] / 255, fabric.alpha * fabricOpacity(this.camera.zoom));
+    const [r, g, b] = this.ink;
+    gl.uniform4f(u.fabric, r / 255, g / 255, b / 255, fabricAlpha * fabricOpacity(this.camera.zoom));
     const grid = this.grid;
     if (grid) gl.uniform4f(u.grid, grid.cols[0], grid.rows[0], grid.cols[1] - grid.cols[0] + 1, grid.rows[1] - grid.rows[0] + 1);
     else gl.uniform4f(u.grid, 0, 0, 0, 0);

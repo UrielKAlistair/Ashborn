@@ -17,14 +17,22 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
   const overall = statLevel(model.totalStatXp);
   const tier = Math.min(portraitTiers, Math.floor((overall.level - 1) / PORTRAIT_TIER_LEVELS) + 1);
 
+  // The portrait stands on a hex cell of the canvas's fabric, the overall level beneath it
   const portrait = (
-    <div className={`flex shrink-0 flex-col items-center ${card ? "w-48" : "ml-3 w-24"}`}>
-      <div className={`flex items-end justify-center ${card ? "w-48" : "w-24"}`}>
-        <Portrait tier={tier} zoom={card ? CARD_PORTRAIT_ZOOM : 1} />
+    <div className={`flex shrink-0 flex-col items-center ${card ? "w-48" : "w-28"}`}>
+      <div className={`relative flex items-end justify-center ${card ? "w-48" : "w-28"}`}>
+        <svg viewBox="0 0 56 48" className="absolute inset-x-0 bottom-0 mx-auto w-full" aria-hidden="true">
+          <polygon points="14,1.5 42,1.5 55,24 42,46.5 14,46.5 1,24" strokeLinejoin="round" strokeWidth="0.8" className="fill-ember/[0.07] stroke-ember/30" />
+        </svg>
+        <div className="relative">
+          <Portrait tier={tier} zoom={card ? CARD_PORTRAIT_ZOOM : 1} />
+        </div>
       </div>
-      <p className={`mt-3 uppercase tracking-[0.22em] text-white/55 ${card ? "text-xs" : "text-[10px]"}`}>Lv {overall.level}</p>
-      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-night/50">
-        <div className="h-full rounded-full bg-[#d7c17d]" style={{ width: `${overall.percent}%` }} />
+      <p className={`mt-3 font-display font-semibold text-white/90 ${card ? "text-lg" : "text-sm"}`}>
+        Level <span className="text-ember">{overall.level}</span>
+      </p>
+      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/8">
+        <div className="h-full rounded-full bg-ember" style={{ width: `${overall.percent}%` }} />
       </div>
     </div>
   );
@@ -36,10 +44,10 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
         return (
           <div key={key} title={`${Math.round(model.statXp[key])} xp`}>
             <div className="flex items-baseline justify-between">
-              <dt className={`tracking-[0.18em] text-white/55 ${card ? "text-xs" : "text-[11px]"}`}>{key}</dt>
-              <dd className={`text-white/90 ${card ? "text-base" : "text-sm"}`}>{level}</dd>
+              <dt className={`font-display font-medium tracking-[0.08em] text-white/55 ${card ? "text-xs" : "text-[11px]"}`}>{key}</dt>
+              <dd className={`font-mono text-white/90 ${card ? "text-base" : "text-[13px]"}`}>{level}</dd>
             </div>
-            <div className={`mt-1 overflow-hidden rounded-full border border-white/8 bg-night/50 ${card ? "h-1.5" : "h-1"}`}>
+            <div className={`mt-1 overflow-hidden rounded-full bg-white/8 ${card ? "h-1.5" : "h-1"}`}>
               <div className={`h-full rounded-full ${palettes[statColors[key]].bar}`} style={{ width: `${percent}%` }} />
             </div>
           </div>
@@ -49,13 +57,13 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
   );
 
   return card ? (
-    <section className="flex w-full max-w-sm flex-col items-center gap-8 rounded-3xl border border-white/10 bg-night-panel px-6 py-8">
+    <section className="panel-lift flex w-full max-w-sm flex-col items-center gap-8 rounded-2xl border border-white/8 bg-night-panel px-6 py-8">
       {portrait}
       {stats}
     </section>
   ) : (
-    <section className="shrink-0 rounded-3xl border border-white/10 bg-night-panel p-4">
-      <div className="flex gap-8">
+    <section className="panel-lift shrink-0 rounded-2xl border border-white/8 bg-night-panel px-5 py-4">
+      <div className="flex items-center gap-7">
         {portrait}
         {stats}
       </div>

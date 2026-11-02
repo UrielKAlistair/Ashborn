@@ -1,12 +1,58 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
 @import "@fontsource/jetbrains-mono/400.css";
 
-/* The night palette of the homepage's trail: the page, and the panels that sit on it */
+/* Two themes, Ember (dark, the default) and Parchment (light), set by data-theme on <html>.
+   Components colour themselves with `white` (the ink: text, lines and tints, at an opacity) and
+   `night` (the canvas), `night-panel` and `night-card` (surfaces on it); each theme sets those.
+   Parchment also darkens the pale accent shades that are written for a dark ground. */
 @theme {
-  --color-night: #02040d;
-  --color-night-panel: #040a1c;
-  --color-night-card: #08112b;
+  --color-night: #0c0e13;
+  --color-night-panel: #12151c;
+  --color-night-card: #191d26;
+  --color-white: #ece7df;
+  --color-ember: #f0a35e;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter Variable", ui-sans-serif, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+:root {
+  --glow: rgb(240 140 70 / 0.07);
+  --panel-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px rgb(0 0 0 / 0.35);
+  --card-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.9);
+  --sheet-shadow: 0 -20px 60px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --color-night: #ebe5da;
+  --color-night-panel: #f7f3ec;
+  --color-night-card: #fffcf7;
+  --color-white: #231e18;
+  --color-ember: #c2621f;
+  --glow: rgb(255 255 255 / 0.5);
+  --panel-shadow: 0 1px 2px rgb(60 40 20 / 0.06), 0 10px 28px rgb(60 40 20 / 0.08);
+  --card-shadow: 0 1px 2px rgb(60 40 20 / 0.08), 0 14px 30px -12px rgb(60 40 20 / 0.18);
+  --sheet-shadow: 0 -10px 30px rgb(60 40 20 / 0.12);
+  color-scheme: light;
+
+  --color-emerald-100: oklch(43.2% 0.095 166.913);
+  --color-emerald-200: oklch(50.8% 0.118 165.612);
+  --color-emerald-300: oklch(50.8% 0.118 165.612);
+  --color-emerald-400: oklch(59.6% 0.145 163.225);
+  --color-red-100: oklch(44.4% 0.177 26.899);
+  --color-red-200: oklch(50.5% 0.213 27.518);
+  --color-red-300: oklch(50.5% 0.213 27.518);
+  --color-red-400: oklch(57.7% 0.245 27.325);
+  --color-amber-100: oklch(47.3% 0.137 46.201);
+  --color-amber-200: oklch(55.5% 0.163 48.998);
+  --color-amber-300: oklch(55.5% 0.163 48.998);
+  --color-sky-200: oklch(50% 0.134 242.749);
+  --color-sky-300: oklch(50% 0.134 242.749);
+  --color-sky-400: oklch(58.8% 0.158 241.966);
 }
 
 html,
@@ -20,12 +66,19 @@ body,
 
 body {
   height: 100vh;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Surfaces that float on the canvas */
+.panel-lift {
+  box-shadow: var(--panel-shadow);
 }
 
 .panel-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgb(255 255 255 / 0.18) transparent;
+  scrollbar-color: color-mix(in oklab, var(--color-white) 18%, transparent) transparent;
 }
 
 .panel-scroll::-webkit-scrollbar {
@@ -40,15 +93,37 @@ body {
   border: 2px solid transparent;
   border-radius: 9999px;
   background-clip: padding-box;
-  background-color: rgb(255 255 255 / 0.16);
+  background-color: color-mix(in oklab, var(--color-white) 16%, transparent);
 }
 
 .panel-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(255 255 255 / 0.24);
+  background-color: color-mix(in oklab, var(--color-white) 24%, transparent);
 }
 
 /* The quest graph's camera is its own compositor layer, so a pan or zoom moves the cards already
    drawn instead of repainting them in every frame; Chrome redraws them sharp once a zoom ends */
 .react-flow__viewport {
   will-change: transform;
+}
+
+/* React Flow's zoom buttons, in the theme */
+.react-flow__controls {
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--color-white) 10%, transparent);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  border-bottom: 1px solid color-mix(in oklab, var(--color-white) 8%, transparent);
+  background: var(--color-night-card);
+  color: color-mix(in oklab, var(--color-white) 65%, transparent);
+}
+
+.react-flow__controls-button:hover {
+  background: color-mix(in oklab, var(--color-white) 8%, var(--color-night-card));
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
 }
