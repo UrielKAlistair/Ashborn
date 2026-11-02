@@ -233,6 +233,21 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
                   <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
+                  {/* Unlinked, it raises nothing; as its own quest it reaches Now, asking for a first step */}
+                  {deadline.nodeId ? null : (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        // The link refers to the quest, so the quest is saved first
+                        const questId = crypto.randomUUID();
+                        await act("createNode", deadline.title, null, questId);
+                        await act("linkDeadline", deadline.id, questId);
+                      }}
+                      className="-ml-1 mt-0.5 rounded-md px-1 py-0.5 text-[11.5px] text-ember hover:bg-ink/6 pointer-coarse:min-h-8"
+                    >
+                      + Make it a quest
+                    </button>
+                  )}
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
