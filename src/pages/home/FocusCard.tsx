@@ -108,8 +108,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
     const next = days ? { ...rest, [step.id]: { days, last: date } } : rest;
     storePassedOver(next);
   };
-  const running = timed;
-  const timeLeft = running ? Math.max(0, running.endsAt - clock) : null;
+  const timeLeft = timed ? Math.max(0, timed.endsAt - clock) : null;
   const passedDays = counts[step.id]?.days ?? 0;
 
   const done = () => {
@@ -121,10 +120,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   const start = () => box(START_MINUTES);
   const more = () => box(MORE_MINUTES);
   const stop = () => storeTimer(null);
-  // Putting off the last of the round starts it again
+  // Putting off the last of the round starts it again (a step put off and since done doesn't count)
   const notNow = () => {
     if (!passedToday) setPassedDays(passedDays + 1);
-    storePassed(date, steps.length - choice.passed.length > 1 ? [...choice.passed, step.id] : []);
+    const left = steps.filter(({ id }) => !choice.passed.includes(id)).length;
+    storePassed(date, left > 1 ? [...choice.passed, step.id] : []);
   };
   const openSplit = () => setHolding(step.id);
   const firstStep = needsFirstStep(model, step);
@@ -184,11 +184,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
         ) : null}
       </ul>
 
-      {running && timeLeft !== null && !splitting ? (
+      {timed && timeLeft !== null && !splitting ? (
         timeLeft > 0 ? (
           <div className="mt-3 flex items-center gap-3" role="timer" aria-label="Time left">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink/10">
-              <div className="h-full rounded-full bg-ember" style={{ width: `${(100 * timeLeft) / (running.endsAt - running.startedAt)}%` }} />
+              <div className="h-full rounded-full bg-ember" style={{ width: `${(100 * timeLeft) / (timed.endsAt - timed.startedAt)}%` }} />
             </div>
             <span className="font-mono text-[12px] text-ink/80 tabular-nums">
               {Math.floor(timeLeft / 60_000)}:{String(Math.floor(timeLeft / 1000) % 60).padStart(2, "0")}
