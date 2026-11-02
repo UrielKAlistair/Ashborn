@@ -52,3 +52,48 @@ body {
 .react-flow__viewport {
   will-change: transform;
 }
+
+/* A chain's priority on the graph. Three looks to choose between, on <html data-priority-look>. */
+:root {
+  --priority-1: #f87171;
+  --priority-2: #fbbf24;
+  --priority-3: #38bdf8;
+  --priority-4: #a78bfa;
+  --priority-edge-1: #f87171;
+  --priority-edge-2: #fbbf24;
+  --priority-edge-3: #38bdf8;
+  --priority-edge-4: #a78bfa;
+}
+.priority-mark {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 0 solid transparent;
+  z-index: 1;
+}
+[data-priority="1"] { --mark: var(--priority-1); }
+[data-priority="2"] { --mark: var(--priority-2); }
+[data-priority="3"] { --mark: var(--priority-3); }
+[data-priority="4"] { --mark: var(--priority-4); }
+
+/* A: the chain in its colour, everything else dimmed */
+:root[data-priority-look="a"] [data-priority="none"],
+:root:not([data-priority-look]) [data-priority="none"] { opacity: 0.45; }
+:root[data-priority-look="a"] [data-priority]:not([data-priority="none"]) > .priority-mark,
+:root:not([data-priority-look]) [data-priority]:not([data-priority="none"]) > .priority-mark {
+  border-width: 1.5px;
+  border-color: var(--mark);
+  background: color-mix(in srgb, var(--mark) 9%, transparent);
+}
+
+/* B: one spotlight colour, brighter the more urgent, everything else strongly dimmed */
+:root[data-priority-look="b"] { --priority-edge-1: #fde68a; --priority-edge-2: #fde68acc; --priority-edge-3: #fde68a99; --priority-edge-4: #fde68a66; }
+:root[data-priority-look="b"] [data-priority="none"] { opacity: 0.28; }
+:root[data-priority-look="b"] [data-priority]:not([data-priority="none"]) > .priority-mark { border-width: 1px; border-color: #fde68a; }
+:root[data-priority-look="b"] [data-priority="1"] > .priority-mark { box-shadow: 0 0 26px 3px #fde68a99; }
+:root[data-priority-look="b"] [data-priority="2"] > .priority-mark { box-shadow: 0 0 16px 1px #fde68a66; border-color: #fde68acc; }
+:root[data-priority-look="b"] [data-priority="3"] > .priority-mark { box-shadow: 0 0 8px #fde68a33; border-color: #fde68a99; }
+:root[data-priority-look="b"] [data-priority="4"] > .priority-mark { border-color: #fde68a66; }
+
+/* C: a coloured rail down the card's left edge, nothing dimmed */
+:root[data-priority-look="c"] [data-priority]:not([data-priority="none"]) > .priority-mark { border-left-width: 5px; border-left-color: var(--mark); }

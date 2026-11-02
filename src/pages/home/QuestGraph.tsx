@@ -22,9 +22,10 @@ import { createPortal } from "react-dom";
 import { paletteOf, palettes } from "../../lib/theme";
 import { useToday } from "../../lib/useToday";
 import { isDone, isFinished, statKeys, type GraphModel } from "../../shared/graphModel";
+import { byPriority, derivePriorities } from "../../shared/priority";
 import { nodeLevel } from "../../shared/progression";
 import { packQuests, prerequisitesFirst, type Canvas, type Size } from "../../shared/questPacking";
-import { questColors, type GraphEdge, type GraphNode, type ISODate, type QuestColor, type Snapshot, type StatKey, type StatWeights } from "../../shared/types";
+import { questColors, type GraphEdge, type GraphNode, type ISODate, type Priority, type QuestColor, type Snapshot, type StatKey, type StatWeights } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
 import { usePhonePanZoom } from "./phonePanZoom";
@@ -87,9 +88,14 @@ type CardData = {
   locked: boolean; // the quest it sits in, or is, keeps its steps where they are
   adding: boolean;
   menuOpen: boolean;
+  look: PriorityLook;
   phone: boolean; // view-only placement, and one labelled menu instead of the small buttons
   actions: CardActions;
 };
+
+// How a card shows priority: the most urgent inside it, "none" dimmed while anything has one, and
+// undefined, plain, while nothing has
+type PriorityLook = Priority | "none" | undefined;
 
 // What a card can do, one object shared by every card; each takes the card's node id
 type CardActions = {
@@ -140,8 +146,11 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // graph for the Completed list.
   const isFolded = (id: string) => isFinished(model, id) && (opened[id] ?? "") < today;
 
-  // A box shows all its steps, done ones greyed, unless the user collapsed it or it is folded
-  const visibleSteps = (id: string) => (collapsed.has(id) || isFolded(id) ? [] : (model.children.get(id) ?? []));
+  const priorities = useMemo(() => derivePriorities(model, snapshot, today), [model, snapshot.edges, snapshot.deadlines, today]);
+
+  // A box shows all its steps, done ones greyed, most urgent first, unless the user collapsed it or
+  // it is folded
+  const visibleSteps = (id: string) => (collapsed.has(id) || isFolded(id) ? [] : byPriority(model.children.get(id) ?? [], priorities));
 
   const quests = model.children.get(null) ?? [];
   const completed = quests.filter((quest) => quest.active && isFolded(quest.id));
@@ -151,7 +160,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // Rendered nodes, parents before their steps (React Flow needs that order), and the links
   // between them; worked out again only when the graph or what is open changes, not per drag move
   const { shown, rendered, depthOf, renderedEdges, structureKey } = useMemo(() => {
-    const shown = quests.filter((quest) => quest.active && !isFolded(quest.id));
+    const shown = byPriority(quests.filter((quest) => quest.active && !isFolded(quest.id)), priorities);
     const rendered: Array<{ node: GraphNode; depth: number; questId: string }> = [];
     const visit = (node: GraphNode, depth: number, questId: string) => {
       rendered.push({ node, depth, questId });
@@ -166,7 +175,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       addingTo,
     ]);
     return { shown, rendered, depthOf, renderedEdges, structureKey };
-  }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo]);
+  }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo, priorities]);
   const topKey = shown.map((quest) => quest.id).join();
 
   const paneMeasured = useStore((state) => state.width > 0 && state.height > 0);
@@ -269,6 +278,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
 
   // Each node keeps its previous object while its position, size and data are unchanged, so a
   // drag hands React Flow one new node per move, and an edit only the nodes it touched
+  const lookOf = (id: string): PriorityLook => priorities.best.get(id) ?? (priorities.best.size > 0 ? "none" : undefined);
   const built = useRef(new Map<string, Node<CardData>>());
   const nodes = useMemo<Node<CardData>[]>(() => {
     const previous = built.current;
@@ -288,6 +298,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         locked: !unlocked.has(questId),
         adding: addingTo === node.id,
         menuOpen: menuFor === node.id,
+        look: lookOf(node.id),
         phone,
         actions,
       };
@@ -325,7 +336,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       built.current.set(node.id, next);
       return next;
     });
-  }, [rendered, model, placements, moving, collapsed, opened, today, dayStartHour, unlocked, addingTo, menuFor, phone, actions]);
+  }, [rendered, model, placements, moving, collapsed, opened, today, dayStartHour, unlocked, addingTo, menuFor, priorities, phone, actions]);
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -335,21 +346,23 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         const depth = depthOf.get(edge.from) ?? 0;
         // A link out of a done step is a met prerequisite
         const met = model.byId.get(edge.from)?.completedAt;
+        const priority = priorities.effective.get(edge.to);
+        const color = met ? "rgba(255,255,255,0.15)" : priority ? `var(--priority-edge-${priority})` : "rgba(255,255,255,0.32)";
         return {
           id: `${edge.from}->${edge.to}`,
           source: edge.from,
           target: edge.to,
           deletable: false,
           zIndex: depth * 10 - 5,
-          markerEnd: { type: MarkerType.ArrowClosed, color: met ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.32)" },
+          markerEnd: { type: MarkerType.ArrowClosed, color },
           style: {
-            stroke: isSelected ? "rgba(125,211,252,0.9)" : met ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.32)",
+            stroke: isSelected ? "rgba(125,211,252,0.9)" : color,
             strokeWidth: isSelected ? 2 : 1.25,
             strokeDasharray: met && !isSelected ? "4 4" : undefined,
           },
         };
       }),
-    [renderedEdges, depthOf, model, selectedEdge],
+    [renderedEdges, depthOf, model, selectedEdge, priorities],
   );
 
   // Each shown quest claims the hex cells around it, in its colour, following it as it is
@@ -537,8 +550,9 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
   const palette = paletteOf(node.color);
 
   return (
-    <div className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
+    <div data-priority={data.look} className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
       <Handles height={questHeader.height} hidden={data.phone} />
+      <div className="priority-mark rounded-3xl" />
 
       {/* A frosted sheet in the quest's colour, as the trail's chapters are */}
       <div
@@ -593,11 +607,13 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
 
   return (
     <div
+      data-priority={data.look}
       className={`group relative h-full w-full rounded-xl border ${done ? "border-white/[0.06]" : "border-white/12"} ${
         holdsSteps ? "bg-white/[0.025]" : done ? "bg-white/[0.015]" : "bg-white/[0.05]"
       } ${data.shelved ? shelvedLook : ""}`}
     >
       <Handles height={stepRow.height} hidden={data.phone} />
+      <div className="priority-mark rounded-xl" />
       <div className="flex items-center gap-2 px-3" style={{ height: stepRow.height }}>
         <Tick done={done} onClick={() => void act("updateNode", node.id, { done: !done })} className="nodrag" />
         <Title
@@ -760,6 +776,7 @@ function BoxButtons({ data }: { data: CardData }) {
         </>
       ) : (
         <>
+          <PriorityButton data={data} />
           <ShelveButton data={data} />
           <DeleteButton data={data} />
         </>
@@ -769,6 +786,52 @@ function BoxButtons({ data }: { data: CardData }) {
 }
 
 // Shelves or unshelves a step; shown on hover, and always on a shelved step so it can be undone
+function PriorityButton({ data }: { data: CardData }) {
+  const { node, menuOpen } = data;
+  const { act, onMenu } = boundActions(data);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onMenu(!menuOpen);
+        }}
+        title="Priority"
+        className={`nodrag ${boxButton} rounded-[5px] border border-white/15 text-[9px] font-semibold text-white/50 hover:text-white`}
+      >
+        {node.priority ? `P${node.priority}` : "P"}
+      </button>
+      <NodeToolbar isVisible={menuOpen} position={Position.Bottom} align="end" offset={6}>
+        <div className="nodrag nopan w-48 rounded-xl border border-white/12 bg-night-card/95 p-2 text-xs text-white/75">
+          <PriorityPicker node={node} act={act} />
+        </div>
+      </NodeToolbar>
+    </>
+  );
+}
+
+// Sets the node's own priority, which covers its chain; 1 is the most urgent
+function PriorityPicker({ node, act }: { node: GraphNode; act: Act }) {
+  return (
+    <div className="flex w-full items-center justify-between gap-1" role="radiogroup" aria-label="Priority">
+      {([null, 1, 2, 3, 4] as const).map((priority) => (
+        <button
+          key={priority ?? "none"}
+          type="button"
+          role="radio"
+          aria-checked={node.priority === priority}
+          aria-label={priority ? `Priority ${priority}` : "No priority"}
+          onClick={() => void act("updateNode", node.id, { priority })}
+          className={`flex-1 rounded-md border px-1 py-1 text-[10px] ${node.priority === priority ? "border-white/50 text-white" : "border-white/10 text-white/50 hover:border-white/25"}`}
+        >
+          {priority ? `P${priority}` : "–"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ShelveButton({ data }: { data: CardData }) {
   const { node } = data;
   const { act } = data.actions;
@@ -905,6 +968,7 @@ function MenuButton({ data }: { data: CardData }) {
 
       <NodeToolbar isVisible={menuOpen} position={side} align="end" offset={6}>
         <div className="nodrag nopan w-60 space-y-2 rounded-xl border border-white/12 bg-night-card/95 p-3 text-xs text-white/75 shadow-xl">
+          <PriorityPicker node={node} act={act} />
           <ColorPicker node={node} act={act} />
           <StatWeightsEditor node={node} act={act} />
 
@@ -994,6 +1058,9 @@ function PhoneMenu({ data }: { data: CardData }) {
                   <EyeIcon crossed={!collapsed} /> {collapsed ? "Show steps" : "Hide steps"}
                 </button>
               ) : null}
+              <div className={phoneItem}>
+                <PriorityPicker node={node} act={act} />
+              </div>
               {isQuest ? (
                 <>
                   <button type="button" onClick={choose(() => act("levelUp", node.id, crypto.randomUUID()))} className={phoneItem}>
@@ -1220,6 +1287,8 @@ async function layoutTree(
         "elk.layered.spacing.nodeNodeBetweenLayers": "48",
         "elk.spacing.componentComponent": "12",
         "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+        // Otherwise an unlinked step goes above the chains, whatever its priority
+        "elk.layered.considerModelOrder.components": "MODEL_ORDER",
       },
       children: nodes.map((node, i) => ({ id: node.id, ...sizes[i] })),
       edges: links.map((edge, i) => ({ id: `e${i}`, sources: [edge.from], targets: [edge.to] })),

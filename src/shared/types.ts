@@ -72,6 +72,7 @@ export type Deadline = {
   title: string;
   dueDate: ISODate;
   alarmTime: ClockTime | null; // an alarm on the due day (on the phone)
+  nodeId: string | null; // the quest or step it is for: as it nears, it raises that chain's priority
 };
 
 // Level-ups and completed steps on `date`
@@ -219,6 +220,7 @@ export type AshbornApi = {
   deleteRoutine(id: string): Promise<Delta>;
   setRoutineCheck(routineId: string, date: ISODate, checked: boolean): Promise<Delta>;
   createDeadline(deadline: Deadline): Promise<Delta>;
+  linkDeadline(id: string, nodeId: string | null): Promise<Delta>;
   completeDeadline(id: string): Promise<Delta>;
   deleteDeadline(id: string): Promise<Delta>;
   createAlarm(alarm: Alarm): Promise<Delta>; // the id is made by the caller, so it works offline

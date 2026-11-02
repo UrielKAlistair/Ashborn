@@ -6,7 +6,7 @@ import type { Alarm, Deadline, Routine, Snapshot } from "../../src/shared/types"
 // Which alarms the phone should schedule, from routines and deadlines
 
 const routine = (overrides: Partial<Routine>): Routine => ({ id: "r", title: "Routine", cue: "", weekdays: [], time: null, alarm: "none", ...overrides });
-const deadline = (overrides: Partial<Deadline>): Deadline => ({ id: "d", title: "Deadline", dueDate: "2026-10-20", alarmTime: null, ...overrides });
+const deadline = (overrides: Partial<Deadline>): Deadline => ({ id: "d", nodeId: null, title: "Deadline", dueDate: "2026-10-20", alarmTime: null, ...overrides });
 const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", at: null, time: null, weekdays: [], enabled: true, ...overrides });
 const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   nodes: [],

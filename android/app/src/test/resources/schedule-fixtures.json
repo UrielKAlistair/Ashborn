@@ -413,30 +413,35 @@
         "deadlines": [
           {
             "id": "soon",
+            "nodeId": null,
             "title": "Essay",
             "dueDate": "2026-10-20",
             "alarmTime": "09:00"
           },
           {
             "id": "edge",
+            "nodeId": null,
             "title": "Deadline",
             "dueDate": "2026-10-25",
             "alarmTime": "23:30"
           },
           {
             "id": "later",
+            "nodeId": null,
             "title": "Deadline",
             "dueDate": "2026-10-26",
             "alarmTime": "09:00"
           },
           {
             "id": "quiet",
+            "nodeId": null,
             "title": "Deadline",
             "dueDate": "2026-10-20",
             "alarmTime": null
           },
           {
             "id": "overdue",
+            "nodeId": null,
             "title": "Deadline",
             "dueDate": "2026-10-18",
             "alarmTime": "09:00"
@@ -704,6 +709,7 @@
         "deadlines": [
           {
             "id": "seven",
+            "nodeId": null,
             "title": "Deadline",
             "dueDate": "2026-10-19",
             "alarmTime": "07:00"
