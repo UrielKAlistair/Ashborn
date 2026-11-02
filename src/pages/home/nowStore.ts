@@ -1,39 +1,78 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import type { NowMemory, StartTimer } from "../../shared/nowStep";
+import type { ISODate } from "../../shared/types";
 
-// What Now remembers on this device between sittings: on how many days each step was passed over, and the
-// timer on a started step. Where storage refuses (a private window), it is forgotten.
+// What Now remembers on this device: the steps put off today and the timer on a started step, kept
+// between sittings; the step last split and the one Split is open on, for this sitting. On how many
+// days each step was put off is kept too, for the nudge. Where storage refuses (a private window),
+// it is forgotten. Every reader follows a change, wherever it was made: Now, the tray, another screen.
 
+const passedKey = "ashborn-now-passed";
 const passedOverKey = "ashborn-passed-over";
 const timerKey = "ashborn-now-timer";
-const timerEvent = "ashborn:now-timer";
+const changeEvent = "ashborn:now-memory";
 // A started step's time box, and the extra time offered when it ends
 export const START_MINUTES = 15;
 export const MORE_MINUTES = 5;
 
-export type StartTimer = { stepId: string; startedAt: number; endsAt: number };
 export type PassedOver = Record<string, { days: number; last: string }>; // by step: days passed over, the latest
 
-export const passedOver = () => read<PassedOver>(passedOverKey, {});
+let splitFrom: string | null = null;
+let holding: string | null = null;
+let version = 0;
 
-export function storePassedOver(counts: PassedOver) {
-  write(passedOverKey, counts);
+// What Now remembers today, read afresh whenever any of it changes
+export function useNowMemory(date: ISODate): NowMemory {
+  useSyncExternalStore(onNowMemoryChange, () => version);
+  const passed = read<{ date: string; ids: string[] } | null>(passedKey, null);
+  return { passed: passed?.date === date ? passed.ids : [], timer: storedTimer(), splitFrom, holding };
+}
+
+export function storePassed(date: ISODate, ids: string[]) {
+  write(passedKey, { date, ids });
+  changed();
 }
 
 export const storedTimer = () => read<StartTimer | null>(timerKey, null);
 
-// Set from Now or from the tray's menu; Now follows either
+// Set from Now or from the tray's menu
 export function storeTimer(timer: StartTimer | null) {
   write(timerKey, timer);
-  window.dispatchEvent(new Event(timerEvent));
+  changed();
 }
 
 export function timerBox(stepId: string, minutes: number): StartTimer {
   return { stepId, startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000 };
 }
 
-export function onTimerChange(follow: () => void) {
-  window.addEventListener(timerEvent, follow);
-  return () => window.removeEventListener(timerEvent, follow);
+export function setSplitFrom(id: string | null) {
+  splitFrom = id;
+  changed();
+}
+
+export function setHolding(id: string | null) {
+  holding = id;
+  changed();
+}
+
+export const passedOver = () => read<PassedOver>(passedOverKey, {});
+
+export function storePassedOver(counts: PassedOver) {
+  write(passedOverKey, counts);
+  changed();
+}
+
+export function onNowMemoryChange(follow: () => void) {
+  const handle = () => {
+    version++;
+    follow();
+  };
+  window.addEventListener(changeEvent, handle);
+  return () => window.removeEventListener(changeEvent, handle);
+}
+
+function changed() {
+  window.dispatchEvent(new Event(changeEvent));
 }
 
 // Says when a started step's time is up, whichever screen is open and even with the window hidden.
@@ -54,7 +93,7 @@ export function useTimeUpNotice(titleOf: (stepId: string) => string | undefined)
       }, timer.endsAt - Date.now());
     };
     schedule();
-    const stop = onTimerChange(schedule);
+    const stop = onNowMemoryChange(schedule);
     return () => {
       stop();
       window.clearTimeout(end);

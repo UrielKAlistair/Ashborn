@@ -7,16 +7,17 @@ import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import { needsFirstStep, type Priorities } from "../../shared/priority";
 import type { GraphNode, ISODate, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
-import { MORE_MINUTES, onTimerChange, passedOver, START_MINUTES, storePassedOver, storedTimer, storeTimer, timerBox } from "./nowStore";
+import { chooseNow } from "../../shared/nowStep";
+import { MORE_MINUTES, passedOver, setHolding, setSplitFrom, START_MINUTES, storePassed, storePassedOver, storeTimer, timerBox, useNowMemory } from "./nowStore";
 import { SplitSteps } from "./SplitSteps";
 import { showOnGraph } from "./showOnGraph";
-import { useNowMirror } from "./nowMirror";
 
 // On how many days a step can be passed over before Now asks why
 const PASSED_OVER_ASKS = 3;
 
-// One step to do now: the most urgent ready one, with why it is here. Done ticks it; Start boxes
-// it into 15 minutes; Not now passes to the next for the day; Split turns it into smaller steps.
+// One step to do now: the most urgent ready one, with why it is here (which one, see chooseNow). Done
+// ticks it; Start boxes it into 15 minutes; Not now passes to the next for the day; Split turns it into
+// smaller steps, and holds Now on it while open.
 export function FocusCard({ steps, priorities, snapshot, model, act, date, onBoxed }: {
   steps: GraphNode[]; // the to-do, most urgent first
   priorities: Priorities;
@@ -26,25 +27,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   date: ISODate;
   onBoxed?: (boxed: boolean) => void; // hears whether a started step's timer is running, so the panel can fold the rest
 }) {
-  // Passed over today, kept through a reload (the phone reloads often), so a deferred step stays deferred
-  const [passed, setPassed] = useState(() => Object.entries(passedOver()).flatMap(([id, { last }]) => (last === date ? [id] : [])));
-  const [splitting, setSplitting] = useState(false);
-  // The step last split here: its new steps come up next, ahead of the to-do's order
-  const [splitFrom, setSplitFrom] = useState<string | null>(null);
-  const [counts, setCounts] = useState(passedOver);
-  const [timer, setTimer] = useState(storedTimer);
+  const memory = useNowMemory(date);
   const [clock, setClock] = useState(Date.now);
-  // Started or stopped here or from the tray's menu, the stored timer is the one shown
-  useEffect(
-    () =>
-      onTimerChange(() => {
-        setTimer(storedTimer());
-        setClock(Date.now());
-      }),
-    [],
-  );
+  const choice = chooseNow(steps, memory, clock, date);
+  const timer = memory.timer;
   const phone = usePhone();
-  const mirror = useNowMirror();
   // The keys act on the step shown now, whichever render set them up
   const keys = useRef<Record<string, () => void>>({});
 
@@ -62,7 +49,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const boxed = Boolean(timer && timer.endsAt > clock && steps.some(({ id }) => id === timer.stepId));
+  const boxed = Boolean(choice?.timed && choice.timed.endsAt > clock);
   useEffect(() => {
     onBoxed?.(boxed);
     return () => onBoxed?.(false);
@@ -70,6 +57,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
 
   // A running timer ticks each second until it ends (the app says when, see useTimeUpNotice)
   useEffect(() => {
+    setClock(Date.now());
     if (!timer || timer.endsAt <= Date.now()) return;
     const tick = window.setInterval(() => setClock(Date.now()), 1000);
     const end = window.setTimeout(() => {
@@ -80,18 +68,15 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
       window.clearInterval(tick);
       window.clearTimeout(end);
     };
-  }, [timer]);
+  }, [timer?.endsAt]);
 
-  if (steps.length === 0) {
+  if (!choice) {
     keys.current = { "/": requestCapture };
-    mirror.current = null;
     return null;
   }
 
-  // A started step holds Now; otherwise passing every step starts the round again
-  const timed = timer ? steps.find(({ id }) => id === timer.stepId) : undefined;
-  const waiting = steps.filter((step) => !passed.includes(step.id));
-  const step = timed ?? waiting.find(({ parentId }) => parentId === splitFrom) ?? waiting[0] ?? steps[0];
+  const { step, timed } = choice;
+  const splitting = memory.holding === step.id;
   const priority = priorities.effective.get(step.id);
   const origin = priorities.origin.get(step.id);
   const quest = questOf(model.byId, step);
@@ -116,14 +101,14 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
     .find((next) => next && !isDone(next));
 
   // Once a day at most, so looking through the steps in one sitting isn't counted as avoiding one
+  const counts = passedOver();
   const passedToday = counts[step.id]?.last === date;
   const setPassedDays = (days: number) => {
     const { [step.id]: _, ...rest } = counts;
     const next = days ? { ...rest, [step.id]: { days, last: date } } : rest;
     storePassedOver(next);
-    setCounts(next);
   };
-  const running = timed && timer ? timer : null;
+  const running = timed;
   const timeLeft = running ? Math.max(0, running.endsAt - clock) : null;
   const passedDays = counts[step.id]?.days ?? 0;
 
@@ -136,17 +121,18 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   const start = () => box(START_MINUTES);
   const more = () => box(MORE_MINUTES);
   const stop = () => storeTimer(null);
+  // Putting off the last of the round starts it again
   const notNow = () => {
     if (!passedToday) setPassedDays(passedDays + 1);
-    setPassed(waiting.length > 1 ? [...passed, step.id] : []);
+    storePassed(date, steps.length - choice.passed.length > 1 ? [...choice.passed, step.id] : []);
   };
+  const openSplit = () => setHolding(step.id);
   const firstStep = needsFirstStep(model, step);
-  mirror.current = { id: step.id, title: step.title, endsAt: running?.endsAt ?? null, canTick: !firstStep };
   keys.current = splitting
     ? { "/": requestCapture }
     : firstStep
-      ? { n: steps.length > 1 ? notNow : () => {}, s: () => setSplitting(true), "/": requestCapture }
-      : { d: done, t: timed ? stop : start, n: steps.length > 1 && !timed ? notNow : () => {}, s: () => setSplitting(true), "/": requestCapture };
+      ? { n: steps.length > 1 ? notNow : () => {}, s: openSplit, "/": requestCapture }
+      : { d: done, t: timed ? stop : start, n: steps.length > 1 && !timed ? notNow : () => {}, s: openSplit, "/": requestCapture };
 
   return (
     <section data-priority={priority} aria-label="Now" className="rounded-xl border border-[color-mix(in_oklab,var(--mark)_40%,transparent)] bg-card p-4">
@@ -217,11 +203,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
         <SplitSteps act={act} parentId={step.id} onAdded={() => {
             setPassedDays(0);
             setSplitFrom(step.id);
-          }} onDone={() => setSplitting(false)} graph={{ model, snapshot }} heading={firstStep ? "First steps" : undefined} className="mt-3 w-full" />
+          }} onDone={() => setHolding(null)} graph={{ model, snapshot }} heading={firstStep ? "First steps" : undefined} className="mt-3 w-full" />
       ) : (
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
           {firstStep ? (
-            <button type="button" onClick={() => setSplitting(true)} title="Add a first step (S)" className="rounded-lg bg-ember px-3.5 py-1.5 font-medium text-canvas hover:brightness-110">
+            <button type="button" onClick={openSplit} title="Add a first step (S)" className="rounded-lg bg-ember px-3.5 py-1.5 font-medium text-canvas hover:brightness-110">
               Add a first step
             </button>
           ) : (
@@ -258,7 +244,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
           {firstStep ? null : (
             <button
               type="button"
-              onClick={() => setSplitting(true)}
+              onClick={openSplit}
               title="Split it (S)"
               className={`rounded-lg px-2 py-1.5 hover:bg-ink/6 ${passedDays >= PASSED_OVER_ASKS ? "border border-amber-300/50 text-ink/85" : "text-muted hover:text-ink/85"}`}
             >

@@ -2,19 +2,17 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 
 export type MirroredNow = { id: string; title: string; endsAt: number | null; canTick: boolean } | null;
 
-// The step in Now, shown again elsewhere: in the desktop tray's menu, and marked on the graph. The
-// card sets the ref as it renders; after the render it is passed on, only when it changed.
-export function useNowMirror() {
-  const now = useRef<MirroredNow>(null);
+// The step in Now, shown again elsewhere: in the desktop tray's menu, and marked on the graph. The app
+// passes it on every render; it is sent on only when it changed.
+export function useNowMirror(now: MirroredNow) {
   const sent = useRef<string | undefined>(undefined);
+  const next = JSON.stringify(now);
   useEffect(() => {
-    const next = JSON.stringify(now.current);
     if (next === sent.current) return;
     sent.current = next;
-    window.ashborn?.setNow(now.current);
-    setNowStep(now.current?.id ?? null);
+    window.ashborn?.setNow(now);
+    setNowStep(now?.id ?? null);
   });
-  return now;
 }
 
 // Whether a node is the step in Now; a card re-renders only when its own answer changes

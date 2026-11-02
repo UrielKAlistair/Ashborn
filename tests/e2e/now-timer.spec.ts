@@ -82,7 +82,11 @@ test("start timer and passing over", async () => {
     await expect(now).toContainText("Draft the intro");
     await now.getByRole("button", { name: "Not now" }).click();
     expect((await storage("ashborn-passed-over"))[id.draft]).toEqual({ days: 1, last: today() });
-    await page.evaluate((stepId) => localStorage.setItem("ashborn-passed-over", JSON.stringify({ [stepId]: { days: 3, last: "2026-01-01" } })), id.draft);
+    // As if it had been put off on three earlier days, and not yet today
+    await page.evaluate((stepId) => {
+      localStorage.setItem("ashborn-passed-over", JSON.stringify({ [stepId]: { days: 3, last: "2026-01-01" } }));
+      localStorage.removeItem("ashborn-now-passed");
+    }, id.draft);
     await page.reload();
     await expect(now).toContainText("Draft the intro", { timeout: 15_000 });
     await expect(now).toContainText("Passed over on 3 days. Too big, or waiting on something?");
@@ -104,10 +108,11 @@ test("start timer and passing over", async () => {
         }
       } as unknown as typeof Notification;
     });
-    await page.getByRole("button", { name: "Kitchen", exact: true }).click();
+    await page.getByRole("button", { name: "Alarms", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Now" })).toHaveCount(0); // off Home for real
     await page.evaluate((stepId) => {
       localStorage.setItem("ashborn-now-timer", JSON.stringify({ stepId, startedAt: Date.now(), endsAt: Date.now() + 1500 }));
-      window.dispatchEvent(new Event("ashborn:now-timer"));
+      window.dispatchEvent(new Event("ashborn:now-memory"));
     }, id.tidy);
     await expect.poll(() => page.evaluate(() => (window as unknown as { said: string[] }).said)).toEqual(["Time's up: Tidy the notes"]);
   });

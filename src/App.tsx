@@ -18,7 +18,12 @@ import { AlarmsPage } from "./pages/AlarmsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
 import { onShowOnGraph } from "./pages/home/showOnGraph";
-import { START_MINUTES, storeTimer, timerBox, useTimeUpNotice } from "./pages/home/nowStore";
+import { START_MINUTES, storeTimer, timerBox, useNowMemory, useTimeUpNotice } from "./pages/home/nowStore";
+import { useNowMirror } from "./pages/home/nowMirror";
+import { buildGraphModel } from "./shared/graphModel";
+import { chooseNow } from "./shared/nowStep";
+import { derivePriorities, needsFirstStep, prioritisedSteps } from "./shared/priority";
+import { useToday } from "./lib/useToday";
 import { PhoneHome } from "./pages/phone/PhoneHome";
 import { SignInPage } from "./pages/SignInPage";
 import { DEFAULT_DAY_START_HOUR, setDayStartHour } from "./shared/dates";
@@ -296,6 +301,21 @@ function App() {
   });
   // Start or Stop chosen there sets the step's timer, whichever screen is open
   useEffect(() => window.ashborn?.onNowTimer((id, start) => storeTimer(start ? timerBox(id, START_MINUTES) : null)), []);
+
+  // The step in Now on any screen, for the tray's menu and the graph's tag; the card on Home draws the same choice
+  const nowDate = useToday(snapshot?.settings.dayStartHour ?? 0);
+  const nowMemory = useNowMemory(nowDate);
+  const toDo = useMemo(() => {
+    if (!snapshot) return null;
+    const model = buildGraphModel(snapshot);
+    return { model, steps: prioritisedSteps(model, snapshot, derivePriorities(model, snapshot, nowDate)).flatMap(({ steps }) => steps) };
+  }, [snapshot, nowDate]);
+  const nowChoice = toDo && chooseNow(toDo.steps, nowMemory, Date.now(), nowDate);
+  useNowMirror(
+    toDo && nowChoice
+      ? { id: nowChoice.step.id, title: nowChoice.step.title, endsAt: nowChoice.timed?.endsAt ?? null, canTick: !needsFirstStep(toDo.model, nowChoice.step) }
+      : null,
+  );
 
   const renderPage = () => {
     if (currentPath === "/atlas" || currentPath.startsWith("/atlas/")) {

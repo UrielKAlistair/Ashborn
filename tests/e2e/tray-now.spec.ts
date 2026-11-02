@@ -15,7 +15,7 @@ test("the tray's Now", async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
   for (const table of ["graph_nodes", "deadlines"]) await db.from(table).delete().not("id", "is", null);
-  const id = { quest: crypto.randomUUID(), draft: crypto.randomUUID(), email: crypto.randomUUID() };
+  const id = { quest: crypto.randomUUID(), draft: crypto.randomUUID(), email: crypto.randomUUID(), room: crypto.randomUUID() };
   const insert = async (rows: Array<Record<string, unknown>>) => {
     const { error: insertError } = await db.from("graph_nodes").insert(rows);
     if (insertError) throw insertError;
@@ -24,6 +24,7 @@ test("the tray's Now", async () => {
   await insert([
     { id: id.draft, title: "Draft the intro", parent_id: id.quest },
     { id: id.email, title: "Email the professor", parent_id: id.quest },
+    { id: id.room, title: "Book the room", parent_id: id.quest },
   ]);
 
   const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
@@ -52,8 +53,11 @@ test("the tray's Now", async () => {
     await send(false);
     await expect(now.getByRole("timer")).toHaveCount(0);
     await expect.poll(async () => ((await trayNow()) as { endsAt: number | null }).endsAt).toBeNull();
-    await page.getByRole("button", { name: "Kitchen", exact: true }).click();
+    await page.getByRole("button", { name: "Alarms", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Now" })).toHaveCount(0); // off Home for real
     await send(true);
+    // The tray hears it from there too
+    await expect.poll(async () => ((await trayNow()) as { endsAt: number | null }).endsAt).toBeGreaterThan(Date.now());
     await page.getByRole("button", { name: "Home", exact: true }).click();
     await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/1[45]:\d\d/);
   });
@@ -71,6 +75,11 @@ test("the tray's Now", async () => {
     const node = page.locator(`.react-flow__node[data-id="${id.email}"]`);
     await expect(node).toHaveClass(/node-flash/);
     await expect(node).toBeInViewport();
+    // Ticked on the graph tab, with no Now card mounted, the tag moves to the next step
+    await expect(node.getByText("Now", { exact: true })).toBeVisible();
+    await node.getByTitle("Mark done").click();
+    await expect(page.locator(`.react-flow__node[data-id="${id.room}"]`).getByText("Now", { exact: true })).toBeVisible();
+    await expect(node.getByText("Now", { exact: true })).toHaveCount(0);
   });
 
   await app.close();

@@ -207,7 +207,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           </Section>
 
           {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} openAtFirst={todoCount === 0} /> : null}
-          <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} />
+          <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} openAtFirst={todoCount === 0 && unprioritised.length === 0} />
         </>
       )}
 

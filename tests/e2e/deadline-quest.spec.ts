@@ -15,7 +15,7 @@ test("make a deadline a quest", async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
   for (const table of ["graph_nodes", "deadlines"]) await db.from(table).delete().not("id", "is", null);
-  const { error: insertError } = await db.from("deadlines").insert([{ title: "Judge the science fest", due_date: addDays(today(), 2), node_id: null }]);
+  const { error: insertError } = await db.from("deadlines").insert([{ title: "Judge the science fest", due_date: addDays(today(), 1), node_id: null }]);
   if (insertError) throw insertError;
   const quest = crypto.randomUUID();
   const { error: nodeError } = await db.from("graph_nodes").insert([{ id: quest, title: "Reading", parent_id: null }]);
@@ -50,13 +50,14 @@ test("make a deadline a quest", async () => {
   await expect(page.getByRole("group", { name: "Priority for Read chapter 2" })).toHaveCount(0);
   await expect.poll(async () => (await db.from("graph_nodes").select("priority").eq("id", quest).single()).data?.priority).toBe(3);
 
-  // Due in 2 days and linked to nothing: it comes up top, with the same ways to link it
+  // Due tomorrow and linked to nothing: it comes up top, with the same ways to link it. (The test's day
+  // starts at midnight and the app's at the account's hour, so between them "tomorrow" may read as 2d.)
   const dueSoon = page.getByRole("region", { name: "Due soon, linked to nothing" });
-  await expect(dueSoon).toContainText("Judge the science fest due in 2d, linked to nothing");
+  await expect(dueSoon).toContainText(/Judge the science fest due (tomorrow|in 2d), linked to nothing/);
   await deadlines.getByRole("button", { name: "Make it a quest" }).click();
   await expect(dueSoon).toHaveCount(0);
   await expect(now).toContainText("Judge the science fest");
-  await expect(now).toContainText("Judge the science fest, due in 2d");
+  await expect(now).toContainText(/Judge the science fest, due in [12]d/);
   await expect(now.getByRole("button", { name: "Add a first step" })).toBeVisible();
   await expect(deadlines.getByRole("button", { name: "Make it a quest" })).toHaveCount(0);
   await expect

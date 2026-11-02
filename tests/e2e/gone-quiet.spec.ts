@@ -130,6 +130,18 @@ test("gone quiet", async () => {
     expect(shelve.height).toBeGreaterThanOrEqual(32);
   });
 
+  await test.step("with nothing else to do, it opens by itself", async () => {
+    // Only quiet quests left: the fresh one and the two brought back above go
+    for (const id of [ids.fresh, ids.levelled, ids.extended]) {
+      const { error: stepsError } = await db.from("graph_nodes").delete().eq("parent_id", id);
+      if (stepsError) throw stepsError;
+      const { error: questError } = await db.from("graph_nodes").delete().eq("id", id);
+      if (questError) throw questError;
+    }
+    await page.reload();
+    await expect(chips("Moved around")).toBeVisible({ timeout: 20_000 });
+  });
+
   expect(pageErrors).toEqual([]);
   await app.close();
   rmSync(profile, { recursive: true, force: true });

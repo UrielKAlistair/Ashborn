@@ -10,8 +10,9 @@ import { SplitSteps } from "./SplitSteps";
 
 // A folded list of quests nothing has touched for a while, each with what brings it back or puts it
 // away. Any of them counts as touching it, so it leaves the list.
-export function GoneQuiet({ quiet, snapshot, model, act }: { quiet: QuietQuest[]; snapshot: Snapshot; model: GraphModel; act: Act }) {
-  const [open, setOpen] = useState(false);
+// `openAtFirst`: open from the start, when it is all Today has to offer
+export function GoneQuiet({ quiet, snapshot, model, act, openAtFirst }: { quiet: QuietQuest[]; snapshot: Snapshot; model: GraphModel; act: Act; openAtFirst: boolean }) {
+  const [open, setOpen] = useState(openAtFirst);
   const oneTap = useOneTap();
   if (quiet.length === 0) return null;
   return (
