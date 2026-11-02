@@ -43,7 +43,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   // The keys act on the step shown now, whichever render set them up
   const keys = useRef<Record<string, () => void>>({});
 
-  // On the desktop: D done, N not now, S split, / the capture field; never while typing in a field
+  // On the desktop: D done, T start or stop, N not now, S split, / the capture field; never while typing in a field
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
@@ -63,13 +63,14 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
     return () => onBoxed?.(false);
   }, [boxed, onBoxed]);
 
-  // A running timer ticks each second, and says so when it ends, even with the window hidden
+  // A running timer ticks each second until it ends, and says so then, even with the window hidden.
+  // One that ended before this card mounted has had its notice.
   useEffect(() => {
-    if (!timer) return;
+    if (!timer || timer.endsAt <= Date.now()) return;
     const tick = window.setInterval(() => setClock(Date.now()), 1000);
-    // A timer that ended before this card mounted has had its notice
-    if (timer.endsAt <= Date.now()) return () => window.clearInterval(tick);
     const end = window.setTimeout(() => {
+      window.clearInterval(tick);
+      setClock(Date.now());
       const step = latestSteps.current.find(({ id }) => id === timer.stepId);
       if (step && "Notification" in window && Notification.permission === "granted") new Notification(`Time's up: ${step.title}`, { body: "Done, or keep going?" });
     }, timer.endsAt - Date.now());
