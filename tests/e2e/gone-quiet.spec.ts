@@ -91,8 +91,9 @@ test("gone quiet", async () => {
     await expect(page.getByRole("region", { name: "Now" })).toContainText("Step of given");
     await page.getByRole("status").getByRole("button", { name: "Undo" }).click();
     await expect(page.getByRole("region", { name: "Now" })).toHaveCount(0);
-    // Undoing the priority doesn't undo having touched it: it's been looked at, so it stays off
-    await expect(section.getByText("Given a priority")).toHaveCount(0);
+    // A priority isn't work, so with it undone the quest is as quiet as before
+    await expect(section.getByText("Given a priority")).toBeVisible();
+    await expect(header).toContainText("4");
   });
 
   await test.step("a next step counts, and goes inside", async () => {
@@ -111,6 +112,11 @@ test("gone quiet", async () => {
     await expect.poll(async () => (await db.from("graph_nodes").select("shelved").eq("id", ids.shelved).single()).data?.shelved).toBe(true);
     await page.getByRole("status").getByRole("button", { name: "Undo" }).click();
     await expect.poll(async () => (await db.from("graph_nodes").select("shelved").eq("id", ids.shelved).single()).data?.shelved).toBe(false);
+    await expect(section.getByText("Shelved it")).toBeVisible(); // back, still quiet
+    await page.reload(); // and as the server counts it, too
+    await header.click();
+    await expect(section.getByText("Shelved it")).toBeVisible({ timeout: 20_000 });
+    await expect(section.getByText("Given a priority")).toBeVisible();
   });
 
   await test.step("on the phone, within the width", async () => {

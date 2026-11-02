@@ -480,9 +480,10 @@ export function toNode(row: NodeRow): GraphNode {
   };
 }
 
-// The changes that count as working on a node: moving it on the canvas or recolouring it doesn't.
-// Deleting a step or changing a link leaves no date behind, so neither can count.
-const ACTIVITY_FIELDS = ["title", "parent_id", "completed_at", "priority", "shelved", "active"];
+// The changes that count as working on a node: making, ticking, renaming or moving it (and a level-up,
+// read separately). Moving it on the canvas, recolouring, a priority, shelving or hiding it doesn't,
+// so an undone slip leaves a quiet quest quiet. Deleting a step or changing a link leaves no date.
+const ACTIVITY_FIELDS = ["title", "parent_id", "completed_at"];
 
 function lastActive(row: NodeRow) {
   const moments = [row.created_at, row.completed_at, row.last_logged_at, ...ACTIVITY_FIELDS.map((field) => row.changed_at?.[field])];

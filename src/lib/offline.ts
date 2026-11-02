@@ -67,7 +67,8 @@ const preview: Record<Mutation, Preview> = {
       ...definedOnly(fields),
       completedAt: ticked ? (done ? at : null) : node.completedAt,
       ownXp: node.ownXp + step * PROGRESS_UNIT,
-      lastActive: at,
+      // As the server counts it: a tick or a new title is work, a priority or shelving isn't
+      lastActive: ticked || fields.title !== undefined ? at : node.lastActive,
     };
     return { nodes: [updated], progressToday: step ? countedToday(snapshot, step) : undefined };
   },
