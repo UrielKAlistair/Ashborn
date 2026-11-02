@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { isDone, type GraphModel } from "../../shared/graphModel";
 import { INBOX_TITLE } from "../../shared/inbox";
 import { parseStepList } from "../../shared/splitList";
-import type { GraphNode, Priority, Snapshot } from "../../shared/types";
+import { priorities, type GraphNode, type Priority, type Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { SplitSteps } from "./SplitSteps";
 
@@ -110,7 +110,6 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
   );
 }
 
-const PRIORITIES: Priority[] = [1, 2, 3, 4];
 
 // The Inbox one item at a time, oldest first. Skipping every item starts the round again. The item
 // on show stays until it is dealt with, whatever is captured or arrives meanwhile.
@@ -144,7 +143,7 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
   // On the desktop: M move, Q its own quest, S split, X delete, N skip, 1 to 4 priority, Escape closes; never while
   // typing in a field. Heard before Focus's keys and kept from them while this card is open.
   const keys = useRef<Record<string, () => void>>({});
-  keys.current = splitting ? { "/": requestCapture } : { m: moveTo, q: ownQuest, s: () => setSplitting(true), x: remove, n: onSkip, "/": requestCapture, ...Object.fromEntries(PRIORITIES.map((priority) => [`${priority}`, () => prioritise(priority)])) };
+  keys.current = splitting ? { "/": requestCapture } : { m: moveTo, q: ownQuest, s: () => setSplitting(true), x: remove, n: onSkip, "/": requestCapture, ...Object.fromEntries(priorities.map((priority) => [`${priority}`, () => prioritise(priority)])) };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -190,7 +189,7 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
           <MoveToPicker step={item} act={act} selectRef={picker} offerOwnQuest={false} className="mt-3 min-h-9 w-full rounded-lg border border-ink/10 bg-canvas/60 px-2.5 py-1.5 text-[13px] text-ink/85" />
           <div role="group" aria-label={`Priority for ${item.title}`} className="mt-2 flex items-center gap-1.5">
             <span className="mr-1 text-[12px] text-muted">When, if you know</span>
-            {PRIORITIES.map((priority) => (
+            {priorities.map((priority) => (
               <button
                 key={priority}
                 type="button"

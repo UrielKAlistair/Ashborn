@@ -3,11 +3,10 @@ import { paletteOf } from "../../lib/theme";
 import type { QuietQuest } from "../../shared/goneQuiet";
 import { useOneTap } from "./oneTap";
 import type { GraphModel } from "../../shared/graphModel";
-import type { Priority, Snapshot } from "../../shared/types";
+import { priorities, type Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { SplitSteps } from "./SplitSteps";
 
-const PRIORITIES: Priority[] = [1, 2, 3, 4];
 
 // A folded list of quests nothing has touched for a while, each with what brings it back or puts it
 // away. Any of them counts as touching it, so it leaves the list.
@@ -57,7 +56,7 @@ function QuietRow({ entry: { quest, days, openSteps }, snapshot, model, act, one
       ) : (
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12.5px]">
           <div role="group" aria-label={`Priority for ${quest.title}`} className="flex gap-1">
-            {PRIORITIES.map((priority) => (
+            {priorities.map((priority) => (
               <button
                 key={priority}
                 type="button"

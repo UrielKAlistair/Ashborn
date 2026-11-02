@@ -4,7 +4,7 @@ import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, needsFirstStep, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
-import type { AlarmKind, Deadline, GraphNode, Snapshot, Weekday } from "../../shared/types";
+import { priorities, type AlarmKind, type Deadline, type GraphNode, type Priority, type Snapshot, type Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
 import { Capture, NodePicker } from "./Capture";
@@ -274,37 +274,75 @@ function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[];
       </button>
       {open ? (
         <div className="mt-2 space-y-0.5">
-          <p className="px-1 pb-1 text-[11px] text-muted">P1 most urgent, P4 least</p>
-          {steps.map((step) => {
-            const quest = questOf(model.byId, step);
-            return (
-              <div key={step.id} className={`group ${rowClass}`}>
+          <p className="px-1 pb-1 text-[11px] text-muted">P1 most urgent, P4 least. On a quest, it covers all its steps.</p>
+          {byQuest(steps, model).map(({ quest, steps: inQuest }) =>
+            inQuest.length === 1 ? (
+              <div key={inQuest[0].id} className={rowClass}>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] leading-snug text-ink/80">{step.title}</p>
+                  <p className="text-[13px] leading-snug text-ink/80">{inQuest[0].title}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
-                    {needsFirstStep(model, step) ? "A quest with no steps yet" : quest.title}
+                    {needsFirstStep(model, inQuest[0]) ? "A quest with no steps yet" : quest.title}
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-1" role="group" aria-label={`Priority for ${step.title}`}>
-                  {([1, 2, 3, 4] as const).map((priority) => (
-                    <button
-                      key={priority}
-                      type="button"
-                      data-priority={priority}
-                      onClick={oneTap(() => void act("updateNode", step.id, { priority }))}
-                      title={`Priority ${priority}`}
-                      className="rounded-md border border-[color-mix(in_oklab,var(--mark)_35%,transparent)] px-1.5 py-0.5 font-mono pointer-coarse:min-h-8 pointer-coarse:min-w-8 text-[10.5px] text-[var(--mark)] hover:bg-[color-mix(in_oklab,var(--mark)_14%,transparent)]"
-                    >
-                      P{priority}
-                    </button>
-                  ))}
-                </div>
+                <PriorityChips label={`Priority for ${inQuest[0].title}`} onPick={oneTap((priority) => void act("updateNode", inQuest[0].id, { priority }))} />
               </div>
-            );
-          })}
+            ) : (
+              // Several ready in one quest: one priority on the quest covers them all
+              <div key={quest.id}>
+                <div className={rowClass}>
+                  <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] leading-snug font-medium text-ink/85">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+                    <span className="truncate">{quest.title}</span>
+                    <span className="shrink-0 text-[11.5px] font-normal text-muted">{inQuest.length} ready</span>
+                  </p>
+                  <PriorityChips label={`Priority for all of ${quest.title}`} onPick={oneTap((priority) => void act("updateNode", quest.id, { priority }))} />
+                </div>
+                {inQuest.map((step) => (
+                  <div key={step.id} className={`${rowClass} py-1.5 pl-6`}>
+                    <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink/75">{step.title}</p>
+                    <PriorityChips label={`Priority for ${step.title}`} onPick={oneTap((priority) => void act("updateNode", step.id, { priority }))} quiet />
+                  </div>
+                ))}
+              </div>
+            ),
+          )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// The ready steps in their quests, in the order the quests first come up
+function byQuest(steps: GraphNode[], model: GraphModel) {
+  const groups = new Map<string, { quest: GraphNode; steps: GraphNode[] }>();
+  for (const step of steps) {
+    const quest = questOf(model.byId, step);
+    const group = groups.get(quest.id) ?? { quest, steps: [] };
+    group.steps.push(step);
+    groups.set(quest.id, group);
+  }
+  return [...groups.values()];
+}
+
+// `quiet`: drawn in plain ink until pointed at, for a step under a quest's own chips
+function PriorityChips({ label, onPick, quiet = false }: { label: string; onPick: (priority: Priority) => void; quiet?: boolean }) {
+  return (
+    <div className="flex shrink-0 gap-1" role="group" aria-label={label}>
+      {priorities.map((priority) => (
+        <button
+          key={priority}
+          type="button"
+          data-priority={priority}
+          onClick={() => onPick(priority)}
+          title={`Priority ${priority}`}
+          className={`rounded-md border px-1.5 py-0.5 font-mono pointer-coarse:min-h-8 pointer-coarse:min-w-8 text-[10.5px] hover:bg-[color-mix(in_oklab,var(--mark)_14%,transparent)] ${
+            quiet ? "border-ink/10 text-muted hover:border-[color-mix(in_oklab,var(--mark)_35%,transparent)] hover:text-[var(--mark)]" : "border-[color-mix(in_oklab,var(--mark)_35%,transparent)] text-[var(--mark)]"
+          }`}
+        >
+          P{priority}
+        </button>
+      ))}
     </div>
   );
 }

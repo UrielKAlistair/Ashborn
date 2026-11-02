@@ -20,7 +20,10 @@ test("make a deadline a quest", async () => {
   const quest = crypto.randomUUID();
   const { error: nodeError } = await db.from("graph_nodes").insert([{ id: quest, title: "Reading", parent_id: null }]);
   if (nodeError) throw nodeError;
-  const { error: stepError } = await db.from("graph_nodes").insert([{ id: crypto.randomUUID(), title: "Read chapter 1", parent_id: quest }]);
+  const { error: stepError } = await db.from("graph_nodes").insert([
+    { id: crypto.randomUUID(), title: "Read chapter 1", parent_id: quest },
+    { id: crypto.randomUUID(), title: "Read chapter 2", parent_id: quest },
+  ]);
   if (stepError) throw stepError;
 
   const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
@@ -37,8 +40,15 @@ test("make a deadline a quest", async () => {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(deadlines).toContainText("Judge the science fest", { timeout: 15_000 });
   await expect(now).toHaveCount(0);
+
   // With nothing prioritised, Ready is open from the start: giving a priority is the way to a Now
   await expect(page.getByRole("group", { name: "Priority for Read chapter 1" })).toBeVisible();
+  // Two ready in one quest: one priority on the quest covers both
+  await expect(page.getByText("2 ready")).toBeVisible();
+  await page.getByRole("group", { name: "Priority for all of Reading" }).getByRole("button", { name: "P3" }).click();
+  await expect(now).toContainText("Part of Reading, which has this priority");
+  await expect(page.getByRole("group", { name: "Priority for Read chapter 2" })).toHaveCount(0);
+  await expect.poll(async () => (await db.from("graph_nodes").select("priority").eq("id", quest).single()).data?.priority).toBe(3);
 
   await deadlines.getByRole("button", { name: "Make it a quest" }).click();
   await expect(now).toContainText("Judge the science fest");

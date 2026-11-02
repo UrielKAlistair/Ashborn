@@ -6,9 +6,9 @@ const SETTLE_MS = 400;
 
 export function useOneTap() {
   const last = useRef(0);
-  return (action: () => void) => () => {
+  return <Args extends unknown[]>(action: (...args: Args) => void) => (...args: Args) => {
     if (Date.now() - last.current < SETTLE_MS) return;
     last.current = Date.now();
-    action();
+    action(...args);
   };
 }

@@ -31,6 +31,7 @@ export type GraphNode = {
 
 export type Point = { x: number; y: number };
 export type Priority = 1 | 2 | 3 | 4; // 1 is the most urgent
+export const priorities: Priority[] = [1, 2, 3, 4];
 
 // `from` is a prerequisite of `to`; both have the same parent
 export type GraphEdge = {
