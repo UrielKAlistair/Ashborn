@@ -7,14 +7,12 @@ import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import { needsFirstStep, type Priorities } from "../../shared/priority";
 import type { GraphNode, ISODate, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
-import { passedOver, storePassedOver, storedTimer, storeTimer, type StartTimer } from "./nowStore";
+import { MORE_MINUTES, onTimerChange, passedOver, START_MINUTES, storePassedOver, storedTimer, storeTimer, timerBox } from "./nowStore";
 import { SplitSteps } from "./SplitSteps";
 import { showOnGraph } from "./showOnGraph";
 import { useNowMirror } from "./nowMirror";
 
-// A started step's time box, and on how many days a step can be passed over before Now asks why
-const START_MINUTES = 15;
-const MORE_MINUTES = 5;
+// On how many days a step can be passed over before Now asks why
 const PASSED_OVER_ASKS = 3;
 
 // One step to do now: the most urgent ready one, with why it is here. Done ticks it; Start boxes
@@ -36,6 +34,15 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   const [counts, setCounts] = useState(passedOver);
   const [timer, setTimer] = useState(storedTimer);
   const [clock, setClock] = useState(Date.now);
+  // Started or stopped here or from the tray's menu, the stored timer is the one shown
+  useEffect(
+    () =>
+      onTimerChange(() => {
+        setTimer(storedTimer());
+        setClock(Date.now());
+      }),
+    [],
+  );
   const phone = usePhone();
   const mirror = useNowMirror();
   // The notice at the end reads the steps as they are then
@@ -114,11 +121,6 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
     .map(({ to }) => model.byId.get(to))
     .find((next) => next && !isDone(next));
 
-  const setTimed = (next: StartTimer | null) => {
-    storeTimer(next);
-    setTimer(next);
-    setClock(Date.now());
-  };
   // Once a day at most, so looking through the steps in one sitting isn't counted as avoiding one
   const passedToday = counts[step.id]?.last === date;
   const setPassedDays = (days: number) => {
@@ -132,14 +134,14 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   const passedDays = counts[step.id]?.days ?? 0;
 
   const done = () => {
-    if (timed) setTimed(null);
+    if (timed) storeTimer(null);
     if (passedDays) setPassedDays(0);
     void act("updateNode", step.id, { done: true });
   };
-  const box = (minutes: number) => setTimed({ stepId: step.id, startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000 });
+  const box = (minutes: number) => storeTimer(timerBox(step.id, minutes));
   const start = () => box(START_MINUTES);
   const more = () => box(MORE_MINUTES);
-  const stop = () => setTimed(null);
+  const stop = () => storeTimer(null);
   const notNow = () => {
     if (!passedToday) setPassedDays(passedDays + 1);
     setPassed(waiting.length > 1 ? [...passed, step.id] : []);

@@ -11,6 +11,7 @@ declare global {
       onCapture: (listener: () => void) => () => void; // the desktop-wide capture shortcut; returns the unsubscribe
       setNow: (step: import("./pages/home/nowMirror").MirroredNow) => void; // mirrors Now in the tray
       onNowDone: (listener: (id: string) => void) => () => void; // Done chosen in the tray; returns the unsubscribe
+      onNowTimer: (listener: (id: string, start: boolean) => void) => () => void; // Start or Stop chosen in the tray; returns the unsubscribe
       newestBackup: () => Promise<number | null>; // when the newest backup was written (ms), or null
       writeBackup: (json: string) => Promise<void>;
     };

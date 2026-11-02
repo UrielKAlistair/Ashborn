@@ -96,7 +96,14 @@ function updateTrayMenu() {
     ? [
         { label: `Now: ${title}`, click: showMainWindow },
         ...(now.endsAt ? [{ label: `Timer ends at ${new Date(now.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`, enabled: false }] : []),
-        ...(now.canTick ? [{ label: "Done", click: () => mainWindow?.webContents.send("now:done", now.id) }] : []),
+        ...(now.canTick
+          ? [
+              { label: "Done", click: () => mainWindow?.webContents.send("now:done", now.id) },
+              now.endsAt
+                ? { label: "Stop the timer", click: () => mainWindow?.webContents.send("now:timer", now.id, false) }
+                : { label: "Start the timer", click: () => mainWindow?.webContents.send("now:timer", now.id, true) },
+            ]
+          : []),
         { type: "separator" },
       ]
     : [];

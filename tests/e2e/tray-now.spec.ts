@@ -47,6 +47,17 @@ test("the tray's Now", async () => {
     await expect.poll(async () => ((await trayNow()) as { endsAt: number | null }).endsAt).toBeGreaterThan(Date.now());
   });
 
+  await test.step("the tray's Stop and Start set the timer, from another screen too", async () => {
+    const send = (start: boolean) => app.evaluate(({ BrowserWindow }, [stepId, on]) => BrowserWindow.getAllWindows()[0].webContents.send("now:timer", stepId, on), [id.draft, start] as const);
+    await send(false);
+    await expect(now.getByRole("timer")).toHaveCount(0);
+    await expect.poll(async () => ((await trayNow()) as { endsAt: number | null }).endsAt).toBeNull();
+    await page.getByRole("button", { name: "Kitchen", exact: true }).click();
+    await send(true);
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/1[45]:\d\d/);
+  });
+
   await test.step("Done in the tray ticks it, and the tray moves on", async () => {
     await app.evaluate(({ BrowserWindow }, stepId) => BrowserWindow.getAllWindows()[0].webContents.send("now:done", stepId), id.draft);
     await expect(now).toContainText("Email the professor");
