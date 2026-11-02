@@ -19,13 +19,14 @@ const PASSED_OVER_ASKS = 3;
 
 // One step to do now: the most urgent ready one, with why it is here. Done ticks it; Start boxes
 // it into 15 minutes; Not now passes to the next for this sitting; Split turns it into smaller steps.
-export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
+export function FocusCard({ steps, priorities, snapshot, model, act, date, onBoxed }: {
   steps: GraphNode[]; // the to-do, most urgent first
   priorities: Priorities;
   snapshot: Snapshot;
   model: GraphModel;
   act: Act;
   date: ISODate;
+  onBoxed?: (boxed: boolean) => void; // hears whether a started step's timer is running, so the panel can fold the rest
 }) {
   const [passed, setPassed] = useState<string[]>([]);
   const [splitting, setSplitting] = useState(false);
@@ -55,6 +56,12 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date }: {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const boxed = Boolean(timer && timer.endsAt > clock && steps.some(({ id }) => id === timer.stepId));
+  useEffect(() => {
+    onBoxed?.(boxed);
+    return () => onBoxed?.(false);
+  }, [boxed, onBoxed]);
 
   // A running timer ticks each second, and says so when it ends, even with the window hidden
   useEffect(() => {

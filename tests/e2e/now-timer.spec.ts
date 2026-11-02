@@ -44,6 +44,8 @@ test("start timer and passing over", async () => {
     await now.getByRole("button", { name: "Start", exact: true }).click();
     await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/1[45]:\d\d/);
     await expect(now.getByRole("button", { name: "Not now" })).toHaveCount(0);
+    await expect(page.getByText("The rest of the list waits until the timer ends.")).toBeVisible();
+    await expect(page.getByRole("group", { name: "Up next" })).toHaveCount(0);
     await page.keyboard.press("n");
     await expect(now).toContainText("Draft the intro");
     await page.reload();
@@ -52,6 +54,7 @@ test("start timer and passing over", async () => {
     await now.getByRole("button", { name: "Stop" }).click();
     await expect(now.getByRole("timer")).toHaveCount(0);
     expect(await storage("ashborn-now-timer")).toBeNull();
+    await expect(page.getByRole("group", { name: "Up next" })).toBeVisible();
   });
 
   await test.step("when the time is up: Done, or keep going", async () => {
@@ -59,6 +62,7 @@ test("start timer and passing over", async () => {
     await page.reload();
     await expect(now).toContainText("Email the professor", { timeout: 15_000 });
     await expect(now).toContainText("Time's up. Done, or keep going?");
+    await expect(page.getByRole("group", { name: "Up next" })).toBeVisible(); // the box is over
     await now.getByRole("button", { name: "5 more minutes" }).click();
     await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/[45]:\d\d/);
     await now.getByRole("button", { name: "Done" }).click();

@@ -33,6 +33,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const [dayStartOpen, setDayStartOpen] = useState(false);
   // While the Inbox is being sorted, Focus steps aside: one card at a time
   const [sorting, setSorting] = useState(false);
+  // While a started step's timer runs, the lists wait, so the box holds one thing
+  const [boxed, setBoxed] = useState(false);
   // With one step in Focus, the rest of the to-do waits behind a line, so the screen holds one thing
   const [showAll, setShowAllState] = useState(() => loadShowAll());
   const setShowAll = (show: boolean) => {
@@ -131,58 +133,64 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       </div>
 
       <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
-      {sorting ? null : <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} />}
+      {sorting ? null : <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} onBoxed={setBoxed} />}
 
-      <Section title="Up next">
-        {todo.length === 0 ? (
-          <Empty>
-            {model.children.get(null)?.length
-              ? "Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here."
-              : "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."}
-          </Empty>
-        ) : null}
-        {todoCount > 0 && !showAll ? (
-          <button type="button" onClick={() => setShowAll(true)} className="px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
-            › {todoCount === 1 ? "Show the list" : `Show all ${todoCount} ready`}
-          </button>
-        ) : null}
-        {showAll ? (
-          <>
-            {todo.map(({ priority, steps }) => (
-              <div key={priority} data-priority={priority} className="space-y-0.5">
-                <p className="flex items-center gap-2 px-1 pb-1 font-mono text-[11px] font-semibold text-[var(--mark)]">
-                  P{priority}
-                  <span className="h-px flex-1 bg-[color-mix(in_oklab,var(--mark)_25%,transparent)]" />
-                </p>
-                {steps.map((step) => {
-                  if (needsFirstStep(model, step)) return <FirstStepRow key={step.id} quest={step} snapshot={snapshot} model={model} act={act} />;
-                  const quest = questOf(model.byId, step);
-                  const parent = model.byId.get(step.parentId!);
-                  return (
-                    <div key={step.id} className={rowClass}>
-                      <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] leading-snug text-ink/90">{step.title}</p>
-                        <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
-                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
-                          {quest.title}
-                          {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-            <button type="button" onClick={() => setShowAll(false)} className="px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
-              ‹ Show only Now
-            </button>
-          </>
-        ) : null}
-      </Section>
+      {boxed ? (
+        <p className="-mt-2 px-1 text-[12px] text-muted">The rest of the list waits until the timer ends.</p>
+      ) : (
+        <>
+          <Section title="Up next">
+            {todo.length === 0 ? (
+              <Empty>
+                {model.children.get(null)?.length
+                  ? "Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here."
+                  : "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."}
+              </Empty>
+            ) : null}
+            {todoCount > 0 && !showAll ? (
+              <button type="button" onClick={() => setShowAll(true)} className="px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
+                › {todoCount === 1 ? "Show the list" : `Show all ${todoCount} ready`}
+              </button>
+            ) : null}
+            {showAll ? (
+              <>
+                {todo.map(({ priority, steps }) => (
+                  <div key={priority} data-priority={priority} className="space-y-0.5">
+                    <p className="flex items-center gap-2 px-1 pb-1 font-mono text-[11px] font-semibold text-[var(--mark)]">
+                      P{priority}
+                      <span className="h-px flex-1 bg-[color-mix(in_oklab,var(--mark)_25%,transparent)]" />
+                    </p>
+                    {steps.map((step) => {
+                      if (needsFirstStep(model, step)) return <FirstStepRow key={step.id} quest={step} snapshot={snapshot} model={model} act={act} />;
+                      const quest = questOf(model.byId, step);
+                      const parent = model.byId.get(step.parentId!);
+                      return (
+                        <div key={step.id} className={rowClass}>
+                          <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] leading-snug text-ink/90">{step.title}</p>
+                            <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+                              {quest.title}
+                              {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+                <button type="button" onClick={() => setShowAll(false)} className="px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
+                  ‹ Show only Now
+                </button>
+              </>
+            ) : null}
+          </Section>
 
-      {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} /> : null}
-      <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} />
+          {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} /> : null}
+          <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} />
+        </>
+      )}
 
       <Section title="Routines" action={<RoutineForm act={act} />}>
         {routines.length === 0 ? (
