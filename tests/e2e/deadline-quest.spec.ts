@@ -43,6 +43,7 @@ test("make a deadline a quest", async () => {
 
   // With nothing prioritised, Ready is open from the start: giving a priority is the way to a Now
   await expect(page.getByRole("group", { name: "Priority for Read chapter 1" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Up next" })).toContainText("Give a quest a priority below");
   // Two ready in one quest: one priority on the quest covers both
   await expect(page.getByText("2 ready")).toBeVisible();
   await page.getByRole("group", { name: "Priority for all of Reading" }).getByRole("button", { name: "P3" }).click();

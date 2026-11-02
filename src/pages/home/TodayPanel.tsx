@@ -161,9 +161,11 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           <Section title="Up next">
             {todo.length === 0 ? (
               <Empty>
-                {model.children.get(null)?.length
-                  ? "Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here."
-                  : "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."}
+                {!model.children.get(null)?.length
+                  ? "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."
+                  : unprioritised.length > 0
+                    ? "Nothing with a priority is ready. Give a quest a priority below, and its next step shows here."
+                    : "Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here."}
               </Empty>
             ) : null}
             {todoCount > 0 && !showAll ? (
