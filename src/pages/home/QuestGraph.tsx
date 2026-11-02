@@ -1218,7 +1218,7 @@ function FinishedQuests({ title, quests, buttons }: { title: string; quests: Gra
   );
 }
 
-// One swatch per colour, plus white for none
+// One swatch per colour, plus the ink for none
 function ColorPicker({ node, act }: { node: GraphNode; act: Act }) {
   const choices: (QuestColor | null)[] = [null, ...questColors];
   return (
@@ -1229,8 +1229,8 @@ function ColorPicker({ node, act }: { node: GraphNode; act: Act }) {
           type="button"
           role="radio"
           aria-checked={node.color === color}
-          aria-label={color ?? "white"}
-          title={color ?? "white"}
+          aria-label={color ?? "No colour"}
+          title={color ?? "No colour"}
           onClick={() => void act("updateNode", node.id, { color })}
           className={`flex h-6 w-6 items-center justify-center rounded-full border max-sm:h-10 max-sm:w-9 ${node.color === color ? "border-ink/70" : "border-transparent hover:border-ink/25"}`}
         >

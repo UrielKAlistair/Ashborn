@@ -18,7 +18,7 @@ export type GraphNode = {
   parentId: string | null;
   title: string;
   statWeights: StatWeights; // quests only: the stats work in the quest trains; empty trains none
-  color: QuestColor | null; // quests only: the colour the user gave it; null is white
+  color: QuestColor | null; // quests only: the colour the user gave it; null is uncoloured, drawn in the ink
   active: boolean; // quests only: shown on the dashboard
   createdAt: string;
   completedAt: string | null; // a step is done when this is set
