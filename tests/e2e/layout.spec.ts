@@ -84,6 +84,9 @@ function expectNoOverlap(list: Awaited<ReturnType<typeof rects>>) {
   );
 }
 
+// A node's position on the canvas, which a refit of the view does not change
+const canvasPosition = (node: ReturnType<Page["locator"]>) => node.evaluate((element) => (element as HTMLElement).style.transform);
+
 const savedX = async (id: string) => (await db.from("graph_nodes").select("x").eq("id", id).single()).data?.x ?? null;
 
 test("quest layout", async () => {
@@ -120,6 +123,38 @@ test("quest layout", async () => {
     expect(placed.x).toBeCloseTo((await savedX(ids.a))!, 2);
     expectNoOverlap(list);
     await page.screenshot({ path: `${shots}/after-drag.png` });
+  });
+
+  await test.step("a layout that lands mid-drag leaves the dragged quest where the pointer has it", async () => {
+    const dragged = questBoxes().filter({ hasText: "Placement" });
+    const start = (await dragged.boundingBox())!;
+    await page.mouse.move(start.x + 120, start.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 140, start.y + 360, { steps: 8 });
+    const held = await canvasPosition(dragged);
+    await db.from("graph_nodes").insert({ title: "Added mid-drag", parent_id: null });
+    await expect(questBoxes()).toHaveCount(5, { timeout: 10_000 });
+    await page.waitForTimeout(500);
+    expect(await canvasPosition(dragged)).toEqual(held);
+    await page.mouse.up();
+    await expect.poll(() => savedX(ids.b)).not.toBeNull();
+  });
+
+  await test.step("a priority that only reorders the quests keeps the view where it was", async () => {
+    const pane = (await page.locator(".react-flow__pane").boundingBox())!;
+    await page.mouse.move(pane.x + 8, pane.y + pane.height - 8);
+    await page.mouse.down();
+    await page.mouse.move(pane.x + 68, pane.y + pane.height - 48, { steps: 4 });
+    await page.mouse.up();
+    const view = () => page.locator(".react-flow__viewport").evaluate((element) => (element as HTMLElement).style.transform);
+    const panned = await view();
+    const order = async () => (await rects()).map(({ title }) => title).join();
+    const before = await order();
+    const { error } = await db.from("graph_nodes").update({ priority: 1, changed_at: { priority: new Date().toISOString() } }).eq("id", ids.c);
+    if (error) throw error;
+    await expect.poll(order, { timeout: 10_000 }).not.toBe(before);
+    await page.waitForTimeout(800);
+    expect(await view()).toBe(panned);
   });
 
   await test.step("clicking away from Reset layout changes nothing", async () => {

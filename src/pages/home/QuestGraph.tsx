@@ -39,6 +39,7 @@ import { sharpen, usePhonePanZoom } from "./phonePanZoom";
 import Territories from "./territory/Territories";
 import type { TerritoryQuest } from "./territory/territoryGrid";
 import { Tick } from "./Tick";
+import { fontsLoaded, labelWidth, lineHeight, measureTitles, titleLines, type TitleText } from "./titleLines";
 
 // Box sizes. A quest is a header above its steps; a step is a row that grows into a box when
 // it holds steps of its own. A box being added to gets an input row at the bottom.
@@ -46,6 +47,20 @@ const questHeader = { width: 264, height: 76 };
 const stepRow = { width: 248, height: 40 };
 const addRowHeight = 40;
 const padding = 16;
+// Titles wrap to three lines (titleMaxLines, line-clamp-3 on the cards), and a card grows by a
+// line's height for each line past the first. Below, the classes and fixed parts that set the
+// room a title has.
+const questTitleType = "font-display text-[14px] leading-snug font-semibold break-words";
+const stepTitleType = (holdsSteps: boolean) => `text-[12.5px] break-words ${holdsSteps ? "font-medium" : ""}`;
+const plusOneButton = "rounded-md bg-ember/15 px-1.5 py-[3px] font-mono text-[10px] leading-none font-semibold text-ember hover:bg-ember/25";
+const nowPill = "rounded bg-ember/15 px-1 font-mono text-[10px] font-semibold text-ember";
+// Every step row keeps room for the Now pill or its P label, so Now moving never changes a height
+const labelSlot = 32;
+const iconSize = 24; // iconButton
+const phoneMenuWidth = 32;
+// Where nothing can hover (a touch screen in the desktop layout), a quest's buttons stay in its
+// header: group-hover never applies there
+const canHover = window.matchMedia("(hover: hover)").matches;
 const questGap = 40;
 // The quest menu's height with its longest labels, and the room the toolbar takes over the canvas
 const questMenuHeight = 400;
@@ -117,13 +132,18 @@ const elk = new ELK({ workerUrl: elkWorkerUrl });
 const levelLayouts = new Map<string, ElkNode>();
 const maxLevelLayouts = 500;
 
-type Box = { position: XYPosition; size: Size }; // position is relative to the parent box
+// position is relative to the parent box; header is the height of its title row
+type Box = { position: XYPosition; size: Size; header: number };
+type Measured = Size & { header: number };
+// What sits beside a card's title, which sets the room the title has
+type CardShape = { phone: boolean; hasSteps: (id: string) => boolean; collapsed: (id: string) => boolean; folded: (id: string) => boolean };
 
 // A card's data holds only values, so it stays the same object while they do, and React Flow and
 // the memoised cards skip it
 type CardData = {
   node: GraphNode;
   depth: number;
+  header: number; // the height of its title row, which grows as the title wraps
   xp: number;
   hasSteps: boolean;
   shelved: boolean; // shelved itself, or inside a shelved box: shown greyed
@@ -210,8 +230,10 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     [phone, fitView],
   );
   const [placements, setPlacements] = useState<Record<string, Box>>({});
-  // Positions mid-drag, shown until the layout includes them
+  // Positions mid-drag, shown until the layout includes them; a layout that lands mid-drag keeps
+  // the dragged node's
   const [moving, setMoving] = useState<Record<string, XYPosition>>({});
+  const dragging = useRef<string | null>(null);
   const [collapsed, setCollapsed] = useState(() => loadIds(collapsedStorageKey));
   const [unlocked, setUnlocked] = useState(() => loadIds(unlockedStorageKey));
   const [opened, setOpened] = useState(loadOpened);
@@ -250,32 +272,42 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
 
   // Rendered nodes, parents before their steps (React Flow needs that order), and the links
   // between them; worked out again only when the graph or what is open changes, not per drag move
-  const { shown, rendered, depthOf, renderedEdges, structureKey, earlierDone } = useMemo(() => {
+  // Titles are measured again once the fonts have loaded
+  const [fontsReady, setFontsReady] = useState(false);
+  useEffect(() => void fontsLoaded.then(() => setFontsReady(true)), []);
+  const { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone } = useMemo(() => {
     const shown = inboxLast(byPriority(quests.filter((quest) => quest.active && !isFolded(quest.id)), priorities), snapshot.inboxId);
     const rendered: Array<{ node: GraphNode; depth: number; questId: string }> = [];
     // Per quest, how many of its steps finished on an earlier day, shown or not
     const earlierDone = new Map<string, number>();
+    // Per box, its steps that are drawn, which layout sizes and places
+    const stepsOf = new Map<string, GraphNode[]>();
     const visit = (node: GraphNode, depth: number, questId: string) => {
       rendered.push({ node, depth, questId });
+      const steps: GraphNode[] = [];
       visibleSteps(node.id).forEach((step) => {
         if (doneEarlier(step)) {
           earlierDone.set(questId, (earlierDone.get(questId) ?? 0) + 1);
           if (!showsDone(questId)) return;
         }
+        steps.push(step);
         visit(step, depth + 1, questId);
       });
+      stepsOf.set(node.id, steps);
     };
     shown.forEach((quest) => visit(quest, 0, quest.id));
     const depthOf = new Map(rendered.map(({ node, depth }) => [node.id, depth]));
     const renderedEdges = snapshot.edges.filter((edge) => depthOf.has(edge.from) && depthOf.has(edge.to));
     const structureKey = JSON.stringify([
-      rendered.map(({ node }) => [node.id, node.position]),
+      rendered.map(({ node }) => [node.id, node.position, node.title, model.children.has(node.id)]),
       renderedEdges.map((edge) => [edge.from, edge.to]),
       addingTo,
+      fontsReady,
     ]);
-    return { shown, rendered, depthOf, renderedEdges, structureKey, earlierDone };
-  }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo, priorities]);
-  const topKey = shown.map((quest) => quest.id).join();
+    return { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone };
+  }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo, priorities, fontsReady]);
+  // The set of quests shown, whatever their order: a priority that only reorders them keeps the view
+  const topKey = shown.map((quest) => quest.id).sort().join();
 
   const paneMeasured = useStore((state) => state.width > 0 && state.height > 0);
   const paneWidth = useStore((state) => state.width);
@@ -288,10 +320,14 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     let cancelled = false;
 
     const canvas = { width: paneWidth / (1 + fitOptions.padding), height: paneHeight / (1 + fitOptions.padding), maxZoom: fitOptions.maxZoom };
-    void layoutTree(shown, renderedEdges, visibleSteps, addingTo, phone ? null : canvas).then((next) => {
+    const shape: CardShape = { phone, hasSteps: (id) => model.children.has(id), collapsed: (id) => collapsed.has(id), folded: isFolded };
+    void layoutTree(shown, renderedEdges, (id) => stepsOf.get(id) ?? [], addingTo, phone ? null : canvas, shape).then((next) => {
       if (cancelled) return;
       setPlacements(next);
-      setMoving({});
+      setMoving((current) => {
+        const held = dragging.current;
+        return held && current[held] ? { [held]: current[held] } : {};
+      });
     });
 
     return () => {
@@ -404,11 +440,13 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     built.current = new Map();
     return rendered.map(({ node, depth, questId }) => {
       const placement = placements[node.id];
-      const size = placement?.size ?? (depth === 0 ? questHeader : stepRow);
+      const base = depth === 0 ? questHeader : stepRow;
+      const size = placement?.size ?? base;
       const position = moving[node.id] ?? placement?.position ?? { x: 0, y: 0 };
       const data: CardData = {
         node,
         depth,
+        header: placement?.header ?? base.height,
         xp: model.totalXp.get(node.id) ?? 0,
         hasSteps: model.children.has(node.id),
         shelved: model.shelved.has(node.id),
@@ -564,8 +602,10 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       nodesDraggable={!phone}
       nodeDragThreshold={4}
       nodesConnectable={!phone}
+      onNodeDragStart={(_event, dragged) => (dragging.current = dragged.id)}
       onNodeDrag={(_event, dragged) => follow(dragged.id, dragged.position)}
       onNodeDragStop={(_event, dragged) => {
+        dragging.current = null;
         const node = model.byId.get(dragged.id);
         if (node) place(node, dragged.position);
       }}
@@ -684,11 +724,11 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
 
       <div className="absolute inset-0 overflow-hidden rounded-2xl border border-ink/12 bg-card shadow-[var(--card-shadow)]" />
 
-      <div className="group relative flex flex-col justify-between px-4 pt-3 pb-3.5" style={{ height: questHeader.height }}>
+      <div className="group relative flex flex-col justify-between px-4 pt-3 pb-3.5" style={{ height: data.header }}>
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-1 items-start gap-2">
             <HexDot className={palette.hexFill} />
-            <Title node={node} act={act} textSize="text-[14px]" className="truncate font-display leading-snug font-semibold text-ink" />
+            <Title node={node} act={act} textSize="text-[14px]" className={`line-clamp-3 ${questTitleType} text-ink`} />
             {data.phone ? null : (
               <button
                 type="button"
@@ -697,7 +737,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
                   void act("levelUp", node.id, crypto.randomUUID());
                 }}
                 title="Level up: log a session of progress"
-                className="nodrag shrink-0 rounded-md bg-ember/15 px-1.5 py-[3px] font-mono text-[10px] leading-none font-semibold text-ember hover:bg-ember/25"
+                className={`nodrag shrink-0 ${plusOneButton}`}
               >
                 +1
               </button>
@@ -754,21 +794,31 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
     >
       <Handles height={stepRow.height} hidden={data.phone} />
       <div className="priority-mark rounded-xl" />
-      <div className="relative flex items-center gap-2.5 px-3" style={{ height: stepRow.height }}>
-        <Tick done={done} onClick={() => void act("updateNode", node.id, { done: !done })} className="nodrag" />
+      <div className="relative flex items-center gap-2.5 px-3" style={{ height: data.header }}>
+        {/* The tick and labels sit on the title's first line, where the links attach */}
+        <span className="flex shrink-0 items-center self-start" style={{ height: stepRow.height }}>
+          <Tick done={done} onClick={() => void act("updateNode", node.id, { done: !done })} className="nodrag" />
+        </span>
         <Title
           node={node}
           act={act}
           textSize="text-[12.5px]"
-          className={`truncate ${done ? "text-ink/35 line-through decoration-ink/25" : holdsSteps ? "font-medium text-ink/80" : "text-ink/88"}`}
+          className={`line-clamp-3 flex-1 ${stepTitleType(holdsSteps)} ${done ? "text-ink/35 line-through decoration-ink/25" : holdsSteps ? "text-ink/80" : "text-ink/88"}`}
         />
-        <span className="flex-1" />
-        {now ? (
-          <span className="shrink-0 rounded bg-ember/15 px-1 font-mono text-[10px] font-semibold text-ember group-hover:invisible">Now</span>
-        ) : node.priority && !data.phone ? (
-          <span className="shrink-0 font-mono text-[10px] text-muted group-hover:invisible">P{node.priority}</span>
-        ) : null}
-        <BoxButtons data={data} />
+        <span className="flex shrink-0 items-center justify-end self-start" style={{ width: labelSlot, height: stepRow.height }}>
+          {now ? (
+            <span className={`${nowPill} group-hover:invisible`}>Now</span>
+          ) : node.priority && !data.phone ? (
+            <span className="font-mono text-[10px] text-muted group-hover:invisible">P{node.priority}</span>
+          ) : null}
+        </span>
+        {data.phone ? (
+          <span className="flex shrink-0 items-center self-start" style={{ height: stepRow.height }}>
+            <BoxButtons data={data} />
+          </span>
+        ) : (
+          <BoxButtons data={data} />
+        )}
       </div>
       <AddRow data={data} />
     </div>
@@ -879,15 +929,18 @@ function BoxButtons({ data }: { data: CardData }) {
   const { onToggleCollapsed, onToggleLocked, onAdding } = boundActions(data);
   if (data.phone) return <PhoneMenu data={data} />;
 
-  // A quest's buttons sit in its header; a step's float over the end of its title on hover, so
-  // the title has the card's whole width the rest of the time
+  // The buttons float over the end of the title on hover or focus, so the title has the card's
+  // width the rest of the time; a quest's stay while its menu is open, and in its header without hover
   const steps = depth > 0;
+  const floating = "pointer-events-none absolute flex items-center bg-linear-to-l to-transparent opacity-0 [&>*]:pointer-events-auto transition-opacity group-hover:opacity-100 focus-within:opacity-100";
   return (
     <div
       className={
         steps
-          ? "pointer-events-none absolute inset-y-1 right-2 flex items-center gap-1 bg-linear-to-l from-panel from-70% to-transparent pl-12 opacity-0 [&>*]:pointer-events-auto transition-opacity group-hover:opacity-100 focus-within:opacity-100"
-          : "flex shrink-0 items-center gap-0.5"
+          ? `${floating} top-1 right-2 h-8 gap-1 from-panel from-70% pl-12`
+          : !canHover
+            ? "flex shrink-0 items-center gap-0.5"
+            : `${floating} top-2.5 right-4 gap-0.5 from-card from-70% pl-10 ${data.menuOpen ? "opacity-100" : ""}`
       }
     >
       {hasSteps ? (
@@ -1502,11 +1555,22 @@ function parseWeight(draft: string): number | undefined {
 async function layoutTree(
   quests: GraphNode[],
   edges: GraphEdge[],
-  visibleSteps: (id: string) => GraphNode[],
+  stepsOf: (id: string) => GraphNode[],
   addingTo: string | null,
   canvas: Canvas | null,
+  shape: CardShape,
 ) {
   const placements: Record<string, Box> = {};
+  const headerOf = (node: GraphNode, depth: number, width: number) => headerHeight(node, depth, width, shape);
+  // Every title at its card's narrowest, in one pass; only a box wider than that is measured again
+  const titles: TitleText[] = [];
+  const collect = (node: GraphNode, depth: number) => {
+    const title = titleText(node, depth, depth === 0 ? questHeader.width : stepRow.width, shape);
+    if (title) titles.push(title);
+    stepsOf(node.id).forEach((step) => collect(step, depth + 1));
+  };
+  quests.forEach((quest) => collect(quest, 0));
+  measureTitles(titles);
 
   const layoutSteps = async (nodes: GraphNode[], sizes: Size[]): Promise<ElkNode> => {
     const ids = new Set(nodes.map((node) => node.id));
@@ -1527,7 +1591,7 @@ async function layoutTree(
         // Otherwise an unlinked step goes above the chains, whatever its priority
         "elk.layered.considerModelOrder.components": "MODEL_ORDER",
       },
-      children: nodes.map((node, i) => ({ id: node.id, ...sizes[i] })),
+      children: nodes.map((node, i) => ({ id: node.id, width: sizes[i].width, height: sizes[i].height })),
       edges: links.map((edge, i) => ({ id: `e${i}`, sources: [edge.from], targets: [edge.to] })),
     });
     levelLayouts.set(key, result);
@@ -1536,7 +1600,7 @@ async function layoutTree(
   };
 
   // Places `nodes` in a box whose content starts at `origin`; returns the content's far corner
-  const arrange = async (nodes: GraphNode[], sizes: Size[], origin: XYPosition) => {
+  const arrange = async (nodes: GraphNode[], sizes: Measured[], origin: XYPosition) => {
     let right = origin.x;
     let bottom = origin.y;
     const extend = (position: XYPosition, size: Size) => {
@@ -1546,7 +1610,7 @@ async function layoutTree(
 
     nodes.forEach((node, i) => {
       if (!node.position) return;
-      placements[node.id] = { position: node.position, size: sizes[i] };
+      placements[node.id] = placed(node.position, sizes[i]);
       extend(node.position, sizes[i]);
     });
 
@@ -1560,38 +1624,70 @@ async function layoutTree(
       (result.children ?? []).forEach((child) => {
         const { size } = loose.find(({ node }) => node.id === child.id)!;
         const position = { x: origin.x + (child.x ?? 0), y: top + (child.y ?? 0) };
-        placements[child.id] = { position, size };
+        placements[child.id] = placed(position, size);
         extend(position, size);
       });
     }
     return { right, bottom };
   };
 
-  const measure = async (node: GraphNode, depth: number): Promise<Size> => {
-    const header = depth === 0 ? questHeader : stepRow;
+  const measure = async (node: GraphNode, depth: number): Promise<Measured> => {
+    const base = depth === 0 ? questHeader : stepRow;
     const addRow = node.id === addingTo ? addRowHeight : 0;
-    const steps = visibleSteps(node.id);
+    const steps = stepsOf(node.id);
     if (steps.length === 0) {
-      return { width: header.width, height: header.height + addRow };
+      const header = headerOf(node, depth, base.width);
+      return { width: base.width, height: header + addRow, header };
     }
 
+    // A box is as wide as its steps need, and its title wraps to that width; the steps are placed
+    // again if the header then takes a different number of lines
     const sizes = await Promise.all(steps.map((step) => measure(step, depth + 1)));
-    const { right, bottom } = await arrange(steps, sizes, { x: padding, y: header.height });
-    return {
-      width: Math.max(header.width, right + padding),
-      height: bottom + (addRow || padding / 2),
-    };
+    const first = headerOf(node, depth, base.width);
+    const arranged = await arrange(steps, sizes, { x: padding, y: first });
+    const width = Math.max(base.width, arranged.right + padding);
+    const header = headerOf(node, depth, width);
+    const { bottom } = header === first ? arranged : await arrange(steps, sizes, { x: padding, y: header });
+    return { width, height: bottom + (addRow || padding / 2), header };
   };
 
   const sizes = await Promise.all(quests.map((quest) => measure(quest, 0)));
   const sized = quests.map((quest, i) => ({ id: quest.id, position: quest.position, size: sizes[i] }));
   const pinned = sized.flatMap(({ id, position, size }) => (position ? [{ id, position, size }] : []));
-  pinned.forEach(({ id, position, size }) => (placements[id] = { position, size }));
+  pinned.forEach(({ id, position, size }) => (placements[id] = placed(position, size)));
   const loose = prerequisitesFirst(sized.filter(({ position }) => !position), edges);
   const packed = packQuests(pinned, loose, canvas, questGap);
-  loose.forEach(({ id, size }) => (placements[id] = { position: packed[id], size }));
+  loose.forEach(({ id, size }) => (placements[id] = placed(packed[id], size)));
 
   return placements;
+}
+
+const placed = (position: XYPosition, { width, height, header }: Measured): Box => ({ position, size: { width, height }, header });
+
+// A card's title row: its height, grown by a line for each line its title wraps to past the first
+function headerHeight(node: GraphNode, depth: number, width: number, shape: CardShape) {
+  const base = depth === 0 ? questHeader.height : stepRow.height;
+  const title = titleText(node, depth, width, shape);
+  return title ? base + (titleLines(title) - 1) * lineHeight(title.className) : base;
+}
+
+// A card's title as the card sets it, at the width it gets: the card's less the fixed parts beside
+// it. A folded box's one line is cut, not wrapped.
+function titleText(node: GraphNode, depth: number, width: number, shape: CardShape): TitleText | null {
+  if (depth === 0) {
+    // px-4, the hex dot (w-3.5) and its gap-2
+    const fixed = 32 + 14 + 8;
+    // The phone's menu after a gap-2; on the desktop the +1 after its gap-2, and without hover the
+    // icon buttons after another gap-2, with gap-0.5 between them (with hover they float over the title)
+    const icons = !canHover ? 8 + (shape.hasSteps(node.id) ? 4 : 3) * (iconSize + 2) - 2 : 0;
+    const buttons = shape.phone ? 8 + phoneMenuWidth : 8 + labelWidth(plusOneButton, "+1") + icons;
+    return { text: node.title, className: questTitleType, width: width - fixed - buttons };
+  }
+  if (shape.folded(node.id)) return null;
+  // px-3, the tick (w-4), the gap-2.5 on each side of the title, the label slot, and the phone's menu
+  const fixed = 24 + 16 + 10 + 10 + labelSlot + (shape.phone ? 10 + phoneMenuWidth : 0);
+  const holdsSteps = shape.hasSteps(node.id) && !shape.collapsed(node.id);
+  return { text: node.title, className: stepTitleType(holdsSteps), width: width - fixed };
 }
 
 function subtreeOf(model: GraphModel, id: string): string[] {
