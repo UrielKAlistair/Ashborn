@@ -53,3 +53,18 @@ test("capture shortcut and the keys list", async () => {
   await app.close();
   rmSync(profile, { recursive: true, force: true });
 });
+
+test("a first launch with --capture opens at the capture field, after signing in", async () => {
+  const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
+  const env = { ...process.env } as Record<string, string>;
+  delete env.ELECTRON_RUN_AS_NODE;
+  env.ASHBORN_BACKUP_DIR = path.join(profile, "backups");
+  const app = await electron.launch({ args: [`--user-data-dir=${profile}`, ".", "--capture"], env });
+  const page = await app.firstWindow();
+  await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
+  await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByLabel("Capture a thought")).toBeFocused({ timeout: 15_000 });
+  await app.close();
+  rmSync(profile, { recursive: true, force: true });
+});

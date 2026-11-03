@@ -49,6 +49,9 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Split holds Now only while it is on screen: left open on a screen that's gone, it would hide what's next
+  useEffect(() => () => setHolding(null), []);
+
   const boxed = Boolean(choice?.timed && choice.timed.endsAt > clock);
   useEffect(() => {
     onBoxed?.(boxed);

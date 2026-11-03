@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
-import { questOf, type GraphModel } from "../../shared/graphModel";
+import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, needsFirstStep, prioritisedSteps } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
 import { priorities, type AlarmKind, type Deadline, type GraphNode, type Priority, type Snapshot, type Weekday } from "../../shared/types";
@@ -295,8 +295,8 @@ function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[];
       {open ? (
         <div className="mt-2 space-y-0.5">
           <p className="px-1 pb-1 text-[11px] text-muted">P1 most urgent, P4 least. On a quest, it covers all its steps.</p>
-          {byQuest(steps, model).map(({ quest, steps: inQuest }) =>
-            inQuest.length === 1 ? (
+          {byQuest(steps, model).map(({ quest, steps: inQuest, open }) =>
+            open <= 1 ? (
               <div key={inQuest[0].id} className={rowClass}>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] leading-snug text-ink/80">{inQuest[0].title}</p>
@@ -308,13 +308,16 @@ function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[];
                 <PriorityChips label={`Priority for ${inQuest[0].title}`} onPick={oneTap((priority) => void act("updateNode", inQuest[0].id, { priority }))} />
               </div>
             ) : (
-              // Several ready in one quest: one priority on the quest covers them all
+              // More to do in the quest than this: a priority on the quest covers all of it, the steps it
+              // unlocks too (a step's own covers only what leads to it)
               <div key={quest.id}>
                 <div className={rowClass}>
                   <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] leading-snug font-medium text-ink/85">
                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
                     <span className="truncate">{quest.title}</span>
-                    <span className="shrink-0 text-[11.5px] font-normal text-muted">{inQuest.length} ready</span>
+                    <span className="shrink-0 text-[11.5px] font-normal text-muted">
+                      {inQuest.length} ready of {open}
+                    </span>
                   </p>
                   <PriorityChips label={`Priority for all of ${quest.title}`} onPick={oneTap((priority) => void act("updateNode", quest.id, { priority }))} />
                 </div>
@@ -333,16 +336,24 @@ function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[];
   );
 }
 
-// The ready steps in their quests, in the order the quests first come up
+// The ready steps in their quests, in the order the quests first come up, with how many open steps
+// each quest holds in all, ready or waiting on another
 function byQuest(steps: GraphNode[], model: GraphModel) {
-  const groups = new Map<string, { quest: GraphNode; steps: GraphNode[] }>();
+  const groups = new Map<string, { quest: GraphNode; steps: GraphNode[]; open: number }>();
   for (const step of steps) {
     const quest = questOf(model.byId, step);
-    const group = groups.get(quest.id) ?? { quest, steps: [] };
+    const group = groups.get(quest.id) ?? { quest, steps: [], open: openSteps(model, quest.id) };
     group.steps.push(step);
     groups.set(quest.id, group);
   }
   return [...groups.values()];
+}
+
+function openSteps(model: GraphModel, id: string): number {
+  return (model.children.get(id) ?? []).reduce(
+    (count, step) => count + (model.children.has(step.id) ? openSteps(model, step.id) : isDone(step) || model.shelved.has(step.id) ? 0 : 1),
+    0,
+  );
 }
 
 // `quiet`: drawn in plain ink until pointed at, for a step under a quest's own chips

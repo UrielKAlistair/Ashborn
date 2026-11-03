@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("ashborn", {
     ipcRenderer.on("app:capture", handle);
     return () => ipcRenderer.removeListener("app:capture", handle);
   },
+  takeCaptureAtStart: () => ipcRenderer.invoke("app:take-capture"),
   setNow: (step: { id: string; title: string; endsAt: number | null; canTick: boolean } | null) => ipcRenderer.send("now:update", step),
   onNowDone: (listener: (id: string) => void) => {
     const handle = (_event: unknown, id: string) => listener(id);

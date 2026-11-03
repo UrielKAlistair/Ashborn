@@ -139,6 +139,16 @@ test("focus", async () => {
     expect((await db.from("graph_nodes").select("priority").eq("title", "Water the plants").single()).data?.priority).toBeNull();
   });
 
+  await test.step("Split left open on a screen that's gone lets Now go", async () => {
+    await now.getByRole("button", { name: /Split it/ }).click();
+    await expect(now.getByLabel("Steps, one per line")).toBeVisible();
+    await page.getByRole("button", { name: "Alarms", exact: true }).click();
+    await expect(now).toHaveCount(0);
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(now).toBeVisible();
+    await expect(now.getByLabel("Steps, one per line")).toHaveCount(0);
+  });
+
   await app.close();
   rmSync(profile, { recursive: true, force: true });
 });

@@ -97,7 +97,7 @@ function updateTrayMenu() {
   const nowItems: Electron.MenuItemConstructorOptions[] = now
     ? [
         { label: `Now: ${title}`, click: showMainWindow },
-        ...(now.endsAt ? [{ label: `Timer ends at ${new Date(now.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`, enabled: false }] : []),
+        ...(now.endsAt ? [{ label: `Timer until ${new Date(now.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`, enabled: false }] : []),
         ...(now.canTick
           ? [
               { label: "Done", click: () => mainWindow?.webContents.send("now:done", now.id) },
@@ -211,6 +211,14 @@ ipcMain.on("app:toggle-maximise", () => {
 
 ipcMain.handle("app:is-maximised", () => mainWindow?.isMaximized() ?? false);
 
+// A first launch with --capture: the page asks once it can take it, as a message sent on load is missed
+let captureAtStart = startCapture;
+ipcMain.handle("app:take-capture", () => {
+  const take = captureAtStart;
+  captureAtStart = false;
+  return take;
+});
+
 ipcMain.on("now:update", (_event, step: NowStep) => {
   nowStep = step;
   updateTrayMenu();
@@ -253,7 +261,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     createWindow();
     createTray();
-    if (startCapture) mainWindow?.webContents.once("did-finish-load", captureThought);
+
     // From anywhere on the desktop: the window, with its capture field ready for a thought. A key
     // another app already holds is left to it.
     globalShortcut.register("CommandOrControl+Alt+Space", captureThought);

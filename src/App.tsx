@@ -290,6 +290,14 @@ function App() {
       }),
     [],
   );
+  // Launched with --capture: the field is focused once it appears (after sign-in, if need be)
+  useEffect(() => {
+    void window.ashborn?.takeCaptureAtStart().then((take) => {
+      if (!take) return;
+      setCurrentPath("/");
+      requestCapture();
+    });
+  }, []);
 
   // On the phone the graph is a tab of its own: asking to show a node opens it there
   useEffect(
