@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { headingFontNames, headingFonts, setHeadingFont, setTheme, themeNames, themes, useHeadingFont, useTheme } from "../lib/useTheme";
+import { setTheme, setTrial, themeNames, themes, trials, useTheme, useTrial, type Trial } from "../lib/useTheme";
 import { HexTile } from "./HexTile";
 import { LeafIcon, MoonIcon, SunIcon } from "./icons";
 import { desktopSections, screenAt, sectionAt, type Section } from "./sections";
@@ -57,8 +57,6 @@ export function Navbar({
   const theme = useTheme();
   // The switch shows, and goes to, the next theme in turn
   const next = themes[(themes.indexOf(theme) + 1) % themes.length];
-  const font = useHeadingFont();
-  const fontLetter = String.fromCharCode(65 + headingFonts.indexOf(font));
 
   return (
     <aside className="relative z-10 flex h-full min-h-0 w-[5.5rem] shrink-0 flex-col items-center border-r border-ink/8 bg-panel/80 px-2 pt-10 pb-5">
@@ -97,14 +95,11 @@ export function Navbar({
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={() => setHeadingFont(headingFonts[(headingFonts.indexOf(font) + 1) % headingFonts.length])}
-        title={`Font ${fontLetter}: ${headingFontNames[font]}. A trial; click for the next`}
-        className="mb-1 rounded-md px-1.5 py-0.5 font-mono text-[10.5px] text-muted hover:bg-ink/8 hover:text-ink/85"
-      >
-        Font {fontLetter}
-      </button>
+      <div className="mb-2 flex flex-col items-stretch gap-1">
+        {(Object.keys(trials) as Trial[]).map((trial) => (
+          <TrialSwitch key={trial} trial={trial} />
+        ))}
+      </div>
       <button
         type="button"
         onClick={() => setTheme(next)}
@@ -114,6 +109,25 @@ export function Navbar({
         {next === "light" ? <SunIcon className="h-[18px] w-[18px]" /> : next === "meadow" ? <LeafIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
       </button>
     </aside>
+  );
+}
+
+// One trial switch: its name and the option in use; a click goes to the next option
+function TrialSwitch({ trial }: { trial: Trial }) {
+  const current = useTrial(trial);
+  const { label, options } = trials[trial];
+  const keys = Object.keys(options);
+  const name = options[current as keyof typeof options] as string;
+  return (
+    <button
+      type="button"
+      onClick={() => setTrial(trial, keys[(keys.indexOf(current) + 1) % keys.length])}
+      title={`${label}: ${name}. A trial; click for the next`}
+      className="w-[4.75rem] rounded-md px-1 py-0.5 text-left font-mono text-[9.5px] leading-tight text-muted hover:bg-ink/8 hover:text-ink/85"
+    >
+      <span className="block text-ink/50">{label}</span>
+      <span className="block truncate text-ink/85">{name}</span>
+    </button>
   );
 }
 

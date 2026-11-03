@@ -5,14 +5,27 @@
 @import "@fontsource/jetbrains-mono/500.css";
 @import "@fontsource/jetbrains-mono/600.css";
 @import "@fontsource/jetbrains-mono/700.css";
-@import "@fontsource/cinzel/600.css";
-@import "@fontsource/cinzel/700.css";
 @import "@fontsource/vt323/400.css";
 @import "@fontsource/silkscreen/400.css";
-@import "@fontsource/chakra-petch/600.css";
-@import "@fontsource/chakra-petch/700.css";
+@import "@fontsource/silkscreen/700.css";
+@import "@fontsource/press-start-2p/400.css";
+@import "@fontsource/dotgothic16/400.css";
+@import "@fontsource/jersey-10/400.css";
+@import "@fontsource/tiny5/400.css";
+@import "@fontsource/sixtyfour/400.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/share-tech-mono/400.css";
+@import "@fontsource/martian-mono/400.css";
+@import "@fontsource/martian-mono/600.css";
+@import "@fontsource/fira-code/400.css";
+@import "@fontsource/fira-code/600.css";
 @import "@fontsource/space-mono/400.css";
 @import "@fontsource/space-mono/700.css";
+@import "@fontsource/courier-prime/400.css";
+@import "@fontsource/courier-prime/700.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/600.css";
 
 /* Two themes, Ember (dark, the default) and Parchment (light), set by data-theme on <html>.
    Components colour themselves with `ink` (text, lines and tints, at an opacity), `canvas`, and
@@ -98,14 +111,32 @@
   --color-sky-400: oklch(58.8% 0.158 241.966);
 }
 
-/* A trial switch, until the user picks: the heading font, on <html data-heading-font>. Each is
-   scaled to JetBrains Mono's capital height, so a heading keeps its size whichever font draws it. */
-:root[data-heading-font="cinzel"] { --font-display: "Cinzel", serif; }
+/* Trial switches, until the user picks (lib/useTheme.ts). Fonts are scaled to JetBrains Mono's
+   proportions, capital height for headings and x-height for text, so sizes hold whichever draws them. */
 :root[data-heading-font="vt323"] { --font-display: "VT323", monospace; }
 :root[data-heading-font="silkscreen"] { --font-display: "Silkscreen", monospace; }
-:root[data-heading-font="chakra"] { --font-display: "Chakra Petch", sans-serif; }
-:root[data-heading-font="space"] { --font-display: "Space Mono", monospace; --font-sans: "Space Mono", monospace; }
+:root[data-heading-font="pressStart"] { --font-display: "Press Start 2P", monospace; }
+:root[data-heading-font="dotGothic"] { --font-display: "DotGothic16", monospace; }
+:root[data-heading-font="pixelify"] { --font-display: "Pixelify Sans", monospace; }
+:root[data-heading-font="jersey"] { --font-display: "Jersey 10", monospace; }
+:root[data-heading-font="tiny5"] { --font-display: "Tiny5", monospace; }
+:root[data-heading-font="sixtyfour"] { --font-display: "Sixtyfour", monospace; }
 :root[data-heading-font]:not([data-heading-font="mono"]) .font-display { font-size-adjust: cap-height 0.73; }
+:root[data-text-font="plex"] { --font-sans: "IBM Plex Mono", monospace; --font-mono: "IBM Plex Mono", monospace; }
+:root[data-text-font="shareTech"] { --font-sans: "Share Tech Mono", monospace; --font-mono: "Share Tech Mono", monospace; }
+:root[data-text-font="martian"] { --font-sans: "Martian Mono", monospace; --font-mono: "Martian Mono", monospace; }
+:root[data-text-font="fira"] { --font-sans: "Fira Code", monospace; --font-mono: "Fira Code", monospace; }
+:root[data-text-font="space"] { --font-sans: "Space Mono", monospace; --font-mono: "Space Mono", monospace; }
+:root[data-text-font="courier"] { --font-sans: "Courier Prime", monospace; --font-mono: "Courier Prime", monospace; }
+:root[data-text-font="geist"] { --font-sans: "Geist Mono", monospace; --font-mono: "Geist Mono", monospace; }
+:root[data-text-font]:not([data-text-font="mono"]) body { font-size-adjust: ex-height 0.55; }
+:root:not([data-theme="light"]):not([data-theme="meadow"])[data-palette="black"] { --color-canvas: #000000; --color-panel: #0b0b0c; --color-card: #151517; --color-ink: #ffffff; --color-muted: #a6a6ad; }
+:root:not([data-theme="light"]):not([data-theme="meadow"])[data-palette="charcoal"] { --color-canvas: #0c0a08; --color-panel: #15120f; --color-card: #1e1a16; --color-ink: #f5efe6; --color-muted: #aba296; }
+:root:not([data-theme="light"]):not([data-theme="meadow"])[data-palette="dungeon"] { --color-canvas: #070a08; --color-panel: #0e1310; --color-card: #161d18; --color-ink: #eef3ee; --color-muted: #9ba89e; }
+:root:not([data-theme="light"]):not([data-theme="meadow"])[data-palette="steel"] { --color-canvas: #0a0c0f; --color-panel: #12161b; --color-card: #1a2027; --color-ink: #f2f5f8; --color-muted: #9ca6b2; }
+.quest-sheet { border-color: color-mix(in oklab, var(--color-ink) 12%, transparent); }
+:root[data-box-look="edge"] .quest-sheet { border-top: 2px solid var(--quest); }
+:root[data-box-look="title"] .quest-title { color: var(--quest); }
 
 html,
 body,
@@ -157,9 +188,10 @@ body {
   background-color: color-mix(in oklab, var(--color-ink) 24%, transparent);
 }
 
-/* The quest graph's camera is its own compositor layer, so a pan or zoom moves the cards already
-   drawn instead of repainting them in every frame; Chrome redraws them sharp once a zoom ends */
-.react-flow__viewport {
+/* While the quest graph pans or zooms its camera is its own compositor layer, so a move shifts the
+   cards already drawn instead of repainting them in every frame. Only while moving: a layer keeps
+   the scale it was drawn at, so a zoom held still would stay blurred. */
+.react-flow[data-moving] .react-flow__viewport {
   will-change: transform;
 }
 

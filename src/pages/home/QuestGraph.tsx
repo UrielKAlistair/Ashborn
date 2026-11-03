@@ -17,7 +17,7 @@ import {
   type NodeProps,
   type XYPosition,
 } from "@xyflow/react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { HEX_POINTS, HexMark } from "../../components/HexTile";
 import { paletteOf, palettes } from "../../lib/theme";
@@ -518,6 +518,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         startedOnIncoming.current = handleType === "target";
       }}
       onConnect={connect}
+      onMoveStart={() => phonePanZoom.ref.current?.setAttribute("data-moving", "")}
+      onMoveEnd={() => phonePanZoom.ref.current?.removeAttribute("data-moving")}
       onEdgeClick={(_event, edge) => {
         setMenuFor(null);
         setSelectedEdge({ from: edge.source, to: edge.target });
@@ -648,20 +650,21 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
   const palette = paletteOf(node.color);
 
   return (
-    <div data-priority={data.look} className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
+    <div
+      data-priority={data.look}
+      className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}
+      style={{ "--quest": `rgb(${palette.rgb.join(" ")})` } as CSSProperties}
+    >
       <Handles hidden={data.phone} />
       <div className="priority-mark rounded-2xl" />
 
-      {/* A sheet tinted in the quest's colour from the top */}
-      <div className={`absolute inset-0 overflow-hidden rounded-2xl border bg-card shadow-[var(--card-shadow)] ${palette.border}`}>
-        <div className={`pointer-events-none absolute inset-0 bg-linear-to-b to-transparent to-40% ${palette.tint}`} />
-      </div>
+      <div className="quest-sheet absolute inset-0 overflow-hidden rounded-2xl border bg-card shadow-[var(--card-shadow)]" />
 
       <div className="group relative flex flex-col justify-between px-4 pt-3 pb-3.5" style={{ height: questHeader.height }}>
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-1 items-start gap-2">
             <HexDot className={palette.hexFill} />
-            <Title node={node} act={act} textSize="text-[14px]" className="truncate font-display leading-snug font-semibold text-ink" />
+            <Title node={node} act={act} textSize="text-[14px]" className="quest-title truncate font-display leading-snug font-semibold text-ink" />
             {data.phone ? null : (
               <button
                 type="button"

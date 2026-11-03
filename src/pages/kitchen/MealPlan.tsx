@@ -99,9 +99,9 @@ function Day({ kitchen, act, day, today: date, onOpenRecipe }: { kitchen: Kitche
       aria-label={`Meals on ${day}`}
       className={`panel-scroll flex min-h-0 w-full flex-col gap-1.5 overflow-y-auto rounded-xl p-2 ${offset === 0 ? "bg-ember/[0.06] ring-1 ring-ember/30" : "bg-ink/[0.015]"} ${offset < 0 ? "opacity-60" : ""}`}
     >
-      <p className="flex items-baseline justify-between px-1 pb-0.5">
+      <p className="flex flex-wrap items-baseline justify-between gap-x-2 px-1 pb-0.5">
         <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{name}</span>
-        <span className="font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
+        <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
       </p>
       {mealSlots.map((slot) => (
         <MealCell key={slot} kitchen={kitchen} act={act} meal={shownMeal(kitchen, day, slot)} onOpenRecipe={onOpenRecipe} />
@@ -146,8 +146,8 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
     <div role="group" aria-label={`${meal.slot} on ${meal.date}`} className={`group relative rounded-lg px-2.5 py-2 ${empty ? "border border-dashed border-ink/8" : "bg-ink/[0.035] hover:bg-ink/[0.055]"} ${cooked ? "opacity-55" : ""}`}>
       <div className="flex items-center gap-2">
         {empty || cancelled ? null : <Tick done={cooked} onClick={tick} />}
-        <p className="min-w-0 flex-1 truncate text-[11.5px] capitalize text-muted">
-          {meal.slot} <span className="font-mono text-[10.5px] tabular-nums text-ink/35">{mealTimes[meal.slot]}</span>
+        <p className="min-w-0 flex-1 text-[11.5px] capitalize text-muted">
+          {meal.slot} <span className="whitespace-nowrap font-mono text-[10.5px] tabular-nums text-ink/35">{mealTimes[meal.slot]}</span>
         </p>
         {/* Over the slot's name until hovered on the desktop, where a day's column has no room for both */}
         <div className="absolute top-1.5 right-1.5 flex items-center gap-2 rounded-md bg-card px-1.5 py-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-sm:static max-sm:gap-0 max-sm:bg-transparent max-sm:p-0 max-sm:opacity-100">

@@ -62,7 +62,7 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
               <div key={alarm.id} className={`flex items-center gap-4 rounded-xl bg-ink/[0.03] px-4 py-3 hover:bg-ink/[0.05] ${alarm.enabled ? "" : "opacity-50"}`}>
                 <p className="font-mono text-2xl tabular-nums text-ink/90">{alarm.time ?? clock(new Date(alarm.at!))}</p>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] text-ink/85">{alarm.label || "Alarm"}</p>
+                  <p className="text-[13px] text-ink/85 [overflow-wrap:anywhere]">{alarm.label || "Alarm"}</p>
                   <p className="mt-0.5 text-[11.5px] text-muted">
                     {alarm.at ? `once, ${day(new Date(alarm.at))}` : daysText(alarm.weekdays)}
                     {alarm.kind === "plain" ? "" : ` · ${kindLabels[alarm.kind].toLowerCase()}`}

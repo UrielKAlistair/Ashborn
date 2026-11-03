@@ -60,45 +60,57 @@ function inkRgb(): [number, number, number] {
   return Number.isNaN(value) ? [255, 255, 255] : [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
-// A trial switch, until the user picks one: the heading font, data-heading-font on <html>, which
-// index.css reads
-export const headingFonts = ["mono", "cinzel", "vt323", "silkscreen", "chakra", "space"] as const;
-export type HeadingFont = (typeof headingFonts)[number];
-export const headingFontNames: Record<HeadingFont, string> = {
-  mono: "JetBrains Mono",
-  cinzel: "Cinzel",
-  vt323: "VT323",
-  silkscreen: "Silkscreen",
-  chakra: "Chakra Petch",
-  space: "Space Mono throughout",
-};
-const headingFontKey = "ashborn-heading-font";
+// Trial switches, until the user picks: each sets data-<name> on <html>, which index.css reads, and
+// is kept per device. The first option is the default.
+export const trials = {
+  headingFont: {
+    label: "Heading",
+    options: { mono: "JetBrains", vt323: "VT323", silkscreen: "Silkscreen", pressStart: "Press Start", dotGothic: "DotGothic", pixelify: "Pixelify", jersey: "Jersey 10", tiny5: "Tiny5", sixtyfour: "Sixtyfour" },
+  },
+  textFont: {
+    label: "Text",
+    options: { mono: "JetBrains", plex: "IBM Plex", shareTech: "Share Tech", martian: "Martian", fira: "Fira Code", space: "Space Mono", courier: "Courier", geist: "Geist" },
+  },
+  palette: {
+    label: "Dark",
+    options: { graphite: "Graphite", black: "Black", charcoal: "Charcoal", dungeon: "Dungeon", steel: "Steel" },
+  },
+  boxLook: {
+    label: "Box",
+    options: { plain: "Plain", edge: "Top edge", title: "Title" },
+  },
+} as const;
+export type Trial = keyof typeof trials;
+const trialKey = (trial: Trial) => `ashborn-trial-${trial}`;
 
-export function storedHeadingFont(): HeadingFont {
-  try {
-    const font = window.localStorage.getItem(headingFontKey);
-    return headingFonts.find((name) => name === font) ?? "mono";
-  } catch {
-    return "mono";
+export function applyTrials() {
+  for (const trial of Object.keys(trials) as Trial[]) {
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(trialKey(trial));
+    } catch {
+      // Storage blocked: the default
+    }
+    document.documentElement.dataset[trial] = stored && stored in trials[trial].options ? stored : Object.keys(trials[trial].options)[0];
   }
 }
 
-export function setHeadingFont(font: HeadingFont) {
-  document.documentElement.dataset.headingFont = font;
+export function setTrial(trial: Trial, option: string) {
+  document.documentElement.dataset[trial] = option;
   try {
-    window.localStorage.setItem(headingFontKey, font);
+    window.localStorage.setItem(trialKey(trial), option);
   } catch {
-    // Storage blocked: the font lasts until the app closes
+    // Storage blocked: the choice lasts until the app closes
   }
   listeners.forEach((listener) => listener());
 }
 
-export function useHeadingFont(): HeadingFont {
+export function useTrial(trial: Trial): string {
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    () => (document.documentElement.dataset.headingFont as HeadingFont | undefined) ?? "mono",
+    () => document.documentElement.dataset[trial] ?? Object.keys(trials[trial].options)[0],
   );
 }
