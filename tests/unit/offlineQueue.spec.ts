@@ -74,3 +74,57 @@ test("a lost connection holds the queue without counting against the change", as
   expect((held as QueueHeld).tries).toBe(0);
   expect(titles()).toEqual(["held"]);
 });
+
+// Errors the app doesn't name as worth trying again drop the change, so none can hold the queue for good
+for (const [code, status] of [["21000", 400], ["PGRST102", 400], ["", 400], ["XX000", 500], ["P0002", 400]] as const) {
+  test(`an unnamed server error (${code || "no code"}, ${status}) drops the change and sends the rest`, async () => {
+    setQueue([rename("refused"), rename("fine")]);
+    const sent: string[] = [];
+    const refused = await sendQueue(
+      apiWith(async (title) => {
+        if (title === "refused") throw new ServerError("refused", code, status);
+        sent.push(title);
+      }),
+    );
+    expect(refused).toEqual(["refused"]);
+    expect(sent).toEqual(["fine"]);
+  });
+}
+
+for (const [code, status] of [["", 503], ["", 429], ["", 401], ["40001", 500], ["57014", 500], ["PGRST301", 401], ["PGRST204", 400]] as const) {
+  test(`a server error that may pass (${code || "no code"}, ${status}) holds the queue`, async () => {
+    setQueue([rename("held")]);
+    const held = await sendQueue(
+      apiWith(async () => {
+        throw new ServerError("try later", code, status);
+      }),
+    ).catch((error: unknown) => error);
+    expect(held).toBeInstanceOf(QueueHeld);
+    expect(titles()).toEqual(["held"]);
+  });
+}
+
+test("a change failing for 20 tries over a day is given up on, reported, and the rest are sent", async () => {
+  const dayAgo = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  setQueue([{ ...rename("stuck"), tries: 19, failingSince: dayAgo }, rename("fine")]);
+  const sent: string[] = [];
+  const refused = await sendQueue(
+    apiWith(async (title) => {
+      if (title === "stuck") throw new ServerError("Service Unavailable", "", 503);
+      sent.push(title);
+    }),
+  );
+  expect(refused).toEqual(["Service Unavailable"]);
+  expect(sent).toEqual(["fine"]);
+});
+
+test("many quick tries within the day still hold the queue", async () => {
+  setQueue([{ ...rename("held"), tries: 25, failingSince: new Date(Date.now() - 60_000).toISOString() }]);
+  const held = await sendQueue(
+    apiWith(async () => {
+      throw new ServerError("Service Unavailable", "", 503);
+    }),
+  ).catch((error: unknown) => error);
+  expect(held).toBeInstanceOf(QueueHeld);
+  expect(titles()).toEqual(["held"]);
+});

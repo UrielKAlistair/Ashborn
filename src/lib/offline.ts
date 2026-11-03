@@ -27,10 +27,14 @@ const queueStorageKey = "ashborn-offline-queue";
 
 // Failed sends of the first change in a row after which the app shows why it is held
 const HELD_TRIES_SHOWN = 3;
+// A change that keeps meeting server errors worth trying again is given up on after this many
+// tries spread over at least this long, so no one change holds the queue for good
+const GIVE_UP_TRIES = 20;
+const GIVE_UP_MS = 24 * 60 * 60 * 1000;
 
 // `at`: when the change was made, so that when it is sent later it still loses to a change made after it.
-// `tries`: sends of it that met a server error worth trying again.
-export type QueuedChange = { name: Mutation; args: unknown[]; at: string; tries?: number };
+// `tries`: sends of it that met a server error worth trying again; `failingSince`: when the first did.
+export type QueuedChange = { name: Mutation; args: unknown[]; at: string; tries?: number; failingSince?: string };
 
 type Preview = (snapshot: Snapshot, args: any[], at: string) => Delta; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -217,9 +221,9 @@ export class QueueHeld extends Error {
 }
 
 // Sends queued changes in order, each through an API whose clock says when it was made. A change
-// that can never succeed is dropped and its error returned; at one worth trying again, sending
-// stops and QueueHeld is thrown. The queue is read again before each send, since changes made
-// meanwhile are appended to it.
+// that can never succeed, or has been tried for too long, is dropped and its error returned; at one
+// worth trying again, sending stops and QueueHeld is thrown. The queue is read again before each
+// send, since changes made meanwhile are appended to it.
 export async function sendQueue(apiAt: (at: Date) => AshbornApi): Promise<string[]> {
   const refused: string[] = [];
 
@@ -231,8 +235,10 @@ export async function sendQueue(apiAt: (at: Date) => AshbornApi): Promise<string
     } catch (error) {
       // No connection says nothing about the change; a server error counts against it
       if (isConnectionError(error)) throw new QueueHeld((error as Error).message, tries);
-      if (!refusedForGood(error)) {
-        saveQueue([{ ...next, tries: tries + 1 }, ...loadQueue().slice(1)]);
+      const failingSince = next.failingSince ?? new Date().toISOString();
+      const givenUp = tries + 1 >= GIVE_UP_TRIES && Date.now() - Date.parse(failingSince) >= GIVE_UP_MS;
+      if (mayPass(error) && !givenUp) {
+        saveQueue([{ ...next, tries: tries + 1, failingSince }, ...loadQueue().slice(1)]);
         throw new QueueHeld((error as Error).message, tries + 1);
       }
       refused.push((error as Error).message);
@@ -243,12 +249,17 @@ export async function sendQueue(apiAt: (at: Date) => AshbornApi): Promise<string
   return refused;
 }
 
-// A change the server can never accept: a refusal of ours ("deleted on another device", a unit of
-// the wrong kind), or a Postgres error in the data (22), a constraint (23), access or schema (42),
-// a raised exception (P0001), or a row not found (PGRST116). Anything else (no connection, 5xx, 429, an expired sign-in) may pass.
-function refusedForGood(error: unknown) {
-  if (error instanceof ServerError) return /^(22|23|42)/.test(error.code) || error.code === "P0001" || error.code === "PGRST116";
-  return true;
+// A server error that may pass: with no Postgres code, the server unreachable or overloaded (0,
+// 408, 429, 5xx) or an expired sign-in (401); from PostgREST, no database connection (PGRST0xx),
+// a schema cache not yet holding a migration (PGRST2xx) or an expired sign-in (PGRST3xx); from
+// Postgres, a lost connection (08), clashing transactions (40), no resources (53), a lock not
+// granted (55P03) or a cancelled statement (57). Anything else, and any refusal of ours ("deleted
+// on another device", a unit of the wrong kind), can never succeed.
+function mayPass(error: unknown) {
+  if (!(error instanceof ServerError)) return false;
+  const { code, status } = error;
+  if (code === "") return [0, 401, 408, 429].includes(status) || status >= 500;
+  return /^(08|40|53|57|PGRST[023])/.test(code) || code === "55P03";
 }
 
 // Supabase reports an unreachable server as a failed fetch, and a request given up on as a timeout
