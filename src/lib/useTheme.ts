@@ -60,36 +60,45 @@ function inkRgb(): [number, number, number] {
   return Number.isNaN(value) ? [255, 255, 255] : [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
-// A trial switch, until the user picks one: how a prioritized chain looks on the graph, A (coloured
-// chain), B (spotlight) or C (rail); data-priority-look on <html>, which index.css reads
-export type PriorityLook = "a" | "b" | "c";
-const lookKey = "ashborn-priority-look";
+// A trial switch, until the user picks one: the heading font, data-heading-font on <html>, which
+// index.css reads
+export const headingFonts = ["mono", "cinzel", "vt323", "silkscreen", "chakra", "space"] as const;
+export type HeadingFont = (typeof headingFonts)[number];
+export const headingFontNames: Record<HeadingFont, string> = {
+  mono: "JetBrains Mono",
+  cinzel: "Cinzel",
+  vt323: "VT323",
+  silkscreen: "Silkscreen",
+  chakra: "Chakra Petch",
+  space: "Space Mono throughout",
+};
+const headingFontKey = "ashborn-heading-font";
 
-export function storedPriorityLook(): PriorityLook {
+export function storedHeadingFont(): HeadingFont {
   try {
-    const look = window.localStorage.getItem(lookKey);
-    return look === "b" || look === "c" ? look : "a";
+    const font = window.localStorage.getItem(headingFontKey);
+    return headingFonts.find((name) => name === font) ?? "mono";
   } catch {
-    return "a";
+    return "mono";
   }
 }
 
-export function setPriorityLook(look: PriorityLook) {
-  document.documentElement.dataset.priorityLook = look;
+export function setHeadingFont(font: HeadingFont) {
+  document.documentElement.dataset.headingFont = font;
   try {
-    window.localStorage.setItem(lookKey, look);
+    window.localStorage.setItem(headingFontKey, font);
   } catch {
-    // Storage blocked: the look lasts until the app closes
+    // Storage blocked: the font lasts until the app closes
   }
   listeners.forEach((listener) => listener());
 }
 
-export function usePriorityLook(): PriorityLook {
+export function useHeadingFont(): HeadingFont {
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    () => (document.documentElement.dataset.priorityLook as PriorityLook | undefined) ?? "a",
+    () => (document.documentElement.dataset.headingFont as HeadingFont | undefined) ?? "mono",
   );
 }

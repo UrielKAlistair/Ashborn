@@ -23,14 +23,14 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
     <div className={`flex shrink-0 flex-col items-center ${card ? "w-48" : "w-28"}`}>
       <div className={`relative flex items-end justify-center ${card ? "w-48" : "w-28"}`}>
         <svg viewBox="0 0 56 48" className="absolute inset-x-0 bottom-0 mx-auto w-full" aria-hidden="true">
-          <polygon points={HEX_POINTS} strokeLinejoin="round" strokeWidth="0.8" className="fill-ember/[0.07] stroke-ember/30" />
+          <polygon points={HEX_POINTS} strokeLinejoin="round" strokeWidth="0.6" className="fill-ink/[0.03] stroke-ink/35" />
         </svg>
         <div className="relative">
           <Portrait tier={tier} zoom={card ? CARD_PORTRAIT_ZOOM : 1} />
         </div>
       </div>
-      <p className={`mt-3 font-display font-semibold text-ink/90 ${card ? "text-lg" : "text-sm"}`}>
-        Level <span className="text-ember">{overall.level}</span>
+      <p className={`caps mt-3 font-display font-bold text-ink/80 ${card ? "text-base" : "text-[12px]"}`}>
+        Lvl <span className="text-ember">{overall.level}</span>
       </p>
       <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-ink/8">
         <div className="progress-fill h-full rounded-full bg-ember" style={{ width: `${overall.percent}%` }} />

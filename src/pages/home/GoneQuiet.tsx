@@ -21,7 +21,7 @@ export function GoneQuiet({ quiet, snapshot, model, act, openAtFirst }: { quiet:
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-1.5 px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8"
+        className="caps flex w-full items-center gap-1.5 px-1 font-display text-[11px] font-semibold text-ink/65 hover:text-ink/85 pointer-coarse:min-h-8"
       >
         <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>›</span>
         Gone quiet <span className="font-mono tabular-nums">{quiet.length}</span>

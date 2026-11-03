@@ -6,7 +6,7 @@ import path from "node:path";
 import { addDays, today } from "../../src/shared/dates";
 
 // Priorities: a chain's priority reaches its prerequisites, only ready covered steps are on the
-// to-do, chains float up, and a linked deadline raises one. Also takes the looks' screenshots.
+// to-do, chains float up, and a linked deadline raises one. Also takes the graph's screenshot.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 const shots = "research/graph-layout/shots";
@@ -67,13 +67,13 @@ const canvasXY = async (title: string) => {
 };
 
 test("priorities", async () => {
-  await test.step("with none set, the to-do is empty and nothing is dimmed", async () => {
+  await test.step("with none set, the to-do is empty and nothing is marked", async () => {
     await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
     await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(quest("DDP Work")).toBeVisible({ timeout: 20_000 });
     await expect(upNext()).toContainText("Nothing with a priority is ready");
-    await expect(page.locator('[data-priority="none"]')).toHaveCount(0);
+    await expect(page.locator(".react-flow__node [data-priority]")).toHaveCount(0);
   });
 
   await test.step("a priority set on a step in the app reaches its prerequisite: the prerequisite is on the to-do, the step is not yet", async () => {
@@ -101,6 +101,9 @@ test("priorities", async () => {
     expect((await canvasXY("Online BSc")).y).toBe(0);
     await expect(upNext()).toContainText("Course 1");
     await expect(upNext()).not.toContainText("Practice quiz");
+    // The quest is marked; its steps carry its priority without a mark of their own
+    await expect(quest("Online BSc").locator("[data-priority]")).toHaveAttribute("data-priority", "1");
+    await expect(page.locator(".react-flow__node-step", { hasText: "Course 1" }).locator("[data-priority]")).toHaveCount(0);
   });
 
   await test.step("a deadline linked in the app raises its chain as it nears", async () => {
@@ -112,12 +115,6 @@ test("priorities", async () => {
     await expect.poll(async () => (await db.from("deadlines").select("node_id").eq("title", "Apply by").single()).data?.node_id).toBe(ids.apply);
   });
 
-  await test.step("the three looks", async () => {
-    await page.waitForTimeout(800);
-    for (const look of ["a", "b", "c"]) {
-      await page.evaluate((value) => document.documentElement.setAttribute("data-priority-look", value), look);
-      await page.waitForTimeout(200);
-      await page.screenshot({ path: `${shots}/priority-${look}.png` });
-    }
-  });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${shots}/priority.png` });
 });

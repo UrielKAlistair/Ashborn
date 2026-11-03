@@ -1,25 +1,33 @@
 @import "tailwindcss";
-@import "@fontsource-variable/inter";
-@import "@fontsource/space-grotesk/500.css";
-@import "@fontsource/space-grotesk/600.css";
 @import "@fontsource/pixelify-sans/500.css";
 @import "@fontsource/pixelify-sans/600.css";
 @import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
+@import "@fontsource/cinzel/600.css";
+@import "@fontsource/cinzel/700.css";
+@import "@fontsource/vt323/400.css";
+@import "@fontsource/silkscreen/400.css";
+@import "@fontsource/chakra-petch/600.css";
+@import "@fontsource/chakra-petch/700.css";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
 
 /* Two themes, Ember (dark, the default) and Parchment (light), set by data-theme on <html>.
    Components colour themselves with `ink` (text, lines and tints, at an opacity), `canvas`, and
    `panel` and `card` (surfaces on it); each theme sets those.
    Parchment also darkens the pale accent shades that are written for a dark ground. */
 @theme {
-  --color-canvas: #0c0e13;
-  --color-panel: #12151c;
-  --color-card: #191d26;
-  --color-ink: #ece7df;
-  --color-ember: #f0a35e;
+  --color-canvas: #09090b;
+  --color-panel: #111113;
+  --color-card: #19191c;
+  --color-ink: #f6f6f7;
+  --color-ember: #f5a25a;
   /* Secondary text: at least 4.5:1 on every surface, which ink at an opacity is not on Parchment */
-  --color-muted: #94908a;
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", "Inter Variable", ui-sans-serif, sans-serif;
+  --color-muted: #a3a3ab;
+  --font-sans: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "JetBrains Mono", ui-monospace, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -38,7 +46,7 @@
   --color-ink: #33281a;
   --color-ember: #a84a17;
   --color-muted: #66553a;
-  --font-display: "Pixelify Sans", "Space Grotesk", ui-sans-serif, sans-serif;
+  --font-display: "Pixelify Sans", "JetBrains Mono", ui-monospace, monospace;
   --glow: rgb(255 248 222 / 0.6);
   --panel-shadow: 0 3px 0 rgb(110 84 40 / 0.22), 0 10px 24px rgb(90 64 30 / 0.12);
   --card-shadow: 0 2px 0 rgb(110 84 40 / 0.28), 0 12px 24px -10px rgb(90 64 30 / 0.28);
@@ -90,6 +98,15 @@
   --color-sky-400: oklch(58.8% 0.158 241.966);
 }
 
+/* A trial switch, until the user picks: the heading font, on <html data-heading-font>. Each is
+   scaled to JetBrains Mono's capital height, so a heading keeps its size whichever font draws it. */
+:root[data-heading-font="cinzel"] { --font-display: "Cinzel", serif; }
+:root[data-heading-font="vt323"] { --font-display: "VT323", monospace; }
+:root[data-heading-font="silkscreen"] { --font-display: "Silkscreen", monospace; }
+:root[data-heading-font="chakra"] { --font-display: "Chakra Petch", sans-serif; }
+:root[data-heading-font="space"] { --font-display: "Space Mono", monospace; --font-sans: "Space Mono", monospace; }
+:root[data-heading-font]:not([data-heading-font="mono"]) .font-display { font-size-adjust: cap-height 0.73; }
+
 html,
 body,
 #root {
@@ -102,8 +119,13 @@ body,
 body {
   height: 100vh;
   font-family: var(--font-sans);
-  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
+}
+
+/* Section headings: small capitals, spaced */
+@utility caps {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
 }
 
 /* Surfaces that float on the canvas */
@@ -163,16 +185,12 @@ body {
   fill: currentColor;
 }
 
-/* A chain's priority on the graph. Three looks to choose between, on <html data-priority-look>. */
+/* A chain's priority on the graph: a rail down a quest box's left edge, a border round a step */
 :root {
   --priority-1: #f4715a;
   --priority-2: #eab04d;
   --priority-3: #5cb8e4;
   --priority-4: #a68cf2;
-  --priority-edge-1: var(--priority-1);
-  --priority-edge-2: var(--priority-2);
-  --priority-edge-3: var(--priority-3);
-  --priority-edge-4: var(--priority-4);
 }
 :root[data-theme="light"],
 :root[data-theme="meadow"] {
@@ -193,38 +211,11 @@ body {
 [data-priority="3"] { --mark: var(--priority-3); }
 [data-priority="4"] { --mark: var(--priority-4); }
 
-/* A: the chain in its colour, everything else dimmed */
-:root[data-priority-look="a"] [data-priority="none"],
-:root:not([data-priority-look]) [data-priority="none"] { opacity: 0.45; }
-/* Fading towards a pale ground loses more contrast than towards a dark one */
-:root[data-theme="light"][data-priority-look="a"] [data-priority="none"],
-:root[data-theme="light"]:not([data-priority-look]) [data-priority="none"] { opacity: 0.6; }
-/* On Meadow's tiles a see-through card lets the ground through its text: wash it out, solid, instead */
-:root[data-theme="meadow"][data-priority-look="a"] [data-priority="none"],
-:root[data-theme="meadow"]:not([data-priority-look]) [data-priority="none"] { opacity: 1; filter: grayscale(0.7) contrast(0.7) brightness(1.1); }
-:root[data-priority-look="a"] [data-priority]:not([data-priority="none"]) > .priority-mark,
-:root:not([data-priority-look]) [data-priority]:not([data-priority="none"]) > .priority-mark {
-  border-width: 1.5px;
-  border-color: var(--mark);
-  background: color-mix(in srgb, var(--mark) 9%, transparent);
+.react-flow__node-quest [data-priority] > .priority-mark {
+  border-left: 4px solid var(--mark);
 }
-
-/* B: one spotlight colour, brighter the more urgent, everything else strongly dimmed */
-:root[data-priority-look="b"] { --priority-edge-1: var(--color-ember); --priority-edge-2: color-mix(in oklab, var(--color-ember) 80%, transparent); --priority-edge-3: color-mix(in oklab, var(--color-ember) 60%, transparent); --priority-edge-4: color-mix(in oklab, var(--color-ember) 40%, transparent); }
-:root[data-priority-look="b"] [data-priority="none"] { opacity: 0.28; }
-:root[data-priority-look="b"] [data-priority]:not([data-priority="none"]) > .priority-mark { border-width: 1px; border-color: var(--color-ember); }
-:root[data-priority-look="b"] [data-priority="1"] > .priority-mark { box-shadow: 0 0 26px 3px color-mix(in oklab, var(--color-ember) 60%, transparent); }
-:root[data-priority-look="b"] [data-priority="2"] > .priority-mark { box-shadow: 0 0 16px 1px color-mix(in oklab, var(--color-ember) 40%, transparent); border-color: color-mix(in oklab, var(--color-ember) 80%, transparent); }
-:root[data-priority-look="b"] [data-priority="3"] > .priority-mark { box-shadow: 0 0 8px color-mix(in oklab, var(--color-ember) 20%, transparent); border-color: color-mix(in oklab, var(--color-ember) 60%, transparent); }
-:root[data-priority-look="b"] [data-priority="4"] > .priority-mark { border-color: color-mix(in oklab, var(--color-ember) 40%, transparent); }
-
-/* C: a coloured rail down the card's left edge, nothing dimmed */
-:root[data-priority-look="c"] [data-priority]:not([data-priority="none"]) > .priority-mark { border-left-width: 5px; border-left-color: var(--mark); }
-
-/* A quest box takes its chain's colour on its border only; the steps carry the tint */
-:root:not([data-priority-look]) .react-flow__node-quest .priority-mark,
-:root[data-priority-look="a"] .react-flow__node-quest .priority-mark {
-  background: transparent !important;
+.react-flow__node-step [data-priority] > .priority-mark {
+  border: 1.5px solid var(--mark);
 }
 
 /* Progress shows as it happens: bars grow into their new length, a tick pops once */

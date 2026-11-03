@@ -21,7 +21,7 @@ export function MealPlan({ kitchen, dayStartHour, act, phone, onOpenRecipe }: Me
   return (
     <section className="panel-lift rounded-2xl border border-ink/8 bg-panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-sm font-semibold text-ink/85">{defaults ? "Default week" : "Meal plan"}</h2>
+        <h2 className="caps font-display text-[13px] font-bold text-ink/85">{defaults ? "Default week" : "Meal plan"}</h2>
         <button
           type="button"
           role="switch"
@@ -281,7 +281,7 @@ function DefaultWeek({ kitchen, act, phone, onOpenRecipe }: { kitchen: Kitchen; 
       {week.map((weekday) => (
         <div key={weekday} className={phone ? "flex w-full shrink-0 snap-center px-0.5" : "flex min-h-0"}>
           <div aria-label={`Default meals on ${weekday}`} className="panel-scroll flex min-h-0 w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-ink/[0.015] p-2">
-            <p className="px-1 pb-0.5 font-display text-[13px] font-semibold text-ink/85">{weekday}</p>
+            <p className="caps px-1 pb-0.5 font-display text-[11px] font-semibold text-ink/70">{weekday}</p>
             {mealSlots.map((slot) => (
               <DefaultCell key={slot} kitchen={kitchen} act={act} weekday={weekday} slot={slot} onOpenRecipe={onOpenRecipe} />
             ))}

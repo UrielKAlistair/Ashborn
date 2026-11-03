@@ -51,7 +51,7 @@ export function ConsentPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-canvas p-4 text-ink">
       <section className="w-full max-w-sm panel-lift rounded-2xl border border-ink/8 bg-panel p-6">
-        <h1 className="mb-5 text-center font-display text-lg font-semibold text-ink/90">Ashborn</h1>
+        <h1 className="caps mb-5 text-center font-display text-sm font-bold text-ink/90">Ashborn</h1>
         {state.step === "loading" || state.step === "leaving" ? <p className="text-center text-[13px] text-muted">One moment…</p> : null}
         {state.step === "signIn" ? <SignIn onSignedIn={() => void load()} /> : null}
         {state.step === "failed" ? <p className="text-center text-[13px] leading-relaxed text-red-300">{state.message}</p> : null}

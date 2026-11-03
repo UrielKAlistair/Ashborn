@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { setPriorityLook, setTheme, themeNames, themes, usePriorityLook, useTheme, type PriorityLook } from "../lib/useTheme";
+import { headingFontNames, headingFonts, setHeadingFont, setTheme, themeNames, themes, useHeadingFont, useTheme } from "../lib/useTheme";
 import { HexTile } from "./HexTile";
 import { LeafIcon, MoonIcon, SunIcon } from "./icons";
 import { desktopSections, screenAt, sectionAt, type Section } from "./sections";
@@ -55,9 +55,10 @@ export function Navbar({
   }, [openSection]);
 
   const theme = useTheme();
-  const look = usePriorityLook();
   // The switch shows, and goes to, the next theme in turn
   const next = themes[(themes.indexOf(theme) + 1) % themes.length];
+  const font = useHeadingFont();
+  const fontLetter = String.fromCharCode(65 + headingFonts.indexOf(font));
 
   return (
     <aside className="relative z-10 flex h-full min-h-0 w-[5.5rem] shrink-0 flex-col items-center border-r border-ink/8 bg-panel/80 px-2 pt-10 pb-5">
@@ -77,7 +78,7 @@ export function Navbar({
                 <HexTile active={isActive} className="h-12 w-14">
                   <Icon className={isActive ? "text-ember" : ""} />
                 </HexTile>
-                <span className={`text-[10.5px] font-medium tracking-[0.06em] ${isActive ? "text-ink/90" : ""}`}>{section.label}</span>
+                <span className={`caps font-display text-[10px] font-semibold ${isActive ? "text-ink/90" : ""}`}>{section.label}</span>
               </button>
 
               {section.desktop.length > 1 ? (
@@ -98,11 +99,11 @@ export function Navbar({
 
       <button
         type="button"
-        onClick={() => setPriorityLook(nextLook[look])}
-        title={`Priority look ${look.toUpperCase()}: ${lookNames[look]}. A trial; click for the next`}
+        onClick={() => setHeadingFont(headingFonts[(headingFonts.indexOf(font) + 1) % headingFonts.length])}
+        title={`Font ${fontLetter}: ${headingFontNames[font]}. A trial; click for the next`}
         className="mb-1 rounded-md px-1.5 py-0.5 font-mono text-[10.5px] text-muted hover:bg-ink/8 hover:text-ink/85"
       >
-        Look {look.toUpperCase()}
+        Font {fontLetter}
       </button>
       <button
         type="button"
@@ -115,9 +116,6 @@ export function Navbar({
     </aside>
   );
 }
-
-const nextLook: Record<PriorityLook, PriorityLook> = { a: "b", b: "c", c: "a" };
-const lookNames: Record<PriorityLook, string> = { a: "coloured chain", b: "spotlight", c: "rail" };
 
 // A section's pages, unfolding below its button: the grid row grows from nothing to the
 // list's height, so the change animates
@@ -152,7 +150,7 @@ function ScreenMenu({
               }`}
             >
               <Icon className="h-5 w-5" />
-              <span className="text-[10px] font-medium tracking-[0.04em]">{screen.label}</span>
+              <span className="caps font-display text-[9.5px] font-semibold">{screen.label}</span>
             </button>
           );
         })}

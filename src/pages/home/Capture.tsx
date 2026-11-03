@@ -169,7 +169,7 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
   return (
     <section aria-label="Sort the Inbox" className="-mt-3 rounded-xl border border-ember/40 bg-card p-4">
       <div className="flex items-center gap-2">
-        <span className="font-display text-[13px] font-semibold text-ember">Sort</span>
+        <span className="caps font-display text-[11px] font-bold text-ember">Sort</span>
         <span className="flex-1" />
         <span className="font-mono text-[11px] text-muted tabular-nums">
           {place} of {total}

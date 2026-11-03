@@ -35,7 +35,7 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
               <HexTile active={isActive} className="h-9 w-[42px]">
                 <Icon />
               </HexTile>
-              <span className="text-[10.5px] font-medium">{section.label}</span>
+              <span className="caps font-display text-[10px] font-semibold">{section.label}</span>
             </button>
 
             {openSection === section ? (

@@ -137,9 +137,8 @@ type CardData = {
   actions: CardActions;
 };
 
-// How a card shows priority: the most urgent inside it, "none" dimmed while anything has one, and
-// undefined, plain, while nothing has
-type PriorityLook = Priority | "none" | undefined;
+// How a card shows priority: a quest box the most urgent inside it, a step its own chain's
+type PriorityLook = Priority | undefined;
 
 // What a card can do, one object shared by every card; each takes the card's node id
 type CardActions = {
@@ -373,7 +372,6 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
 
   // Each node keeps its previous object while its position, size and data are unchanged, so a
   // drag hands React Flow one new node per move, and an edit only the nodes it touched
-  const lookOf = (id: string): PriorityLook => priorities.best.get(id) ?? (priorities.best.size > 0 ? "none" : undefined);
   const built = useRef(new Map<string, Node<CardData>>());
   const nodes = useMemo<Node<CardData>[]>(() => {
     const previous = built.current;
@@ -393,8 +391,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         locked: !unlocked.has(questId),
         adding: addingTo === node.id,
         menuOpen: menuFor === node.id,
-        // The Inbox is unsorted, not unimportant: never dimmed for having no priority
-        look: questId === snapshot.inboxId ? priorities.best.get(node.id) : lookOf(node.id),
+        look: depth === 0 ? priorities.best.get(node.id) : priorities.marked.get(node.id),
         phone,
         sortable: depth > 0 && questId === snapshot.inboxId,
         actions,
@@ -443,8 +440,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         const depth = depthOf.get(edge.from) ?? 0;
         // A link out of a done step is a met prerequisite
         const met = model.byId.get(edge.from)?.completedAt;
-        const priority = priorities.effective.get(edge.to);
-        const color = met ? linkDone : priority ? `var(--priority-edge-${priority})` : linkOpen;
+        const priority = priorities.marked.get(edge.to);
+        const color = met ? linkDone : priority ? `var(--priority-${priority})` : linkOpen;
         return {
           id: `${edge.from}->${edge.to}`,
           source: edge.from,
@@ -577,7 +574,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
 
           {questsOpen ? (
             <div className="w-72 rounded-xl border border-ink/10 bg-card p-3 shadow-[var(--card-shadow)]">
-              <p className="font-display text-[12px] font-semibold text-ink/60">Shown on the graph</p>
+              <p className="caps font-display text-[11px] font-semibold text-ink/60">Shown on the graph</p>
               <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">
                 {quests.filter((quest) => !completed.includes(quest) && !archived.includes(quest)).map((quest) => (
                   <label key={quest.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[13px] text-ink/80 hover:bg-ink/6">
@@ -652,7 +649,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
 
   return (
     <div data-priority={data.look} className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
-      <Handles height={questHeader.height} hidden={data.phone} />
+      <Handles hidden={data.phone} />
       <div className="priority-mark rounded-2xl" />
 
       {/* A sheet tinted in the quest's colour from the top */}
@@ -683,7 +680,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
         </div>
         <div>
           <span className="font-mono text-[10.5px] text-muted">
-            Lv {level.level}
+            LVL {level.level}
             {node.shelved ? <span className="ml-2 font-sans text-ink/60">· Shelved</span> : null}
           </span>
           <div className="mt-1 h-1 overflow-hidden rounded-full bg-ink/8">
@@ -818,10 +815,10 @@ function Title({ node, act, textSize, className }: { node: GraphNode; act: Act; 
   );
 }
 
-// Edges attach at the middle of the header row. On the phone, where linking is left to the
-// agent, the dots are hidden but still anchor the edges.
-function Handles({ height, hidden }: { height: number; hidden: boolean }) {
-  const style = { top: height / 2 };
+// Edges attach at the middle of a step's row, or of the whole quest box (no height). On the phone,
+// where linking is left to the agent, the dots are hidden but still anchor the edges.
+function Handles({ height, hidden }: { height?: number; hidden: boolean }) {
+  const style = height === undefined ? undefined : { top: height / 2 };
   // nodrag: pressing a dot draws a link rather than dragging the node
   const look = hidden ? "!invisible" : "nodrag !z-10 !h-2.5 !w-2.5 !border-ink/35 !bg-panel";
   return (
@@ -1369,7 +1366,7 @@ function FinishedQuests({ title, quests, buttons }: { title: string; quests: Gra
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="mt-3 flex w-full items-center gap-1.5 font-display text-[12px] font-semibold text-ink/60 hover:text-ink/85"
+        className="caps mt-3 flex w-full items-center gap-1.5 font-display text-[11px] font-semibold text-ink/60 hover:text-ink/85"
       >
         <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>›</span>
         {title} <span className="font-mono font-normal text-muted tabular-nums">{quests.length}</span>

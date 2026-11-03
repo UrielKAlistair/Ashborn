@@ -137,3 +137,11 @@ test("each covered node knows where its priority comes from: the node set, or th
   expect(priorities.origin.get("b")).toEqual({ nodeId: "b", deadlineId: null });
   expect(priorities.origin.get("c")).toEqual({ nodeId: "d", deadlineId: "d-2026-11-03" });
 });
+
+test("the graph marks a chain but not the steps inside the box it was set on", () => {
+  const { priorities } = setup(
+    [node("quest", null, { priority: 1 }), node("box", "quest"), node("inner", "box"), node("other", null), node("x", "other"), node("y", "other", { priority: 3 })],
+    [{ from: "x", to: "y" }],
+  );
+  expect(asObject(priorities.marked)).toEqual({ quest: 1, x: 3, y: 3 });
+});

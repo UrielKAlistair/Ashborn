@@ -8,6 +8,7 @@ import type { GraphNode, ISODate, Priority, Snapshot } from "./types";
 export type Priorities = {
   effective: Map<string, Priority>; // what covers the node; absent: nothing does
   best: Map<string, Priority>; // the most urgent in the node and everything inside it
+  marked: Map<string, Priority>; // what the graph marks: covered, but not as a step inside the node it was set on
   origin: Map<string, PriorityOrigin>; // where a covered node's priority comes from
 };
 
@@ -57,7 +58,13 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot, date: IS
   };
   (model.children.get(null) ?? []).forEach(bestIn);
 
-  return { effective, best, origin };
+  const inside = (id: string, boxId: string) => {
+    for (let parent = model.byId.get(id)?.parentId; parent; parent = model.byId.get(parent)?.parentId) if (parent === boxId) return true;
+    return false;
+  };
+  const marked = new Map([...effective].filter(([id]) => !inside(id, origin.get(id)!.nodeId)));
+
+  return { effective, best, marked, origin };
 }
 
 // Most urgent first, the given order kept among equals; no priority comes last

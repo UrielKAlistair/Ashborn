@@ -51,7 +51,7 @@ export function AtlasSidebarSection({
         onClick={onToggle}
         className="flex w-full items-center justify-between rounded-lg px-1 py-1 text-left hover:bg-ink/[0.03]"
       >
-        <span className="font-display text-[13px] font-semibold text-ink/80">
+        <span className="caps font-display text-[11px] font-semibold text-ink/70">
           {label}
         </span>
         <span className={`inline-block text-muted transition-transform ${isOpen ? "rotate-90" : ""}`}>›</span>

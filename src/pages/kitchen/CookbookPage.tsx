@@ -52,7 +52,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
   const list = (
     <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-4">
       <div className="mb-1 flex items-center justify-between">
-        <h2 className="font-display text-sm font-semibold text-ink/85">Recipes</h2>
+        <h2 className="caps font-display text-[13px] font-bold text-ink/85">Recipes</h2>
         <button type="button" onClick={startNew} className="rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 max-sm:min-h-11">
           + New recipe
         </button>
@@ -369,7 +369,7 @@ function ReminderRow({ reminder, others, onChange, onRemove }: { reminder: Recip
 function Part({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
     <div className="space-y-2">
-      <h3 className="font-display text-[13px] font-semibold text-ink/80">{title}</h3>
+      <h3 className="caps font-display text-[11px] font-semibold text-ink/65">{title}</h3>
       {hint ? <p className="-mt-1 text-[11.5px] text-muted">{hint}</p> : null}
       {children}
     </div>

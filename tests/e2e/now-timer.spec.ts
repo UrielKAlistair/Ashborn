@@ -54,7 +54,7 @@ test("start timer and passing over", async () => {
     await now.getByRole("button", { name: "Stop" }).click();
     await expect(now.getByRole("timer")).toHaveCount(0);
     expect(await storage("ashborn-now-timer")).toBeNull();
-    await expect(page.getByRole("group", { name: "Up next" })).toBeVisible();
+    await expect(page.getByText("Up next", { exact: true })).toBeVisible();
   });
 
   await test.step("when the time is up: Done, or keep going", async () => {
@@ -62,7 +62,7 @@ test("start timer and passing over", async () => {
     await page.reload();
     await expect(now).toContainText("Email the professor", { timeout: 15_000 });
     await expect(now).toContainText("Time's up. Done, or keep going?");
-    await expect(page.getByRole("group", { name: "Up next" })).toBeVisible(); // the box is over
+    await expect(page.getByText("Up next", { exact: true })).toBeVisible(); // the box is over
     await now.getByRole("button", { name: "5 more minutes" }).click();
     await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/[45]:\d\d/);
     await now.getByRole("button", { name: "Done" }).click();

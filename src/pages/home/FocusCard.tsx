@@ -139,7 +139,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   return (
     <section data-priority={priority} aria-label="Now" className="rounded-xl border border-[color-mix(in_oklab,var(--mark)_40%,transparent)] bg-card p-4">
       <div className="flex items-center gap-2">
-        <span className="font-display text-[13px] font-semibold text-ember">Now</span>
+        <span className="caps font-display text-[11px] font-bold text-ember">Now</span>
         <span className="rounded-md bg-[color-mix(in_oklab,var(--mark)_15%,transparent)] px-1.5 font-mono text-[11px] font-semibold text-[var(--mark)]">P{priority}</span>
         <span className="flex-1" />
         <span className="font-mono text-[11px] text-muted tabular-nums">

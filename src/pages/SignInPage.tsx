@@ -27,7 +27,7 @@ export function SignInPage() {
         <HexTile active className="mx-auto h-14 w-16 text-ember">
           <HomeIcon className="h-7 w-7" />
         </HexTile>
-        <h1 className="mb-2 text-center font-display text-lg font-semibold text-ink/90">Sign in</h1>
+        <h1 className="caps mb-2 text-center font-display text-sm font-bold text-ink/90">Sign in</h1>
         <input type="email" required autoFocus placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} className={field} />
         <input type="password" required placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className={field} />
         <button type="submit" disabled={busy} className="rounded-lg bg-ember px-3 py-2 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 max-sm:min-h-11">

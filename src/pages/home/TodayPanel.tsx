@@ -84,7 +84,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   return (
     <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-ink/8 bg-panel px-4 py-4">
       <div className="flex items-baseline justify-between px-1">
-        <h2 className="font-display text-lg font-semibold text-ink/90">Today</h2>
+        <h2 className="caps font-display text-[13px] font-bold text-ink/90">Today</h2>
         <button
           type="button"
           onClick={() => setDayStartOpen((open) => !open)}
@@ -158,7 +158,17 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         <p className="-mt-2 px-1 text-[12px] text-muted">The rest of the list waits until the timer ends.</p>
       ) : (
         <>
-          <Section title="Up next">
+          <Section
+            title="Up next"
+            action={
+              todoCount > 0 ? (
+                // In the heading, so it stays put whichever way it is
+                <button type="button" onClick={() => setShowAll(!showAll)} className="text-[11.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
+                  {showAll ? "Show only Now" : todoCount === 1 ? "Show the list" : `Show all ${todoCount} ready`}
+                </button>
+              ) : undefined
+            }
+          >
             {todo.length === 0 ? (
               <Empty>
                 {!model.children.get(null)?.length
@@ -167,11 +177,6 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     ? "Nothing with a priority is ready. Give a quest a priority below, and its next step shows here."
                     : "Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here."}
               </Empty>
-            ) : null}
-            {todoCount > 0 && !showAll ? (
-              <button type="button" onClick={() => setShowAll(true)} className="px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
-                › {todoCount === 1 ? "Show the list" : `Show all ${todoCount} ready`}
-              </button>
             ) : null}
             {showAll ? (
               <>
@@ -201,9 +206,6 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     })}
                   </div>
                 ))}
-                <button type="button" onClick={() => setShowAll(false)} className="px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
-                  ‹ Show only Now
-                </button>
               </>
             ) : null}
           </Section>
@@ -287,7 +289,7 @@ function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[];
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-1.5 px-1 text-[12.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8"
+        className="caps flex w-full items-center gap-1.5 px-1 font-display text-[11px] font-semibold text-ink/65 hover:text-ink/85 pointer-coarse:min-h-8"
       >
         <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>›</span>
         Ready, no priority <span className="font-mono tabular-nums">{steps.length}</span>
@@ -516,7 +518,7 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
   return (
     <div>
       <div className="relative mb-2 flex items-center justify-between px-1">
-        <p className="font-display text-[13px] font-semibold text-ink/70">{title}</p>
+        <p className="caps font-display text-[11px] font-semibold text-ink/65">{title}</p>
         {action}
       </div>
       <div role="group" aria-label={title} className="space-y-2">

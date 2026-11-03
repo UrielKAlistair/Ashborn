@@ -15,7 +15,7 @@ export function StockPanel({ kitchen, act }: { kitchen: Kitchen; act: Act }) {
 
   return (
     <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-      <h2 className="font-display text-sm font-semibold text-ink/85">Stocks</h2>
+      <h2 className="caps font-display text-[13px] font-bold text-ink/85">Stocks</h2>
       {items.length === 0 ? <p className="text-[12px] text-muted">Track a staple below and its bar shows here.</p> : null}
       {items.map((item) => (
         <StockBar key={item.id} item={item} act={act} />

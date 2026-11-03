@@ -39,7 +39,7 @@ export function KeyHelp() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/50" onClick={() => setOpen(false)}>
       <div role="dialog" aria-label="Keys" className="w-80 rounded-2xl border border-ink/10 bg-card p-5 shadow-[var(--card-shadow)]">
-        <p className="font-display text-base font-semibold text-ink/90">Keys</p>
+        <p className="caps font-display text-[13px] font-bold text-ink/90">Keys</p>
         <dl className="mt-3 space-y-2 text-[13px]">
           {keys.map(([key, does]) => (
             <div key={key} className="flex items-baseline gap-3">

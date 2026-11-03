@@ -33,7 +33,7 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
     <div className="panel-scroll flex min-h-0 min-w-0 flex-1 justify-center gap-5 max-sm:flex-col max-sm:justify-start max-sm:overflow-y-auto">
       <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 w-full max-w-xl flex-col gap-6 overflow-y-auto p-5 max-sm:max-w-none max-sm:shrink-0 max-sm:overflow-visible">
         <div className="flex items-baseline justify-between">
-          <h1 className="font-display text-base font-semibold text-ink/90">Alarms</h1>
+          <h1 className="caps font-display text-[13px] font-bold text-ink/90">Alarms</h1>
           {alarmsAvailable ? null : <p className="text-[11.5px] text-muted">They ring on your phone.</p>}
         </div>
 
@@ -55,7 +55,7 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
         <NewAlarm onCreate={create} />
 
         <div>
-          <p className="mb-2 font-display text-[13px] font-semibold text-ink/80">Your alarms</p>
+          <p className="caps mb-2 font-display text-[11px] font-semibold text-ink/65">Your alarms</p>
           {mine.length === 0 ? <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">None set.</p> : null}
           <div className="space-y-2">
             {mine.map((alarm) => (
@@ -79,7 +79,7 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
       </section>
 
       <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 w-full max-w-sm flex-col gap-4 overflow-y-auto p-5 max-sm:max-w-none max-sm:shrink-0 max-sm:overflow-visible">
-        <h2 className="font-display text-[13px] font-semibold text-ink/80">From your schedule, next {SCHEDULE_DAYS} days</h2>
+        <h2 className="caps font-display text-[11px] font-semibold text-ink/65">From your schedule, next {SCHEDULE_DAYS} days</h2>
         {days.length === 0 ? <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">Routines and deadlines with an alarm time show here.</p> : null}
         {days.map(({ label, alarms }) => (
           <div key={label}>
@@ -116,7 +116,7 @@ function Reliability({ permissions }: { permissions: AlarmPermissions }) {
 
   return (
     <div className="space-y-1 rounded-xl bg-ink/[0.03] p-3">
-      <p className="px-1 pb-1 font-display text-[13px] font-semibold text-ink/80">Alarm reliability</p>
+      <p className="caps px-1 pb-1 font-display text-[11px] font-semibold text-ink/65">Alarm reliability</p>
       {items.map((item) => (
         <button key={item.label} type="button" onClick={item.fix} disabled={item.done === true} className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left text-[13px] max-sm:min-h-11">
           <span className={item.done ? "text-emerald-300" : item.done === false ? "text-amber-300" : "text-muted"}>{item.done ? "✓" : item.done === false ? "!" : "?"}</span>
