@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -19,7 +20,7 @@ import androidx.core.app.NotificationCompat;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-// Rings an alarm until the app stops it: loops the alarm sound at alarm volume, vibrates, and
+// Rings an alarm until the app stops it: loops the alarm sound as the ringer allows, vibrates, and
 // shows the app over the lock screen. A plain alarm can also be dismissed or snoozed from its
 // notification; one with a challenge only stopped from the app, once the challenge is done.
 public class AlarmService extends Service {
@@ -86,12 +87,15 @@ public class AlarmService extends Service {
         return builder.build();
     }
 
+    // On silent or vibrate an alarm only vibrates. The sound plays on the ringtone stream, so the
+    // ringer's volume and Do Not Disturb apply to it as to a call.
     private void startSound() {
+        if (getSystemService(AudioManager.class).getRingerMode() != AudioManager.RINGER_MODE_NORMAL) return;
         Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
         if (sound == null) sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
         try {
             player = new MediaPlayer();
-            player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
             player.setDataSource(this, sound);
             player.setLooping(true);
             player.prepare();
