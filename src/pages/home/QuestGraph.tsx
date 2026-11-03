@@ -77,10 +77,8 @@ const openedStorageKey = "ashborn-opened";
 const fitOptions = { padding: 0.15, maxZoom: 1.1 };
 const zoomRange = { min: 0.15, max: 2 };
 
-// On the phone the whole graph would fit too small to read. The view opens instead on its
-// top-left corner, so the first quests' headers show, as wide as fits but never smaller than
-// PHONE_MIN_ZOOM; the rest is a pan away.
-const PHONE_MIN_ZOOM = 0.75;
+// On the phone the quests stand in one column, too tall to fit. The view opens on its top, zoomed
+// so the widest box fits the screen's width (never above 1); the rest is a scroll away.
 const PHONE_MARGIN = 12;
 // Room at the top for the toolbar (+ New quest, Quests) that floats over the canvas
 const PHONE_TOOLBAR_HEIGHT = 48;
@@ -90,7 +88,7 @@ function phoneViewport(shown: GraphNode[], placements: Record<string, Box>, pane
   const left = Math.min(...boxes.map((box) => box.position.x));
   const top = Math.min(...boxes.map((box) => box.position.y));
   const right = Math.max(...boxes.map((box) => box.position.x + box.size.width));
-  const zoom = Math.min(fitOptions.maxZoom, Math.max(PHONE_MIN_ZOOM, (paneWidth - 2 * PHONE_MARGIN) / (right - left)));
+  const zoom = Math.min(1, Math.max(zoomRange.min, (paneWidth - 2 * PHONE_MARGIN) / (right - left)));
   return { x: PHONE_MARGIN - left * zoom, y: PHONE_TOOLBAR_HEIGHT + PHONE_MARGIN - top * zoom, zoom };
 }
 
@@ -303,11 +301,12 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       renderedEdges.map((edge) => [edge.from, edge.to]),
       addingTo,
       fontsReady,
+      phone,
     ]);
     return { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone };
-  }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo, priorities, fontsReady]);
+  }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo, priorities, fontsReady, phone]);
   // The set of quests shown, whatever their order: a priority that only reorders them keeps the view
-  const topKey = shown.map((quest) => quest.id).sort().join();
+  const topKey = `${phone}:${shown.map((quest) => quest.id).sort().join()}`;
 
   const paneMeasured = useStore((state) => state.width > 0 && state.height > 0);
   const paneWidth = useStore((state) => state.width);
@@ -719,7 +718,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
 
   return (
     <div data-priority={data.look} className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
-      <Handles hidden={data.phone} />
+      <Handles phone={data.phone} />
       <div className="priority-mark rounded-2xl" />
 
       <div className="absolute inset-0 overflow-hidden rounded-2xl border border-ink/12 bg-card shadow-[var(--card-shadow)]" />
@@ -792,7 +791,7 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
         holdsSteps ? "bg-ink/[0.02]" : done ? "bg-ink/[0.012]" : "bg-panel"
       } ${data.shelved ? shelvedLook : ""}`}
     >
-      <Handles height={stepRow.height} hidden={data.phone} />
+      <Handles height={stepRow.height} phone={data.phone} />
       <div className="priority-mark rounded-xl" />
       <div className="relative flex items-center gap-2.5 px-3" style={{ height: data.header }}>
         {/* The tick and labels sit on the title's first line, where the links attach */}
@@ -829,7 +828,7 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
 function FoldedCard({ data, steps }: { data: CardData; steps: number }) {
   return (
     <div className="relative h-full w-full rounded-xl border border-ink/[0.06] bg-ink/[0.015]">
-      <Handles height={stepRow.height} hidden={data.phone} />
+      <Handles height={stepRow.height} phone={data.phone} />
       <button
         type="button"
         onClick={() => data.actions.open(data.node.id)}
@@ -908,16 +907,17 @@ function Title({ node, act, textSize, className }: { node: GraphNode; act: Act; 
   );
 }
 
-// Edges attach at the middle of a step's row, or of the whole quest box (no height). On the phone,
-// where linking is left to the agent, the dots are hidden but still anchor the edges.
-function Handles({ height, hidden }: { height?: number; hidden: boolean }) {
-  const style = height === undefined ? undefined : { top: height / 2 };
+// Edges attach at the middle of a step's row, or of the whole quest box (no height). On the phone
+// links run downward, so they attach at the top and bottom; linking there is left to the agent, so
+// the dots are hidden but still anchor the edges.
+function Handles({ height, phone }: { height?: number; phone: boolean }) {
+  const style = phone || height === undefined ? undefined : { top: height / 2 };
   // nodrag: pressing a dot draws a link rather than dragging the node
-  const look = hidden ? "!invisible" : "nodrag !z-10 !h-2.5 !w-2.5 !border-ink/35 !bg-panel";
+  const look = phone ? "!invisible" : "nodrag !z-10 !h-2.5 !w-2.5 !border-ink/35 !bg-panel";
   return (
     <>
-      <Handle type="target" position={Position.Left} style={style} className={look} />
-      <Handle type="source" position={Position.Right} style={style} className={look} />
+      <Handle type="target" position={phone ? Position.Top : Position.Left} style={style} className={look} />
+      <Handle type="source" position={phone ? Position.Bottom : Position.Right} style={style} className={look} />
     </>
   );
 }
@@ -1045,7 +1045,7 @@ function PriorityPicker({ node, act }: { node: GraphNode; act: Act }) {
           aria-label={priority ? `Priority ${priority}` : "No priority"}
           onClick={() => void act("updateNode", node.id, { priority })}
           data-priority={priority ?? "none"}
-          className={`flex-1 rounded-md border px-1 py-1 font-mono text-[11px] max-sm:min-h-11 ${node.priority === priority ? "border-[var(--mark,var(--color-ink))] bg-[color-mix(in_oklab,var(--mark,var(--color-ink))_14%,transparent)] text-ink" : "border-ink/10 text-muted hover:border-ink/25"}`}
+          className={`flex-1 rounded-md border px-1 py-1 font-mono text-[11px] phone:min-h-11 ${node.priority === priority ? "border-[var(--mark,var(--color-ink))] bg-[color-mix(in_oklab,var(--mark,var(--color-ink))_14%,transparent)] text-ink" : "border-ink/10 text-muted hover:border-ink/25"}`}
         >
           {priority ? `P${priority}` : "–"}
         </button>
@@ -1470,7 +1470,7 @@ function FinishedQuests({ title, quests, buttons }: { title: string; quests: Gra
                   key={label}
                   type="button"
                   onClick={() => onClick(quest.id)}
-                  className="rounded-md border border-ink/12 px-2 py-0.5 text-[11.5px] text-ink/70 hover:bg-ink/6 max-sm:min-h-11"
+                  className="rounded-md border border-ink/12 px-2 py-0.5 text-[11.5px] text-ink/70 hover:bg-ink/6 phone:min-h-11"
                 >
                   {label}
                 </button>
@@ -1532,7 +1532,7 @@ function StatWeightsEditor({ node, act }: { node: GraphNode; act: Act }) {
               onKeyDown={(event) => {
                 if (event.key === "Enter") event.currentTarget.blur();
               }}
-              className="w-14 rounded-md border border-ink/10 bg-canvas/60 px-1.5 py-0.5 text-right font-mono text-[12px] tabular-nums text-ink/85 [appearance:textfield] focus:border-ember/60 focus:outline-none max-sm:min-h-11 max-sm:w-16 [&::-webkit-inner-spin-button]:appearance-none"
+              className="w-14 rounded-md border border-ink/10 bg-canvas/60 px-1.5 py-0.5 text-right font-mono text-[12px] tabular-nums text-ink/85 [appearance:textfield] focus:border-ember/60 focus:outline-none phone:min-h-11 phone:w-16 [&::-webkit-inner-spin-button]:appearance-none"
             />
           </label>
         ))}
@@ -1552,6 +1552,8 @@ function parseWeight(draft: string): number | undefined {
 // Lays out every rendered level. Inside a box, steps the user has placed keep their place and
 // the rest are laid out automatically (prerequisites to the left) below them. A box is as big as
 // its content needs. Quests are packed on the canvas around the ones the user placed.
+// The phone has a layout of its own, fixed: nothing placed is read, prerequisites run top to
+// bottom, and the quests stand in one column in the order given.
 async function layoutTree(
   quests: GraphNode[],
   edges: GraphEdge[],
@@ -1561,6 +1563,8 @@ async function layoutTree(
   shape: CardShape,
 ) {
   const placements: Record<string, Box> = {};
+  const placedAt = (node: GraphNode) => (shape.phone ? null : node.position);
+  const direction = shape.phone ? "DOWN" : "RIGHT";
   const headerOf = (node: GraphNode, depth: number, width: number) => headerHeight(node, depth, width, shape);
   // Every title at its card's narrowest, in one pass; only a box wider than that is measured again
   const titles: TitleText[] = [];
@@ -1575,17 +1579,18 @@ async function layoutTree(
   const layoutSteps = async (nodes: GraphNode[], sizes: Size[]): Promise<ElkNode> => {
     const ids = new Set(nodes.map((node) => node.id));
     const links = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
-    const key = JSON.stringify([nodes.map((node, i) => [node.id, sizes[i].width, sizes[i].height]), links.map((edge) => [edge.from, edge.to])]);
+    const key = JSON.stringify([direction, nodes.map((node, i) => [node.id, sizes[i].width, sizes[i].height]), links.map((edge) => [edge.from, edge.to])]);
     const known = levelLayouts.get(key);
     if (known) return known;
     const result = await elk.layout({
       id: "level",
       layoutOptions: {
         "elk.algorithm": "layered",
-        "elk.direction": "RIGHT",
+        "elk.direction": direction,
         "elk.padding": "[top=0,left=0,bottom=0,right=0]",
         "elk.spacing.nodeNode": "12",
-        "elk.layered.spacing.nodeNodeBetweenLayers": "48",
+        // Room for a link's arrow between layers: across on the desktop, down on the phone
+        "elk.layered.spacing.nodeNodeBetweenLayers": shape.phone ? "28" : "48",
         "elk.spacing.componentComponent": "12",
         "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
         // Otherwise an unlinked step goes above the chains, whatever its priority
@@ -1609,12 +1614,13 @@ async function layoutTree(
     };
 
     nodes.forEach((node, i) => {
-      if (!node.position) return;
-      placements[node.id] = placed(node.position, sizes[i]);
-      extend(node.position, sizes[i]);
+      const position = placedAt(node);
+      if (!position) return;
+      placements[node.id] = placed(position, sizes[i]);
+      extend(position, sizes[i]);
     });
 
-    const loose = nodes.flatMap((node, i) => (node.position ? [] : [{ node, size: sizes[i] }]));
+    const loose = nodes.flatMap((node, i) => (placedAt(node) ? [] : [{ node, size: sizes[i] }]));
     if (loose.length > 0) {
       const result = await layoutSteps(
         loose.map(({ node }) => node),
@@ -1652,6 +1658,14 @@ async function layoutTree(
   };
 
   const sizes = await Promise.all(quests.map((quest) => measure(quest, 0)));
+  if (shape.phone) {
+    let top = 0;
+    quests.forEach((quest, i) => {
+      placements[quest.id] = placed({ x: 0, y: top }, sizes[i]);
+      top += sizes[i].height + questGap;
+    });
+    return placements;
+  }
   const sized = quests.map((quest, i) => ({ id: quest.id, position: quest.position, size: sizes[i] }));
   const pinned = sized.flatMap(({ id, position, size }) => (position ? [{ id, position, size }] : []));
   pinned.forEach(({ id, position, size }) => (placements[id] = placed(position, size)));
