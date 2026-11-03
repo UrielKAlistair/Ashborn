@@ -62,14 +62,14 @@ final class Schedule {
         for (JSONObject alarm : standalone) {
             String at = text(alarm, "at");
             if (!alarm.getBoolean("enabled") || at == null || instant(at) >= end) continue;
-            alarms.add(new Alarm("alarm:" + alarm.getString("id"), instant(at), label(alarm), alarm.getString("kind")));
+            alarms.add(new Alarm("alarm:" + alarm.getString("id") + "@" + instant(at), instant(at), label(alarm), alarm.getString("kind")));
         }
         String lastDate = isoDate(new GregorianCalendar(year, month, day + days - 1));
         for (JSONObject deadline : objects(snapshot.getJSONArray("deadlines"))) {
             String time = text(deadline, "alarmTime");
             String due = deadline.getString("dueDate");
             if (time == null || due.compareTo(lastDate) > 0) continue;
-            alarms.add(new Alarm("deadline:" + deadline.getString("id"), atTime(due, time), "Due today: " + deadline.getString("title"), "plain"));
+            alarms.add(new Alarm("deadline:" + deadline.getString("id") + "@" + due, atTime(due, time), "Due today: " + deadline.getString("title"), "plain"));
         }
 
         alarms.addAll(mealReminders(snapshot.getJSONObject("kitchen"), from, days));
@@ -82,13 +82,14 @@ final class Schedule {
         return due;
     }
 
-    // The reminders of meals shown from `from` over the next `days` days; a cancelled or cooked
-    // meal rings nothing, nor does a meal with no recipe
+    // The reminders of meals shown from the day before `from` over the next `days` days (a reminder
+    // after last night's meal can ring after midnight; the caller drops past rings); a cancelled or
+    // cooked meal rings nothing, nor does a meal with no recipe
     private static List<Alarm> mealReminders(JSONObject kitchen, long from, int days) throws JSONException {
         List<Alarm> reminders = new ArrayList<>();
         List<JSONObject> recipes = objects(kitchen.getJSONArray("recipes"));
         Calendar start = calendarAt(from);
-        for (int offset = 0; offset < days; offset++) {
+        for (int offset = -1; offset < days; offset++) {
             String date = isoDate(new GregorianCalendar(start.get(Calendar.YEAR), start.get(Calendar.MONTH), start.get(Calendar.DAY_OF_MONTH) + offset));
             for (int s = 0; s < MEAL_SLOTS.length; s++) {
                 String slot = MEAL_SLOTS[s];

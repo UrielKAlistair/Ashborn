@@ -29,6 +29,10 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   const id = z.string().describe("A node id, as shown by `overview`");
   const ids = z.array(z.string()).min(1).describe("Node ids, as shown by `overview`");
   const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe("HH:MM, 24-hour local time");
+  // Which of `nodeIds` are done: ticking a done step again would move its completion to now, and
+  // count it in today's progress a second time
+  const doneIds = async (nodeIds: string[]) =>
+    new Set(((await db.from("graph_nodes").select("id").in("id", nodeIds).not("completed_at", "is", null)).data ?? []).map((row: { id: string }) => row.id));
 
   register(
     "overview",
@@ -90,8 +94,11 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
 
   register(
     "complete",
-    { description: "Marks steps done.", inputSchema: { ids } },
-    async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { done: true })), "Done"),
+    { description: "Marks steps done. Steps already done keep the time they were done.", inputSchema: { ids } },
+    async ({ ids }) => {
+      const done = await doneIds(ids);
+      return run(ids.filter((nodeId) => !done.has(nodeId)).map((nodeId) => () => api.updateNode(nodeId, { done: true })), "Done");
+    },
   );
 
   register(
@@ -122,7 +129,10 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "reopen",
     { description: "Marks done steps as not done.", inputSchema: { ids } },
-    async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { done: false })), "Reopened"),
+    async ({ ids }) => {
+      const done = await doneIds(ids);
+      return run(ids.filter((nodeId) => done.has(nodeId)).map((nodeId) => () => api.updateNode(nodeId, { done: false })), "Reopened");
+    },
   );
 
   register(
@@ -328,7 +338,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
         : (existing?.reminders ?? [{ id: crypto.randomUUID(), anchorId: null, ...DEFAULT_REMINDER }]);
 
       const recipe = { id: existing?.id ?? crypto.randomUUID(), title: title ?? existing!.title, body: body ?? existing?.body ?? "", ingredients: resolved, reminders: timed };
-      return run([() => api.saveRecipe(recipe)], `Saved recipe ${recipe.title} [${recipe.id}]`);
+      return run([() => api.saveRecipe(recipe, !existing)], `Saved recipe ${recipe.title} [${recipe.id}]`);
     },
   );
 
@@ -375,14 +385,14 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "adjust_stock",
     {
-      description: "Corrects a stock item by hand, in its unit: `set` the amount on hand (after counting), or `add` to it (a restock; negative takes some away).",
+      description: "Corrects a stock item by hand, in its unit: `set` the amount on hand (after counting), or `add` to it (a restock; negative takes some away, down to none).",
       inputSchema: { id: z.string(), set: z.number().nonnegative().optional(), add: z.number().optional() },
     },
     async ({ id, set, add }) => {
       if ((set === undefined) === (add === undefined)) return failure("Give either set or add.");
       const item = (await readKitchen(db)).items.find((candidate) => candidate.id === id);
       if (!item) return failure(`No stock item ${id}.`);
-      const onHand = set !== undefined ? toBase(set, item.unit) : item.onHand + toBase(add!, item.unit);
+      const onHand = set !== undefined ? toBase(set, item.unit) : Math.max(0, item.onHand + toBase(add!, item.unit));
       return run([() => api.setStock(crypto.randomUUID(), id, onHand)], `${item.name}: ${amount(onHand, item.unit)}`);
     },
   );

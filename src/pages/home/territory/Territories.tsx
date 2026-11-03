@@ -31,7 +31,14 @@ function Territories({ quests, camera }: { quests: TerritoryQuest[]; camera?: Ca
     const renderer = TerritoryRenderer.create(canvasRef.current!);
     if (!renderer) return;
     rendererRef.current = renderer;
-    const follow = ({ transform: [x, y, zoom] }: { transform: [number, number, number] }) => renderer.setCamera({ x, y, zoom });
+    // Only a change of the store's camera: the store also changes for other reasons, and on the phone
+    // its camera is stale during a gesture, which the feed below moves the territory through
+    let last: [number, number, number] | null = null;
+    const follow = ({ transform }: { transform: [number, number, number] }) => {
+      if (transform === last) return;
+      last = transform;
+      renderer.setCamera({ x: transform[0], y: transform[1], zoom: transform[2] });
+    };
     follow(store.getState());
     const unsubscribe = store.subscribe(follow);
     return () => {

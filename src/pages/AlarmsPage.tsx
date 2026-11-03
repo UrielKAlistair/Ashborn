@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { alarmsAvailable, connectBackgroundRefresh, fixPermission, type AlarmPermissions } from "../lib/alarms";
 import { db } from "../lib/client";
 import { SITUPS_TO_STOP, STEPS_TO_STOP } from "../lib/motion";
-import { toISODate, week } from "../shared/dates";
+import { addDays, startOfDay, toISODate, week } from "../shared/dates";
 import { nextOccurrence, upcomingAlarms, type AlarmInstance } from "../shared/schedule";
 import type { Alarm, Snapshot, Weekday } from "../shared/types";
 import type { Act } from "./home/HomePage";
@@ -101,10 +101,17 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
   );
 }
 
-// What rings for the rest of today, skipped rings included (switched off), soonest first
+// What rings before midnight, skipped rings included (switched off), soonest first. Two days are
+// asked for, since a routine belongs to the app's day, which can start after midnight; each minute
+// drops the rings that have passed.
 function TodayRings({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
-  const now = new Date();
-  const rings = upcomingAlarms({ ...snapshot, skippedAlarms: [] }, now, 1);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const midnight = startOfDay(addDays(toISODate(now), 1), 0);
+  const rings = upcomingAlarms({ ...snapshot, skippedAlarms: [] }, now, 2).filter((ring) => ring.at < midnight);
   const skipped = new Set(snapshot.skippedAlarms.map((skip) => skip.key));
 
   if (rings.length === 0) return <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">Nothing rings for the rest of today.</p>;
@@ -330,7 +337,7 @@ function daysText(days: Weekday[]) {
   return week.filter((weekday) => days.includes(weekday)).join(" ");
 }
 
-const clock = (date: Date) => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+const clock = (date: Date) => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const day = (date: Date) => date.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 
 const field =

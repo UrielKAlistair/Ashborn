@@ -146,6 +146,18 @@ const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] 
     days: 3,
   },
   {
+    name: "a reminder after last night's dinner still rings after midnight",
+    snapshot: snapshot({
+      kitchen: {
+        ...emptyKitchen,
+        recipes: [recipe("ferment", "Batter", [reminder("grind", 360)])],
+        defaultWeek: [{ weekday: "Mon", slot: "dinner", description: "dosa batter", recipeIds: ["ferment"] }],
+      },
+    }),
+    from: "2026-10-20T00:30:00",
+    days: 1,
+  },
+  {
     name: "equal times keep the order of their sources",
     snapshot: snapshot({
       alarms: [alarm({ id: "seven", time: "07:00", weekdays: ["Mon"] })],

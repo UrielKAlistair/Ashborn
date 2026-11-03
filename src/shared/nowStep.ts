@@ -25,6 +25,7 @@ export function chooseNow(steps: GraphNode[], { passed, timer, splitFrom, holdin
   const timedStep = live ? steps.find(({ id }) => id === live.stepId) : undefined;
   const waiting = steps.filter(({ id }) => !passed.includes(id));
   const round = waiting.length > 0 ? waiting : steps;
-  const step = held ?? timedStep ?? round.find(({ parentId }) => parentId === splitFrom) ?? round[0];
+  const fromSplit = splitFrom ? round.find(({ parentId }) => parentId === splitFrom) : undefined;
+  const step = held ?? timedStep ?? fromSplit ?? round[0];
   return { step, timed: timedStep && step.id === timedStep.id ? live : null, passed: waiting.length > 0 ? passed : [] };
 }

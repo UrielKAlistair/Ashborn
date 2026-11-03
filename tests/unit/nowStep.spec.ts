@@ -15,6 +15,10 @@ test("the first of the to-do, or nothing", () => {
   expect(pick({}, [])).toBeNull();
 });
 
+test("before any split, a quest that needs a first step takes its place in the order, not the lead", () => {
+  expect(pick({}, [step("urgent"), step("empty quest", null as unknown as string)])).toBe("urgent");
+});
+
 test("put off steps are passed; putting off all of them starts the round again", () => {
   expect(pick({ passed: ["a"] })).toBe("b");
   expect(pick({ passed: ["a", "b", "c"] })).toBe("a");

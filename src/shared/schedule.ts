@@ -5,7 +5,7 @@ import type { AlarmKind, ISODate, Routine, Snapshot } from "./types.js";
 // One ring of an alarm: a timed routine on one of its days, a deadline on its due day, or a
 // reminder of a recipe for a planned meal
 export type AlarmInstance = {
-  key: string; // stable per source and day, so rescheduling replaces rather than duplicates
+  key: string; // stable per source and ring (its day, or a one-off's moment), so rescheduling replaces rather than duplicates, and a skip follows the ring, not a moved one
   at: Date;
   title: string;
   kind: Exclude<AlarmKind, "none">;
@@ -46,12 +46,12 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
   const end = startOfDay(addDays(firstDate, days), 0);
   for (const alarm of snapshot.alarms) {
     if (!alarm.enabled || !alarm.at || new Date(alarm.at) >= end) continue;
-    alarms.push({ key: `alarm:${alarm.id}`, at: new Date(alarm.at), title: alarm.label || "Alarm", kind: alarm.kind });
+    alarms.push({ key: `alarm:${alarm.id}@${new Date(alarm.at).getTime()}`, at: new Date(alarm.at), title: alarm.label || "Alarm", kind: alarm.kind });
   }
   const lastDate = addDays(firstDate, days - 1);
   for (const deadline of snapshot.deadlines) {
     if (!deadline.alarmTime || deadline.dueDate > lastDate) continue;
-    alarms.push({ key: `deadline:${deadline.id}`, at: atTime(deadline.dueDate, deadline.alarmTime), title: `Due today: ${deadline.title}`, kind: "plain" });
+    alarms.push({ key: `deadline:${deadline.id}@${deadline.dueDate}`, at: atTime(deadline.dueDate, deadline.alarmTime), title: `Due today: ${deadline.title}`, kind: "plain" });
   }
 
   for (const reminder of mealReminders(snapshot.kitchen, from, days)) alarms.push({ ...reminder, kind: "plain" });

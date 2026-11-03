@@ -5,7 +5,7 @@ import org.json.JSONObject;
 
 // One ring of an alarm, as the web app computes it (src/shared/schedule.ts)
 final class Alarm {
-    final String key; // stable per routine and day, or per deadline
+    final String key; // stable per source and ring: its day, or a one-off's moment
     final long at; // epoch milliseconds
     final String title;
     final String kind; // "plain", "walk" or "situps"

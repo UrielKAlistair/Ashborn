@@ -142,11 +142,12 @@ export function reminderOffsets(reminders: RecipeReminder[]): Map<string, number
 // One reminder ringing for one meal
 export type MealReminder = { key: string; at: Date; title: string };
 
-// The reminders of meals shown from `from` over the next `days` days. A cancelled or cooked
-// meal rings nothing, nor does a meal with no recipe.
+// The reminders of meals shown from the day before `from` over the next `days` days: the day
+// before, since a reminder timed after last night's meal can ring after midnight; the caller drops
+// rings already past. A cancelled or cooked meal rings nothing, nor does a meal with no recipe.
 export function mealReminders(kitchen: Kitchen, from: Date, days: number): MealReminder[] {
   const reminders: MealReminder[] = [];
-  for (let offset = 0; offset < days; offset++) {
+  for (let offset = -1; offset < days; offset++) {
     const date = addDays(toISODate(from), offset);
     for (const slot of mealSlots) {
       const meal = shownMeal(kitchen, date, slot);

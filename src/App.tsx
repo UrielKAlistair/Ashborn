@@ -325,11 +325,13 @@ function App() {
   // The step in Now on any screen, for the tray's menu and the graph's tag; the card on Home draws the same choice
   const nowDate = useToday(snapshot?.settings.dayStartHour ?? 0);
   const nowMemory = useNowMemory(nowDate);
+  // The to-do reads only the graph and the deadlines, so alarms, the Kitchen or settings changing leave it be
   const toDo = useMemo(() => {
     if (!snapshot) return null;
     const model = buildGraphModel(snapshot);
     return { model, steps: prioritisedSteps(model, snapshot, derivePriorities(model, snapshot, nowDate)).flatMap(({ steps }) => steps) };
-  }, [snapshot, nowDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot?.nodes, snapshot?.edges, snapshot?.deadlines, snapshot?.inboxId, nowDate]);
   const nowChoice = toDo && chooseNow(toDo.steps, nowMemory, Date.now(), nowDate);
   // A step done anywhere (the card, the tray, the graph) starts its "passed over" count again
   useEffect(() => {

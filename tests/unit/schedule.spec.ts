@@ -32,6 +32,16 @@ test("a ring skipped does not ring, and only that one", () => {
   expect(times(upcomingAlarms(snapshot({ routines: [wake], alarms: [walk], skippedAlarms }), monday6am, 2))).toEqual(["routine:wake@2026-10-20 Tue Oct 20 2026 07:00"]);
 });
 
+test("a skip is of one ring: a deadline moved to another day, or a one-off moved, rings again", () => {
+  const skippedAlarms = [{ key: "deadline:soon@2026-10-20", date: "2026-10-20" }, { key: `alarm:nap@${new Date("2026-10-19T15:30:00").getTime()}`, date: "2026-10-19" }];
+  const deadlines = [deadline({ id: "soon", dueDate: "2026-10-21", alarmTime: "09:00" })];
+  const alarms = [alarm({ id: "nap", at: new Date("2026-10-19T16:00:00").toISOString() })];
+  expect(times(upcomingAlarms(snapshot({ deadlines, alarms, skippedAlarms }), monday6am, 3)).map((ring) => ring.split(" ")[0])).toEqual([
+    `alarm:nap@${new Date("2026-10-19T16:00:00").getTime()}`,
+    "deadline:soon@2026-10-21",
+  ]);
+});
+
 test("routines ring on their weekdays at their time, soonest first", () => {
   const wake = routine({ id: "wake", weekdays: ["Mon", "Wed"], time: "07:00", alarm: "situps" });
   const prep = routine({ id: "prep", weekdays: ["Mon"], time: "06:30", alarm: "plain" });
@@ -77,7 +87,7 @@ test("deadlines ring on their due day when they have an alarm time inside the wi
     deadline({ id: "quiet", dueDate: "2026-10-20" }),
   ];
   const alarms = upcomingAlarms(snapshot({ deadlines }), monday6am, 7);
-  expect(times(alarms)).toEqual(["deadline:soon Tue Oct 20 2026 09:00"]);
+  expect(times(alarms)).toEqual(["deadline:soon@2026-10-20 Tue Oct 20 2026 09:00"]);
   expect(alarms[0]).toMatchObject({ title: "Due today: Deadline", kind: "plain" });
 });
 
@@ -90,7 +100,7 @@ test("standalone alarms: recurring ones on their days, one-offs once, switched-o
   ];
   const found = upcomingAlarms(snapshot({ alarms }), monday6am, 3);
   expect(times(found)).toEqual([
-    "alarm:nap Mon Oct 19 2026 15:30",
+    `alarm:nap@${new Date("2026-10-19T15:30:00").getTime()} Mon Oct 19 2026 15:30`,
     "alarm:wake@2026-10-20 Tue Oct 20 2026 06:00",
     "alarm:wake@2026-10-21 Wed Oct 21 2026 06:00",
   ]);

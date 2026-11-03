@@ -105,7 +105,7 @@ public class AlarmRefreshWorker extends Worker {
         }
         JSONArray defaultWeek = get(rest, key, access, "default_meals?select=weekday,slot,default_meal_recipes(recipe_id)");
         for (int i = 0; i < defaultWeek.length(); i++) recipeIds(defaultWeek.getJSONObject(i), "default_meal_recipes");
-        JSONArray meals = get(rest, key, access, "meals?select=date,slot,status,meal_recipes(recipe_id)&date=gte." + today + "&date=lte." + Schedule.addDays(today, SCHEDULE_DAYS - 1));
+        JSONArray meals = get(rest, key, access, "meals?select=date,slot,status,meal_recipes(recipe_id)&date=gte." + Schedule.addDays(today, -1) + "&date=lte." + Schedule.addDays(today, SCHEDULE_DAYS - 1));
         for (int i = 0; i < meals.length(); i++) recipeIds(meals.getJSONObject(i), "meal_recipes");
 
         return new JSONObject()
