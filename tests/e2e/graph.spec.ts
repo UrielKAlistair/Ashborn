@@ -331,7 +331,7 @@ test("home graph", async () => {
     await page.getByRole("button", { name: "Alarms" }).click();
     await page.getByRole("button", { name: "New alarm" }).click();
     await page.getByRole("dialog", { name: "New alarm" }).getByRole("button", { name: "In 30 min" }).click();
-    await page.getByRole("button", { name: "All alarms", exact: true }).click();
+    await page.getByRole("button", { name: "All alarms ›" }).click();
     await expect(page.getByText(/^once, /)).toBeVisible();
 
     await page.getByRole("button", { name: "New alarm" }).click();

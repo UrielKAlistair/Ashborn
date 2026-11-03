@@ -87,7 +87,8 @@ test("agent tools", async () => {
   });
 
   await test.step("a priority is set, shown, stored, refused out of range, and removed", async () => {
-    expect((await call("set_priority", { ids: [id("kpca")], priority: 2 })).ok).toBe(true);
+    const prioritised = await call("set_priority", { ids: [id("kpca")], priority: 2 });
+    expect(prioritised.body).toMatch(/Kernel PCA \[[^\]]+\]: P2, set on it/);
     let { body } = await call("overview", { quest_id: id("dl") });
     expect(body).toMatch(/Kernel PCA \[[^\]]+\] P2/);
     expect((await call("set_priority", { ids: [id("kpca")], priority: 5 })).ok).toBe(false);
@@ -96,16 +97,26 @@ test("agent tools", async () => {
     expect(body).not.toMatch(/Kernel PCA \[[^\]]+\] P/);
   });
 
-  await test.step("a deadline links to a step: as it nears the step joins Up next, and unlinking takes it out", async () => {
+  await test.step("a deadline links to a step: as it nears the step joins Up next, saying why, and unlinking or deleting it takes it out", async () => {
     const soon = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-    expect((await call("add_deadline", { title: "Soon", due_date: soon, node_id: id("kernel") })).ok).toBe(true);
+    const added = await call("add_deadline", { title: "Soon", due_date: soon, node_id: id("kernel") });
+    expect(added.body).toMatch(/Kernel trick \[[^\]]+\]: P1, raised by deadline "Soon"/);
     let { body } = await call("overview");
-    expect(body.split("\n\n")[0]).toMatch(/- P1 Kernel trick/);
-    expect(body).toContain(", for Kernel trick: due");
+    expect(body.split("\n\n")[0]).toMatch(/- P1 Kernel trick \[[^\]]+\] \(raised by deadline "Soon"/);
+    expect(body).toContain(", linked to Kernel trick (raising its chain as it nears): due");
+    expect((await call("overview", { quest_id: id("dl") })).body).toMatch(/^Deadlines linked to this quest:\n- Soon \[/m);
     const deadlineId = /- Soon \[([^\]]+)\]/.exec(body)![1];
-    expect((await call("link_deadline", { id: deadlineId, node_id: null })).ok).toBe(true);
+    const unlinked = await call("link_deadline", { id: deadlineId, node_id: null });
+    expect(unlinked.body).toMatch(/Kernel trick \[[^\]]+\]: no priority/);
     ({ body } = await call("overview"));
     expect(body.split("\n\n")[0]).not.toContain("Kernel trick");
+
+    // `delete` takes only quests and steps; a deadline has its own, which ends its raise
+    expect((await call("link_deadline", { id: deadlineId, node_id: id("kernel") })).ok).toBe(true);
+    expect((await call("delete", { id: deadlineId })).ok).toBe(false);
+    const deleted = await call("delete_deadline", { id: deadlineId });
+    expect(deleted.body).toMatch(/Kernel trick \[[^\]]+\]: no priority/);
+    expect((await call("overview")).body).not.toContain("- Soon [");
   });
 
   await test.step("a shelved step is marked, and nothing inside it is up next until it is unshelved", async () => {
@@ -148,13 +159,20 @@ test("agent tools", async () => {
     expect((await call("delete", { id: ref("admin") })).ok).toBe(true);
   });
 
-  await test.step("alarms: in some minutes, or recurring with a challenge", async () => {
+  await test.step("alarms: in some minutes, on a date, or recurring with a challenge; and deleted", async () => {
     expect((await call("add_alarm", { label: "Nap", in_minutes: 40 })).ok).toBe(true);
     expect((await call("add_alarm", { label: "Wake", time: "06:00", weekdays: ["Mon", "Wed"], kind: "situps" })).ok).toBe(true);
     expect((await call("add_alarm", { label: "Bad", weekdays: ["Mon"] })).ok).toBe(false);
-    const { body } = await call("overview");
-    expect(body).toMatch(/\[on\] once at .* Nap/);
-    expect(body).toContain("[on] 06:00 on Mon Wed Wake (situps)");
+    expect((await call("add_alarm", { label: "Past", time: "16:00", date: "2020-01-01" })).ok).toBe(false);
+    expect((await call("add_alarm", { label: "Dentist", time: "16:00", date: "2099-11-05" })).ok).toBe(true);
+    let { body } = await call("overview");
+    expect(body).toMatch(/\[on\] once at .* Nap \[/);
+    expect(body).toMatch(/\[on\] 06:00 on Mon Wed Wake \[[^\]]+\] \(situps\)/);
+    expect(body).toMatch(/\[on\] once at .*2099.* Dentist \[/);
+    const dentist = /Dentist \[([^\]]+)\]/.exec(body)![1];
+    expect((await call("delete_alarm", { id: dentist })).ok).toBe(true);
+    ({ body } = await call("overview"));
+    expect(body).not.toContain("Dentist");
   });
 
   await test.step("delete removes a step with everything inside it", async () => {
