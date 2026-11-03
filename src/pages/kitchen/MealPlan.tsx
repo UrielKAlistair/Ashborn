@@ -27,7 +27,7 @@ export function MealPlan({ kitchen, dayStartHour, act, phone, onOpenRecipe }: Me
           role="switch"
           aria-checked={defaults}
           onClick={() => setDefaults(!defaults)}
-          className={`rounded-lg border px-2.5 py-1 text-[12px] font-medium max-sm:min-h-11 max-sm:px-3.5 ${defaults ? "border-ember/40 bg-ember/10 text-ember" : "border-ink/12 text-ink/60 hover:bg-ink/6"}`}
+          className={`rounded-lg border px-2.5 py-1 text-[12px] font-medium phone:min-h-11 phone:px-3.5 ${defaults ? "border-ember/40 bg-ember/10 text-ember" : "border-ink/12 text-ink/60 hover:bg-ink/6"}`}
         >
           Default week
         </button>
@@ -150,19 +150,19 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
           {meal.slot} <span className="whitespace-nowrap font-mono text-[10.5px] tabular-nums text-ink/35">{mealTimes[meal.slot]}</span>
         </p>
         {/* Over the slot's name until hovered on the desktop, where a day's column has no room for both */}
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-2 rounded-md bg-card px-1.5 py-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-sm:static max-sm:gap-0 max-sm:bg-transparent max-sm:p-0 max-sm:opacity-100">
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-2 rounded-md bg-card px-1.5 py-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 phone:static phone:gap-0 phone:bg-transparent phone:p-0 phone:opacity-100">
         {!cooked && !empty ? (
           <button
             type="button"
             onClick={() => void act("setMeal", { id: id(), date: meal.date, slot: meal.slot, description: meal.description, recipeIds: meal.recipeIds, status: cancelled ? "planned" : "cancelled" })}
-            className="text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2"
+            className="text-[11.5px] text-muted hover:text-ink/85 phone:min-h-11 phone:px-2"
             title={cancelled ? "Bring this meal back" : "Cancel this meal and its alarms"}
           >
             {cancelled ? "Restore" : "Cancel"}
           </button>
         ) : null}
         {!cooked ? (
-          <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2" title="Change this meal">
+          <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-muted hover:text-ink/85 phone:min-h-11 phone:px-2" title="Change this meal">
             Edit
           </button>
         ) : null}
@@ -198,7 +198,7 @@ function RecipeLinks({ kitchen, recipeIds, onOpenRecipe }: { kitchen: Kitchen; r
           key={recipe.id}
           type="button"
           onClick={() => onOpenRecipe(recipe.id)}
-          className="rounded-md bg-ink/8 px-1.5 py-0.5 text-[11px] text-ink/75 hover:bg-ink/12 max-sm:px-2 max-sm:py-1"
+          className="rounded-md bg-ink/8 px-1.5 py-0.5 text-[11px] text-ink/75 hover:bg-ink/12 phone:px-2 phone:py-1"
         >
           {recipe.title}
         </button>
@@ -254,7 +254,7 @@ function MealEditor({
                 type="button"
                 aria-pressed={on}
                 onClick={() => setChosen(on ? chosen.filter((other) => other !== recipe.id) : [...chosen, recipe.id])}
-                className={`rounded-md border px-1.5 py-0.5 text-[11px] max-sm:px-2 max-sm:py-1 ${on ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
+                className={`rounded-md border px-1.5 py-0.5 text-[11px] phone:px-2 phone:py-1 ${on ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
               >
                 {recipe.title}
               </button>
@@ -263,10 +263,10 @@ function MealEditor({
         </div>
       ) : null}
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={onCancel} className="text-[12px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
+        <button type="button" onClick={onCancel} className="text-[12px] text-muted hover:text-ink/85 phone:min-h-11 phone:px-2">
           Cancel
         </button>
-        <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
+        <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 phone:min-h-11 phone:px-4">
           Save
         </button>
       </div>
@@ -316,7 +316,7 @@ function DefaultCell({ kitchen, act, weekday, slot, onOpenRecipe }: { kitchen: K
     <div role="group" aria-label={`Default ${slot} on ${weekday}`} className="rounded-lg bg-ink/[0.035] px-2.5 py-2 hover:bg-ink/[0.055]">
       <div className="flex items-center justify-between">
         <p className="text-[11.5px] capitalize text-muted">{slot}</p>
-        <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
+        <button type="button" onClick={() => setEditing(true)} className="text-[11.5px] text-muted hover:text-ink/85 phone:min-h-11 phone:px-2">
           Edit
         </button>
       </div>

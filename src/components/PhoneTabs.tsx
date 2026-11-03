@@ -18,7 +18,7 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
   };
 
   return (
-    <nav className="relative z-10 flex shrink-0 justify-center gap-4 border-t border-ink/8 bg-panel px-6 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <nav className="relative z-10 flex shrink-0 justify-center gap-1 border-t border-ink/8 bg-panel px-6 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {openSection ? <div className="fixed inset-0 z-40" onClick={() => setOpenSection(null)} /> : null}
 
       {phoneSections.map((section) => {

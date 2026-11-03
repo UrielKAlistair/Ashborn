@@ -5,6 +5,9 @@
 @import "@fontsource/martian-mono/600.css";
 @import "@fontsource/martian-mono/700.css";
 
+/* `phone:` styles apply in the phone layout (usePhone marks <html>), whatever the window's width */
+@custom-variant phone (&:where([data-phone] *));
+
 /* Two themes, dark (the default) and light (beige, a game map's paper), set by data-theme on <html>.
    Components colour themselves with `ink` (text, lines and tints, at an opacity), `canvas`, and
    `panel` and `card` (surfaces on it); each theme sets those.

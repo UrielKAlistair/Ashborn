@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildGraphModel } from "../../shared/graphModel";
 import type { Snapshot } from "../../shared/types";
+import { statLevel } from "../../shared/progression";
 import { CharacterPanel } from "../home/CharacterPanel";
+import { portraitTier, preparePortrait } from "../home/Portrait";
 import type { Act } from "../home/HomePage";
 import { QuestGraph } from "../home/QuestGraph";
 import { TodayPanel } from "../home/TodayPanel";
@@ -16,7 +18,7 @@ export function PhoneHome({ snapshot, act, screen }: { snapshot: Snapshot; act: 
   const model = useMemo(() => buildGraphModel(snapshot), [snapshot.nodes, snapshot.edges]);
 
   // The graph is built ahead, hidden, once the app has been idle a moment, or when first opened,
-  // and then stays mounted, so opening it shows it rather than building it anew. While hidden it
+  // and the character's portrait is read then too. The graph then stays mounted, so opening it shows it rather than building it anew. While hidden it
   // keeps the data it last showed, so a change made on another screen re-renders nothing here; it
   // catches up in the render that shows it again. (requestIdleCallback: the app runs only
   // in Chromium, the desktop's Electron and Android's WebView.)
@@ -25,8 +27,15 @@ export function PhoneHome({ snapshot, act, screen }: { snapshot: Snapshot; act: 
     if (screen === "graph") setGraphOpened(true);
   }, [screen]);
   useEffect(() => {
-    const idle = window.requestIdleCallback(() => setGraphOpened(true), { timeout: 3000 });
+    const idle = window.requestIdleCallback(
+      () => {
+        setGraphOpened(true);
+        preparePortrait(portraitTier(statLevel(model.totalStatXp).level));
+      },
+      { timeout: 3000 },
+    );
     return () => window.cancelIdleCallback(idle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [shown, setShown] = useState({ snapshot, model });
   if (screen === "graph" && (shown.snapshot !== snapshot || shown.model !== model)) setShown({ snapshot, model });

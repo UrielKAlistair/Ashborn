@@ -30,7 +30,7 @@ export function SignInPage() {
         <h1 className="caps mb-2 text-center font-display text-sm font-bold text-ink/90">Sign in</h1>
         <input type="email" required autoFocus placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} className={field} />
         <input type="password" required placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className={field} />
-        <button type="submit" disabled={busy} className="rounded-lg bg-ember px-3 py-2 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 max-sm:min-h-11">
+        <button type="submit" disabled={busy} className="rounded-lg bg-ember px-3 py-2 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
           Sign in
         </button>
         <p className="text-center text-[11.5px] text-muted">No account? Ashborn is invite-only right now.</p>
@@ -41,4 +41,4 @@ export function SignInPage() {
 }
 
 const field =
-  "rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 text-[13px] text-ink/90 placeholder:text-ink/35 focus:border-ember/60 focus:outline-none max-sm:min-h-11";
+  "rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 text-[13px] text-ink/90 placeholder:text-ink/35 focus:border-ember/60 focus:outline-none phone:min-h-11";

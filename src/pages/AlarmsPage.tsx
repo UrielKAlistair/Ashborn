@@ -1,6 +1,5 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { alarmsAvailable, connectBackgroundRefresh, fixPermission, type AlarmPermissions } from "../lib/alarms";
-import { db } from "../lib/client";
+import { useEffect, useState, type ReactNode } from "react";
+import { alarmsAvailable } from "../lib/alarms";
 import { SITUPS_TO_STOP, STEPS_TO_STOP } from "../lib/motion";
 import { addDays, startOfDay, toISODate, week } from "../shared/dates";
 import { nextOccurrence, upcomingAlarms, type AlarmInstance } from "../shared/schedule";
@@ -21,8 +20,8 @@ const sourceLabels: Record<string, string> = { alarm: "Alarm", routine: "Routine
 
 // Today: everything still to ring today, each with a switch that skips it for today only. All
 // alarms: the user's own alarms, each with a switch that turns it off; a tap opens it to edit or
-// delete. A new alarm is set in a pop-up.
-export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot; act: Act; permissions: AlarmPermissions | null }) {
+// delete. A new alarm is set in a pop-up, from the round button at the bottom right.
+export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
   const [view, setView] = useState<"today" | "all">("today");
   const [editing, setEditing] = useState<Alarm | "new" | null>(null);
 
@@ -32,39 +31,38 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
     setEditing(null);
   };
 
+  const toggle = "rounded-lg border border-ink/12 px-3 py-1.5 text-[12.5px] text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11";
   return (
-    <div className="panel-scroll flex min-h-0 min-w-0 flex-1 justify-center max-sm:overflow-y-auto">
-      <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 w-full max-w-xl flex-col gap-5 overflow-y-auto p-5 max-sm:max-w-none max-sm:shrink-0 max-sm:overflow-visible">
-        <div className="flex items-center justify-between gap-3">
-          {view === "today" ? (
-            <h1 className="caps font-display text-[13px] font-bold text-ink/90">Today</h1>
-          ) : (
-            <button type="button" onClick={() => setView("today")} className="caps font-display text-[13px] font-bold text-ink/90 hover:text-ink max-sm:min-h-11">
-              ‹ All alarms
-            </button>
-          )}
-          <div className="flex items-center gap-2">
+    <div className="relative mx-auto flex min-h-0 w-full min-w-0 max-w-xl flex-1 phone:max-w-none">
+      <div className="panel-scroll flex min-h-0 min-w-0 flex-1 phone:overflow-y-auto">
+        <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 w-full flex-col gap-5 overflow-y-auto p-5 pb-20 phone:shrink-0 phone:overflow-visible">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="caps font-display text-[13px] font-bold text-ink/90">{view === "today" ? "Today" : "All alarms"}</h1>
             {view === "today" ? (
-              <button type="button" onClick={() => setView("all")} className="rounded-lg px-2.5 py-1 text-[12.5px] text-muted hover:bg-ink/6 hover:text-ink/85 max-sm:min-h-11">
-                All alarms
+              <button type="button" onClick={() => setView("all")} className={toggle}>
+                All alarms ›
               </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setEditing("new")}
-              aria-label="New alarm"
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-ember text-lg leading-none text-canvas hover:brightness-110 max-sm:h-11 max-sm:w-11"
-            >
-              +
-            </button>
+            ) : (
+              <button type="button" onClick={() => setView("today")} className={toggle}>
+                ‹ Today
+              </button>
+            )}
           </div>
-        </div>
 
-        {alarmsAvailable ? null : <p className="-mt-3 text-[11.5px] text-muted">They ring on your phone.</p>}
-        {permissions && view === "today" ? <Reliability permissions={permissions} /> : null}
+          {alarmsAvailable ? null : <p className="-mt-3 text-[11.5px] text-muted">They ring on your phone.</p>}
 
-        {view === "today" ? <TodayRings snapshot={snapshot} act={act} /> : <AllAlarms alarms={snapshot.alarms} act={act} onEdit={setEditing} />}
-      </section>
+          {view === "today" ? <TodayRings snapshot={snapshot} act={act} /> : <AllAlarms alarms={snapshot.alarms} act={act} onEdit={setEditing} />}
+        </section>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setEditing("new")}
+        aria-label="New alarm"
+        className="absolute right-4 bottom-4 flex h-14 w-14 items-center justify-center rounded-full bg-ember text-3xl leading-none text-canvas shadow-[var(--card-shadow)] hover:brightness-110"
+      >
+        +
+      </button>
 
       {editing ? (
         <Popup label={editing === "new" ? "New alarm" : "Edit alarm"} onClose={() => setEditing(null)}>
@@ -75,7 +73,7 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
                   key={minutes}
                   type="button"
                   onClick={() => save({ label: "", kind: "plain", at: new Date(Date.now() + minutes * 60_000).toISOString(), time: null, weekdays: [] })}
-                  className="rounded-lg border border-ink/12 px-3.5 py-1.5 text-[13px] text-ink/80 hover:bg-ink/6 active:bg-ink/10 max-sm:min-h-11"
+                  className="rounded-lg border border-ink/12 px-3.5 py-1.5 text-[13px] text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11"
                 >
                   In {minutes < 60 ? `${minutes} min` : `${minutes / 60} h`}
                 </button>
@@ -90,7 +88,7 @@ export function AlarmsPage({ snapshot, act, permissions }: { snapshot: Snapshot;
                 void act("deleteAlarm", editing.id);
                 setEditing(null);
               }}
-              className="text-[12.5px] text-muted hover:text-red-300 max-sm:min-h-11"
+              className="text-[12.5px] text-muted hover:text-red-300 phone:min-h-11"
             >
               Delete this alarm
             </button>
@@ -197,67 +195,13 @@ function Popup({ label, onClose, children }: { label: string; onClose: () => voi
       <div role="dialog" aria-modal="true" aria-label={label} onClick={(event) => event.stopPropagation()} className="w-full max-w-md space-y-4 rounded-2xl border border-ink/10 bg-card p-5 shadow-[var(--card-shadow)]">
         <div className="flex items-center justify-between">
           <p className="caps font-display text-[13px] font-bold text-ink/90">{label}</p>
-          <button type="button" onClick={onClose} aria-label="Close" className="flex h-7 w-7 items-center justify-center rounded-md text-lg leading-none text-muted hover:bg-ink/8 max-sm:h-11 max-sm:w-11">
+          <button type="button" onClick={onClose} aria-label="Close" className="flex h-7 w-7 items-center justify-center rounded-md text-lg leading-none text-muted hover:bg-ink/8 phone:h-11 phone:w-11">
             ×
           </button>
         </div>
         {children}
       </div>
     </div>
-  );
-}
-
-// What the phone must allow for alarms to ring on time, each with a button to its setting.
-// Xiaomi's Autostart cannot be read, so it is offered on Xiaomi phones without a tick. The
-// background refresh needs a sign-in of its own, so it asks for the password.
-function Reliability({ permissions }: { permissions: AlarmPermissions }) {
-  const [connected, setConnected] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const background = permissions.background || connected;
-  const items = [
-    { label: "Notifications allowed", done: permissions.notifications, fix: fixPermission.notifications },
-    { label: "Alarms show over the lock screen", done: permissions.fullScreen, fix: fixPermission.fullScreen },
-    { label: "Battery optimisation off for Ashborn", done: permissions.battery, fix: fixPermission.battery },
-    ...(permissions.xiaomi ? [{ label: "Autostart on (Xiaomi)", done: null, fix: fixPermission.autostart }] : []),
-    { label: "Alarms refresh while the app is closed", done: background, fix: () => setAsking(true) },
-  ];
-
-  return (
-    <div className="space-y-1 rounded-xl bg-ink/[0.03] p-3">
-      <p className="caps px-1 pb-1 font-display text-[11px] font-semibold text-ink/65">Alarm reliability</p>
-      {items.map((item) => (
-        <button key={item.label} type="button" onClick={item.fix} disabled={item.done === true} className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left text-[13px] max-sm:min-h-11">
-          <span className={item.done ? "text-emerald-300" : item.done === false ? "text-amber-300" : "text-muted"}>{item.done ? "✓" : item.done === false ? "!" : "?"}</span>
-          <span className={item.done ? "text-muted" : "text-ink/85"}>{item.label}</span>
-          {item.done ? null : <span className="ml-auto text-[12px] text-muted">Open →</span>}
-        </button>
-      ))}
-      {asking && !background ? <BackgroundSignIn onConnected={() => setConnected(true)} /> : null}
-    </div>
-  );
-}
-
-function BackgroundSignIn({ onConnected }: { onConnected: () => void }) {
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const { data } = await db.auth.getSession();
-    const email = data.session?.user.email;
-    const error = email ? await connectBackgroundRefresh(email, password) : "Not signed in.";
-    if (error) setMessage(error);
-    else onConnected();
-  };
-
-  return (
-    <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-center gap-2 px-1 pt-1">
-      <input type="password" required autoFocus placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-canvas/70 px-3 py-2 text-xs text-ink/90 placeholder:text-muted focus:border-ink/30 focus:outline-none" />
-      <button type="submit" className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 max-sm:min-h-11">
-        Connect
-      </button>
-      {message ? <p className="w-full text-[12px] text-ink/60">{message}</p> : null}
-    </form>
   );
 }
 
@@ -288,7 +232,7 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
             type="button"
             aria-pressed={days.includes(weekday)}
             onClick={() => setDays((current) => (current.includes(weekday) ? current.filter((d) => d !== weekday) : [...current, weekday]))}
-            className={`flex-1 rounded-md border py-1.5 text-[11.5px] max-sm:min-h-11 ${days.includes(weekday) ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
+            className={`flex-1 rounded-md border py-1.5 text-[11.5px] phone:min-h-11 ${days.includes(weekday) ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
           >
             {weekday.slice(0, 2)}
           </button>
@@ -302,7 +246,7 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
             </option>
           ))}
         </select>
-        <button type="button" onClick={submit} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 max-sm:min-h-11">
+        <button type="button" onClick={submit} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
           {alarm ? "Save" : days.length === 0 ? "Set once" : "Set"}
         </button>
       </div>

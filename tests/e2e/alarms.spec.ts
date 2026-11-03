@@ -50,7 +50,7 @@ test("alarms", async () => {
   });
 
   await test.step("all alarms: turned off, edited, deleted", async () => {
-    await page.getByRole("button", { name: "All alarms", exact: true }).click();
+    await page.getByRole("button", { name: "All alarms ›" }).click();
     await ring("Stretch").getByRole("switch").click();
     await expect.poll(async () => (await alarmRow())?.enabled).toBe(false);
     await ring("Stretch").getByRole("button", { name: "Edit Stretch" }).click();
@@ -65,7 +65,7 @@ test("alarms", async () => {
   });
 
   await test.step("the + pop-up sets a quick alarm, which rings today", async () => {
-    await page.getByRole("button", { name: "‹ All alarms" }).click();
+    await page.getByRole("button", { name: "‹ Today" }).click();
     await page.getByRole("button", { name: "New alarm" }).click();
     await page.getByRole("dialog", { name: "New alarm" }).getByRole("button", { name: "In 10 min" }).click();
     await expect.poll(async () => (await db.from("alarms").select("id")).data?.length).toBe(1);

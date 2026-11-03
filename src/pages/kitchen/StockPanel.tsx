@@ -35,7 +35,7 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
     <div role="group" aria-label={item.name} className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
         <p className="min-w-0 text-[13px] text-ink/85 [overflow-wrap:anywhere]">{item.name}</p>
-        <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
+        <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 text-[11.5px] text-muted hover:text-ink/85 phone:min-h-11 phone:px-2">
           {editing ? "Done" : "Edit"}
         </button>
       </div>
@@ -130,7 +130,7 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
         <button
           type="button"
           onClick={() => (confirmDelete ? void act("deleteStockItem", item.id) : setConfirmDelete(true))}
-          className="rounded-lg border border-red-400/25 px-2.5 py-1 text-[12px] text-red-300 hover:bg-red-400/10 max-sm:min-h-11"
+          className="rounded-lg border border-red-400/25 px-2.5 py-1 text-[12px] text-red-300 hover:bg-red-400/10 phone:min-h-11"
         >
           {confirmDelete ? "Stop tracking?" : "Stop tracking"}
         </button>
@@ -147,7 +147,7 @@ function NewItemForm({ act }: { act: Act }) {
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="self-start rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 max-sm:min-h-11">
+      <button type="button" onClick={() => setOpen(true)} className="self-start rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 phone:min-h-11">
         + Track a staple
       </button>
     );
@@ -179,10 +179,10 @@ function NewItemForm({ act }: { act: Act }) {
           </option>
         ))}
       </select>
-      <button type="submit" disabled={!valid} className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
+      <button type="submit" disabled={!valid} className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 phone:min-h-11 phone:px-4">
         Add
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-ink/8 hover:text-ink/85 max-sm:h-11 max-sm:w-11">
+      <button type="button" onClick={() => setOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-ink/8 hover:text-ink/85 phone:h-11 phone:w-11">
         ×
       </button>
     </form>

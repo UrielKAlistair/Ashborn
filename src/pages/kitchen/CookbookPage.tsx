@@ -53,7 +53,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
     <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-4">
       <div className="mb-1 flex items-center justify-between">
         <h2 className="caps font-display text-[13px] font-bold text-ink/85">Recipes</h2>
-        <button type="button" onClick={startNew} className="rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 max-sm:min-h-11">
+        <button type="button" onClick={startNew} className="rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 phone:min-h-11">
           + New recipe
         </button>
       </div>
@@ -66,7 +66,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
             setDraft(null);
             onOpenRecipe(recipe.id);
           }}
-          className={`rounded-lg px-3 py-2 text-left text-[13px] max-sm:min-h-11 ${recipe.id === open?.id && !draft ? "bg-ember/10 text-ember" : "bg-ink/[0.03] text-ink/80 hover:bg-ink/[0.055]"}`}
+          className={`rounded-lg px-3 py-2 text-left text-[13px] phone:min-h-11 ${recipe.id === open?.id && !draft ? "bg-ember/10 text-ember" : "bg-ink/[0.03] text-ink/80 hover:bg-ink/[0.055]"}`}
         >
           {recipe.title}
         </button>
@@ -83,7 +83,7 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
             setDraft(null);
             onOpenRecipe(null);
           }}
-          className="self-start text-[13px] text-muted max-sm:min-h-11 max-sm:pr-3"
+          className="self-start text-[13px] text-muted phone:min-h-11 phone:pr-3"
         >
           ‹ Recipes
         </button>
@@ -117,13 +117,13 @@ function RecipeView({ kitchen, recipe, onEdit, onDelete }: { kitchen: Kitchen; r
       <div className="flex items-start justify-between gap-3">
         <h1 className="font-display text-lg font-semibold text-ink/90">{recipe.title}</h1>
         <div className="flex shrink-0 gap-2">
-          <button type="button" onClick={onEdit} className="rounded-lg border border-ink/12 px-2.5 py-1 text-[12px] text-ink/75 hover:bg-ink/6 max-sm:min-h-11 max-sm:px-3.5">
+          <button type="button" onClick={onEdit} className="rounded-lg border border-ink/12 px-2.5 py-1 text-[12px] text-ink/75 hover:bg-ink/6 phone:min-h-11 phone:px-3.5">
             Edit
           </button>
           <button
             type="button"
             onClick={() => (confirmDelete ? onDelete() : setConfirmDelete(true))}
-            className="rounded-lg border border-red-400/25 px-2.5 py-1 text-[12px] text-red-300 hover:bg-red-400/10 max-sm:min-h-11"
+            className="rounded-lg border border-red-400/25 px-2.5 py-1 text-[12px] text-red-300 hover:bg-red-400/10 phone:min-h-11"
           >
             {confirmDelete ? "Really delete?" : "Delete"}
           </button>
@@ -299,10 +299,10 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
       ) : null}
 
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-lg px-2.5 py-1 text-[12px] text-muted hover:text-ink/85 max-sm:min-h-11">
+        <button type="button" onClick={onCancel} className="rounded-lg px-2.5 py-1 text-[12px] text-muted hover:text-ink/85 phone:min-h-11">
           Cancel
         </button>
-        <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 max-sm:min-h-11 max-sm:px-4">
+        <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[12px] font-medium text-canvas hover:brightness-110 disabled:opacity-40 phone:min-h-11 phone:px-4">
           Save
         </button>
       </div>
@@ -378,7 +378,7 @@ function Part({ title, hint, children }: { title: string; hint?: string; childre
 
 function AddButton({ onClick, children }: { onClick: () => void; children: string }) {
   return (
-    <button type="button" onClick={onClick} className="rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 max-sm:min-h-11">
+    <button type="button" onClick={onClick} className="rounded-lg px-1 text-[12.5px] font-medium text-ember hover:brightness-110 phone:min-h-11">
       {children}
     </button>
   );
@@ -386,7 +386,7 @@ function AddButton({ onClick, children }: { onClick: () => void; children: strin
 
 function Remove({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} title="Remove" className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-ink/8 hover:text-red-300 max-sm:h-11 max-sm:w-11">
+    <button type="button" onClick={onClick} title="Remove" className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-ink/8 hover:text-red-300 phone:h-11 phone:w-11">
       ×
     </button>
   );

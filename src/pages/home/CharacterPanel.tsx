@@ -2,10 +2,8 @@ import { HEX_POINTS } from "../../components/HexTile";
 import { statKeys, type GraphModel } from "../../shared/graphModel";
 import { statLevel } from "../../shared/progression";
 import type { StatKey } from "../../shared/types";
-import { Portrait, portraitTiers } from "./Portrait";
+import { Portrait, portraitTier } from "./Portrait";
 
-// The portrait advances one sprite tier every PORTRAIT_TIER_LEVELS overall levels
-const PORTRAIT_TIER_LEVELS = 5;
 // How much larger the portrait is drawn on the phone's character card
 const CARD_PORTRAIT_ZOOM = 2;
 // Each stat's bar has a colour of its own, unrelated to the colours of quests
@@ -15,7 +13,7 @@ const statBars: Record<StatKey, string> = { STR: "bg-red-300/80", DEX: "bg-orang
 // to-do list; on the phone (`card`) a tall card with a larger portrait and the stats beneath it.
 export function CharacterPanel({ model, card = false }: { model: GraphModel; card?: boolean }) {
   const overall = statLevel(model.totalStatXp);
-  const tier = Math.min(portraitTiers, Math.floor((overall.level - 1) / PORTRAIT_TIER_LEVELS) + 1);
+  const tier = portraitTier(overall.level);
 
   // The portrait stands on a hex cell of the canvas's fabric, the overall level beneath it
   const portrait = (

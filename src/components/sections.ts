@@ -8,6 +8,7 @@ import {
   KitchenIcon,
   MealPlanIcon,
   RecipesIcon,
+  SettingsIcon,
   StocksIcon,
   TodoIcon,
 } from "./icons";
@@ -57,10 +58,12 @@ const kitchen: Section = {
 
 const alarms = single("Alarms", "/alarms", AlarmsIcon);
 const atlas = single("Atlas", "/atlas", AtlasIcon);
+const settings = single("Settings", "/settings", SettingsIcon);
 
-// Each device's sections, most used first. The phone has no Atlas.
+// Each device's sections, most used first. The phone has no Atlas; only the phone has Settings
+// (the desktop's rail has its theme switch, and alarms ring only on the phone).
 export const desktopSections: Section[] = [home, kitchen, alarms, atlas];
-export const phoneSections: Section[] = [home, alarms, kitchen];
+export const phoneSections: Section[] = [home, alarms, kitchen, settings];
 // The screen `path` shows: the longest screen path it starts with ("/" only matches itself)
 export function screenAt(path: string, screens: Screen[]): Screen | undefined {
   return screens
@@ -68,7 +71,7 @@ export function screenAt(path: string, screens: Screen[]): Screen | undefined {
     .sort((a, b) => b.path.length - a.path.length)[0];
 }
 
-// The section `path` belongs to, looking at its screens on both devices (the desktop has them all)
+// The section `path` belongs to, looking at its screens on both devices
 export function sectionAt(path: string): Section | undefined {
-  return desktopSections.find((section) => screenAt(path, [...section.phone, ...section.desktop]));
+  return [...desktopSections, settings].find((section) => screenAt(path, [...section.phone, ...section.desktop]));
 }

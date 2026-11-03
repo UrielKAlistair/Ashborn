@@ -15,6 +15,7 @@ import { requestCapture } from "./pages/home/Capture";
 import { HomePage, type Act } from "./pages/home/HomePage";
 import { KitchenPage } from "./pages/kitchen/KitchenPage";
 import { AlarmsPage } from "./pages/AlarmsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
 import { onShowOnGraph } from "./pages/home/showOnGraph";
@@ -362,7 +363,8 @@ function App() {
       );
     }
 
-    if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={acting} permissions={permissions} />;
+    if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={acting} />;
+    if (currentPath === "/settings") return <SettingsPage permissions={permissions} />;
 
     if (currentPath === "/kitchen" || currentPath.startsWith("/kitchen/")) {
       const [, , screen, recipeId] = currentPath.split("/");

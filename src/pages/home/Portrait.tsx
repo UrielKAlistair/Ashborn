@@ -21,14 +21,41 @@ const idleSheets = byTier(import.meta.glob<string>("../../assets/Idle_sheets/*.p
 
 export const portraitTiers = Math.max(...Object.keys(stills).map(Number));
 
+// The portrait advances one sprite tier every PORTRAIT_TIER_LEVELS overall levels
+const PORTRAIT_TIER_LEVELS = 5;
+export const portraitTier = (level: number) => Math.min(portraitTiers, Math.floor((level - 1) / PORTRAIT_TIER_LEVELS) + 1);
+
 // `zoom` enlarges the figure beyond its usual size (the phone's character screen)
 export function Portrait({ tier, zoom = 1 }: { tier: number; zoom?: number }) {
+  const { src, cell, scale } = figureOf(tier);
+  return <Figure key={src} src={src} cell={cell} scale={scale * zoom} />;
+}
+
+// Loads and reads a tier's sheet ahead of its first showing (a sheet is a megapixel image, slow
+// to read on a phone)
+export function preparePortrait(tier: number) {
+  const { src, cell } = figureOf(tier);
+  void prepare(src, cell);
+}
+
+function figureOf(tier: number) {
   const sheet = idleSheets[tier];
-  return sheet ? (
-    <Figure key={sheet} src={sheet} cell={SHEET_CELL} scale={SHEET_SCALE * zoom} />
-  ) : (
-    <Figure key={stills[tier]} src={stills[tier]} cell={null} scale={STILL_SCALE * zoom} />
-  );
+  return sheet ? { src: sheet, cell: SHEET_CELL, scale: SHEET_SCALE } : { src: stills[tier], cell: null, scale: STILL_SCALE };
+}
+
+type Prepared = { image: HTMLImageElement } & ReturnType<typeof readSheet>;
+// Each image is loaded and read once per run of the app
+const prepared = new Map<string, Promise<Prepared>>();
+
+function prepare(src: string, cell: number | null): Promise<Prepared> {
+  let figure = prepared.get(src);
+  if (!figure) {
+    const image = new Image();
+    image.src = src;
+    figure = image.decode().then(() => ({ image, ...readSheet(image, cell ?? image.width, cell ?? image.height) }));
+    prepared.set(src, figure);
+  }
+  return figure;
 }
 
 // Plays the sheet's frames on a canvas (one frame for a still); `cell` null means the whole image
@@ -38,9 +65,9 @@ function Figure({ src, cell, scale }: { src: string; cell: number | null; scale:
   useEffect(() => {
     let frameRequest = 0;
     let timer = 0;
-    const image = new Image();
-    image.onload = () => {
-      const { frames, crop, centre } = readSheet(image, cell ?? image.width, cell ?? image.height);
+    let gone = false;
+    void prepare(src, cell).then(({ image, frames, crop, centre }) => {
+      if (gone) return;
       // Wide enough on both sides of the body's centre that the centre is the canvas's middle
       const half = Math.max(centre - crop.x, crop.x + crop.width - centre);
       const canvas = canvasRef.current!;
@@ -66,10 +93,9 @@ function Figure({ src, cell, scale }: { src: string; cell: number | null; scale:
         if (frames.length > 1) timer = window.setTimeout(() => (frameRequest = requestAnimationFrame(draw)), frameMs - (elapsed % frameMs));
       };
       frameRequest = requestAnimationFrame(draw);
-    };
-    image.src = src;
+    });
     return () => {
-      image.onload = null;
+      gone = true;
       window.clearTimeout(timer);
       cancelAnimationFrame(frameRequest);
     };
@@ -87,21 +113,26 @@ function readSheet(image: HTMLImageElement, cellWidth: number, cellHeight: numbe
   canvas.height = image.height;
   const context = canvas.getContext("2d", { willReadFrequently: true })!;
   context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, image.width, image.height).data;
 
   const frames: { x: number; y: number }[] = [];
   const columns = new Float64Array(cellWidth);
   let [left, top, right, bottom] = [cellWidth, cellHeight, 0, 0];
   for (let y = 0; y + cellHeight <= image.height; y += cellHeight) {
     for (let x = 0; x + cellWidth <= image.width; x += cellWidth) {
-      const pixels = context.getImageData(x, y, cellWidth, cellHeight).data;
       let found = false;
-      for (let i = 3; i < pixels.length; i += 4) {
-        if (pixels[i] <= HAZE_ALPHA) continue;
-        const pixel = (i - 3) / 4;
-        const [px, py] = [pixel % cellWidth, Math.floor(pixel / cellWidth)];
-        [left, top, right, bottom] = [Math.min(left, px), Math.min(top, py), Math.max(right, px + 1), Math.max(bottom, py + 1)];
-        columns[px] += pixels[i];
-        found = true;
+      for (let py = 0; py < cellHeight; py++) {
+        const row = ((y + py) * image.width + x) * 4 + 3;
+        for (let px = 0; px < cellWidth; px++) {
+          const alpha = pixels[row + px * 4];
+          if (alpha <= HAZE_ALPHA) continue;
+          if (px < left) left = px;
+          if (px >= right) right = px + 1;
+          if (py < top) top = py;
+          if (py >= bottom) bottom = py + 1;
+          columns[px] += alpha;
+          found = true;
+        }
       }
       if (found) frames.push({ x, y });
     }
