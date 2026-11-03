@@ -47,7 +47,7 @@ test("make a deadline a quest", async () => {
   // Two ready in one quest: one priority on the quest covers both
   await expect(page.getByText("2 ready")).toBeVisible();
   await page.getByRole("group", { name: "Priority for all of Reading" }).getByRole("button", { name: "P3" }).click();
-  await expect(now).toContainText("Part of Reading, which has this priority");
+  await expect(now).toContainText("Read chapter 1");
   await expect(page.getByRole("group", { name: "Priority for Read chapter 2" })).toHaveCount(0);
   await expect.poll(async () => (await db.from("graph_nodes").select("priority").eq("id", quest).single()).data?.priority).toBe(3);
 
@@ -57,9 +57,9 @@ test("make a deadline a quest", async () => {
   await expect(dueSoon).toContainText(/Judge the science fest due (tomorrow|in 2d), linked to nothing/);
   await deadlines.getByRole("button", { name: "Make it a quest" }).click();
   await expect(dueSoon).toHaveCount(0);
-  await expect(now).toContainText("Judge the science fest");
-  await expect(now).toContainText(/Judge the science fest, due in [12]d/);
-  await expect(now.getByRole("button", { name: "Add a first step" })).toBeVisible();
+  // Due soon, it outranks Reading's P3: first, asking for a first step
+  await expect(now.getByRole("listitem").first()).toContainText("Judge the science fest");
+  await expect(now.getByRole("listitem").first().getByRole("button", { name: "Add a first step" })).toBeVisible();
   await expect(deadlines.getByRole("button", { name: "Make it a quest" })).toHaveCount(0);
   await expect
     .poll(async () => {
@@ -77,7 +77,6 @@ test("make a deadline a quest", async () => {
     await deadlines.getByRole("button", { name: "Link to Reading" }).click();
     await expect(deadlines.getByRole("button", { name: "Link to Reading" })).toHaveCount(0);
     await expect.poll(async () => (await db.from("deadlines").select("node_id").eq("title", "Reading quiz").single()).data?.node_id).toBe(quest);
-    for (let i = 0; i < 3 && !(await now.textContent())?.includes("Read chapter 1"); i++) await page.keyboard.press("n");
     await expect(now).toContainText("Read chapter 1");
   });
 

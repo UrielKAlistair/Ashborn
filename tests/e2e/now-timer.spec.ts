@@ -33,6 +33,12 @@ test("start timer and passing over", async () => {
   const app = await electron.launch({ args: [`--user-data-dir=${profile}`, "."], env });
   const page = await app.firstWindow();
   const now = page.getByRole("region", { name: "Now" });
+  const first = () => now.getByRole("listitem").first();
+  // The first row's ⋯ menu, then one of its items
+  const choose = async (item: string) => {
+    await first().getByRole("button", { name: /^Actions for/ }).click();
+    await now.getByRole("menuitem", { name: item }).click();
+  };
   const storage = (key: string) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? "null"), key);
 
   await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
@@ -41,9 +47,12 @@ test("start timer and passing over", async () => {
   await expect(now).toContainText("Draft the intro", { timeout: 15_000 });
 
   await test.step("Start boxes the step: it holds Now, Not now goes, Stop ends it", async () => {
-    await now.getByRole("button", { name: "Start", exact: true }).click();
+    await choose("Start (15 min)");
     await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/1[45]:\d\d/);
-    await expect(now.getByRole("button", { name: "Not now" })).toHaveCount(0);
+    await expect(now.getByRole("listitem")).toHaveCount(1);
+    await first().getByRole("button", { name: /^Actions for/ }).click();
+    await expect(now.getByRole("menuitem", { name: "Not now" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await expect(page.getByText("The rest of the list waits until the timer ends.")).toBeVisible();
     await expect(page.getByRole("group", { name: "Up next" })).toHaveCount(0);
     await page.keyboard.press("n");
@@ -65,22 +74,22 @@ test("start timer and passing over", async () => {
     await expect(page.getByText("Up next", { exact: true })).toBeVisible(); // the box is over
     await now.getByRole("button", { name: "5 more minutes" }).click();
     await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/[45]:\d\d/);
-    await now.getByRole("button", { name: "Done" }).click();
-    await expect(now).toContainText("Draft the intro");
+    await now.getByTitle("Mark done").click();
+    await expect(first()).toContainText("Draft the intro");
     await expect(now.getByRole("timer")).toHaveCount(0);
     expect(await storage("ashborn-now-timer")).toBeNull();
   });
 
   await test.step("passing a step over counts once a day, and on the third day Now asks why", async () => {
     await page.evaluate(() => localStorage.removeItem("ashborn-passed-over"));
-    await expect(now).toContainText(/of 2/);
-    await now.getByRole("button", { name: "Not now" }).click();
-    await expect(now).toContainText("Tidy the notes");
+    await expect(now.getByRole("listitem")).toHaveCount(2);
+    await choose("Not now");
+    await expect(first()).toContainText("Tidy the notes");
     await page.reload(); // a step put off stays put off for the day
-    await expect(now).toContainText("Tidy the notes", { timeout: 15_000 });
-    await now.getByRole("button", { name: "Not now" }).click();
-    await expect(now).toContainText("Draft the intro");
-    await now.getByRole("button", { name: "Not now" }).click();
+    await expect(first()).toContainText("Tidy the notes", { timeout: 15_000 });
+    await choose("Not now");
+    await expect(first()).toContainText("Draft the intro");
+    await choose("Not now");
     expect((await storage("ashborn-passed-over"))[id.draft]).toEqual({ days: 1, last: today() });
     // As if it had been put off on three earlier days, and not yet today
     await page.evaluate((stepId) => {
@@ -88,9 +97,9 @@ test("start timer and passing over", async () => {
       localStorage.removeItem("ashborn-now-passed");
     }, id.draft);
     await page.reload();
-    await expect(now).toContainText("Draft the intro", { timeout: 15_000 });
+    await expect(first()).toContainText("Draft the intro", { timeout: 15_000 });
     await expect(now).toContainText("Passed over on 3 days. Too big, or waiting on something?");
-    await now.getByRole("button", { name: "Too big? Split it" }).click();
+    await choose("Split it");
     await now.getByLabel("Steps, one per line").fill("Write the first sentence");
     await now.getByRole("button", { name: /^Add step/ }).click();
     await expect(now).toContainText("Write the first sentence");

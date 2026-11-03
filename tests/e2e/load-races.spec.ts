@@ -31,7 +31,7 @@ test("reads of the whole graph", async () => {
   const app = await electron.launch({ args: [`--user-data-dir=${profile}`, "."], env });
   const page = await app.firstWindow();
   const now = page.getByRole("region", { name: "Now" });
-  const nowTitle = () => now.getByRole("button").first().innerText();
+  const nowTitle = () => now.getByRole("listitem").first().getByTitle("Show on the graph").innerText();
   const tickOf = (id: string) => page.locator(`.react-flow__node[data-id="${id}"]`).getByRole("button", { name: /^Mark/ });
   const banner = page.getByText(/^Offline/);
   let reads = 0; // whole reads of the graph: a single node's filters on its id
@@ -59,7 +59,8 @@ test("reads of the whole graph", async () => {
   });
 
   await test.step("a list stays in the order it was typed, through a reload", async () => {
-    await now.getByRole("button", { name: /Split it/ }).click();
+    await now.getByRole("listitem").first().getByRole("button", { name: /^Actions for/ }).click();
+    await now.getByRole("menuitem", { name: "Split it" }).click();
     await page.getByLabel(/In this order/).uncheck(); // not chained: only their order says which comes first
     const typed = ["Zebra", "Mango", "Apple", "Kiwi", "Banana", "Cherry"];
     await page.locator("textarea").fill(typed.join("\n"));

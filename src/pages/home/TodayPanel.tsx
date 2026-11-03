@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
@@ -46,23 +46,27 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   };
   const weekday = weekdayOf(date);
 
-  // Steps you can do now, of the chains that have a priority
-  const priorities = derivePriorities(model, snapshot, date);
-  const todo = prioritisedSteps(model, snapshot, priorities);
+  // Worked out again when the data or the day changes, not when a section opens or closes
+  const { priorities, todo, quiet, unprioritised } = useMemo(() => {
+    // Steps you can do now, of the chains that have a priority
+    const priorities = derivePriorities(model, snapshot, date);
+    const todo = prioritisedSteps(model, snapshot, priorities);
+    // Ready steps and empty quests nothing covers yet, so a priority can be given here without the
+    // graph; untriaged Inbox items are left to the Inbox, and quiet quests' steps to Gone quiet
+    const quiet = goneQuiet(model, snapshot, priorities, date);
+    const quietIds = new Set(quiet.map(({ quest }) => quest.id));
+    const unprioritised = snapshot.nodes.filter(
+      (node) =>
+        (node.parentId || needsFirstStep(model, node)) &&
+        model.ready.has(node.id) &&
+        !priorities.effective.has(node.id) &&
+        questOf(model.byId, node).active &&
+        !inInbox(model, node, snapshot.inboxId) &&
+        !quietIds.has(questOf(model.byId, node).id),
+    );
+    return { priorities, todo, quiet, unprioritised };
+  }, [model, snapshot, date]);
   const todoCount = todo.reduce((count, { steps }) => count + steps.length, 0);
-  // Ready steps and empty quests nothing covers yet, so a priority can be given here without the
-  // graph; untriaged Inbox items are left to the Inbox, and quiet quests' steps to Gone quiet
-  const quiet = goneQuiet(model, snapshot, priorities, date);
-  const quietIds = new Set(quiet.map(({ quest }) => quest.id));
-  const unprioritised = snapshot.nodes.filter(
-    (node) =>
-      (node.parentId || needsFirstStep(model, node)) &&
-      model.ready.has(node.id) &&
-      !priorities.effective.has(node.id) &&
-      questOf(model.byId, node).active &&
-      !inInbox(model, node, snapshot.inboxId) &&
-      !quietIds.has(questOf(model.byId, node).id),
-  );
 
   // The count is from the last change; once the next day starts it belongs to yesterday until the next one
   const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
@@ -135,6 +139,41 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           </ul>
         ) : null}
       </div>
+
+      <Section title="Deadlines" action={<DeadlineForm act={act} model={model} />}>
+        {deadlines.length === 0 ? (
+          <Empty>Nothing due in the next {DEADLINE_HORIZON_DAYS} days.</Empty>
+        ) : (
+          deadlines.map((deadline) => {
+            const days = daysBetween(date, deadline.dueDate);
+            return (
+              <div key={deadline.id} className={`group ${rowClass}`}>
+                <Tick done={false} onClick={() => void act("completeDeadline", deadline.id)} className="mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink/90">{deadline.title}</p>
+                    <span
+                      className={`shrink-0 rounded-md px-1.5 py-px font-mono text-[11px] tabular-nums ${
+                        days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-ink/6 text-muted"
+                      }`}
+                    >
+                      {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 font-mono text-[11px] text-muted tabular-nums">
+                    {deadline.dueDate}
+                    {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
+                  </p>
+                  <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
+                  {/* Unlinked, it raises nothing: linked to the quest it names, or made one, it reaches Now */}
+                  {deadline.nodeId ? null : <LinkDeadline deadline={deadline} model={model} act={act} inboxId={snapshot.inboxId} />}
+                </div>
+                <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
+              </div>
+            );
+          })
+        )}
+      </Section>
 
       <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
       {unlinkedUrgent.length > 0 ? (
@@ -239,40 +278,6 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         )}
       </Section>
 
-      <Section title="Deadlines" action={<DeadlineForm act={act} model={model} />}>
-        {deadlines.length === 0 ? (
-          <Empty>Nothing due in the next {DEADLINE_HORIZON_DAYS} days.</Empty>
-        ) : (
-          deadlines.map((deadline) => {
-            const days = daysBetween(date, deadline.dueDate);
-            return (
-              <div key={deadline.id} className={`group ${rowClass}`}>
-                <Tick done={false} onClick={() => void act("completeDeadline", deadline.id)} className="mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start gap-2">
-                    <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink/90">{deadline.title}</p>
-                    <span
-                      className={`shrink-0 rounded-md px-1.5 py-px font-mono text-[11px] tabular-nums ${
-                        days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-ink/6 text-muted"
-                      }`}
-                    >
-                      {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 font-mono text-[11px] text-muted tabular-nums">
-                    {deadline.dueDate}
-                    {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
-                  </p>
-                  <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
-                  {/* Unlinked, it raises nothing: linked to the quest it names, or made one, it reaches Now */}
-                  {deadline.nodeId ? null : <LinkDeadline deadline={deadline} model={model} act={act} inboxId={snapshot.inboxId} />}
-                </div>
-                <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
-              </div>
-            );
-          })
-        )}
-      </Section>
     </section>
   );
 }
@@ -466,7 +471,12 @@ function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
     setOpen(false);
   };
 
-  if (!open) return <AddButton onClick={() => setOpen(true)} />;
+  // Due today by default, as of when the form opens: the panel can stay mounted across days
+  const show = () => {
+    setDueDate(today());
+    setOpen(true);
+  };
+  if (!open) return <AddButton onClick={show} />;
 
   return (
     <div onKeyDown={closeOnEscape(() => setOpen(false))} className={popoverClass}>

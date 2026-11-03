@@ -44,7 +44,8 @@ test("the tray's Now", async () => {
 
   await test.step("Now's step, then its timer, reach the tray", async () => {
     await expect.poll(trayNow).toEqual({ id: id.draft, title: "Draft the intro", endsAt: null, canTick: true });
-    await now.getByRole("button", { name: "Start", exact: true }).click();
+    await now.getByRole("button", { name: "Actions for Draft the intro" }).click();
+    await now.getByRole("menuitem", { name: "Start (15 min)" }).click();
     await expect.poll(async () => ((await trayNow()) as { endsAt: number | null }).endsAt).toBeGreaterThan(Date.now());
   });
 
@@ -65,7 +66,7 @@ test("the tray's Now", async () => {
   await test.step("Done in the tray ticks it, and the tray moves on", async () => {
     await page.evaluate((stepId) => localStorage.setItem("ashborn-passed-over", JSON.stringify({ [stepId]: { days: 3, last: "2026-01-01" } })), id.draft);
     await app.evaluate(({ BrowserWindow }, stepId) => BrowserWindow.getAllWindows()[0].webContents.send("now:done", stepId), id.draft);
-    await expect(now).toContainText("Email the professor");
+    await expect(now.getByRole("listitem").first()).toContainText("Email the professor");
     await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("id", id.draft).single()).data?.completed_at).toBeTruthy();
     await expect.poll(async () => ((await trayNow()) as { title: string }).title).toBe("Email the professor");
     // Done anywhere starts its "passed over" count again
@@ -74,7 +75,7 @@ test("the tray's Now", async () => {
 
   await test.step("on the phone, Now's title opens the graph on its step", async () => {
     await phoneWindow(app, page);
-    await now.getByRole("button", { name: "Email the professor" }).click();
+    await now.getByRole("button", { name: "Email the professor", exact: true }).click();
     const node = page.locator(`.react-flow__node[data-id="${id.email}"]`);
     await expect(node).toHaveClass(/node-flash/);
     await expect(node).toBeInViewport();

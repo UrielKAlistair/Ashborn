@@ -44,11 +44,12 @@ test("a chain takes one priority, on its quest", async () => {
   // One ready of three, and the quest is offered
   await expect(page.getByText("1 ready of 3")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("group", { name: "Priority for all of Essay" }).getByRole("button", { name: "P2" }).click();
-  await expect(now).toContainText("Outline");
-  await now.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(now).toContainText("Draft");
-  await now.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(now).toContainText("Edit");
+  const first = () => now.getByRole("listitem").first();
+  await expect(first()).toContainText("Outline");
+  await first().getByTitle("Mark done").click();
+  await expect(first()).toContainText("Draft");
+  await first().getByTitle("Mark done").click();
+  await expect(first()).toContainText("Edit");
 
   await app.close();
   rmSync(profile, { recursive: true, force: true });

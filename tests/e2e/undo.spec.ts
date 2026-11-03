@@ -84,8 +84,9 @@ test("undo a tick", async () => {
 
   await test.step("Focus's Done offers it too, and Undo brings the step back to the card", async () => {
     const focus = page.getByRole("region", { name: "Now" });
-    const shown = await focus.getByRole("button").first().innerText(); // the step's title
-    await focus.getByRole("button", { name: "Done", exact: true }).click();
+    const row = focus.getByRole("listitem").first();
+    const shown = await row.getByTitle("Show on the graph").innerText();
+    await row.getByTitle("Mark done").click();
     await expect(toast()).toContainText(`Done: ${shown}`);
     await expect(focus).not.toContainText(shown);
     await undo().click();
@@ -156,7 +157,7 @@ test("undo a tick", async () => {
     await page.getByRole("button", { name: "Home", exact: true }).click();
     await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "To-do" }).click();
     const focus = page.getByRole("region", { name: "Now" });
-    await focus.getByRole("button", { name: "Done", exact: true }).click();
+    await focus.getByRole("listitem").first().getByTitle("Mark done").click();
     await expect(toast()).toHaveCSS("opacity", "1");
     await page.screenshot({ path: `${shots}/undo-phone.png` });
     const box = (await toast().boundingBox())!;

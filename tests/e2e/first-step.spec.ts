@@ -44,10 +44,12 @@ test("a quest with a priority and no steps", async () => {
   await expect(now).toContainText("Talk on attention", { timeout: 20_000 });
 
   await test.step("Now asks for a first step, and has nothing to tick", async () => {
-    await expect(now).toContainText("A quest with no steps yet");
-    await expect(now.getByRole("button", { name: "Add a first step" })).toBeVisible();
-    await expect(now.getByRole("button", { name: "Done", exact: true })).toHaveCount(0);
-    await expect(now.getByRole("button", { name: /Split it/ })).toHaveCount(0);
+    const row = now.getByRole("listitem").filter({ hasText: "Talk on attention" });
+    await expect(row.getByRole("button", { name: "Add a first step" })).toBeVisible();
+    await expect(row.getByTitle("Mark done")).toHaveCount(0);
+    await now.getByRole("button", { name: "Actions for Talk on attention" }).click();
+    await expect(now.getByRole("menuitem", { name: "Split it" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await page.screenshot({ path: `${shots}/first-step.png` });
 
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -64,18 +66,19 @@ test("a quest with a priority and no steps", async () => {
     const client = new Client({ name: "e2e", version: "0" });
     await client.connect(clientSide);
     const result = await client.callTool({ name: "overview", arguments: {} });
-    expect((result.content as Array<{ text: string }>)[0].text).toContain(`- P1 Talk on attention [${idea}] (a quest with no steps yet`);
+    const line = (result.content as Array<{ text: string }>)[0].text.split("\n").find((text) => text.includes(`[${idea}]`));
+    expect(line).toMatch(/^- P1 Talk on attention \[.*\] \(.*\) \(a quest with no steps yet: it needs a first step\)$/);
     await client.close();
   });
 
   await test.step("the first steps replace it with the first of them", async () => {
-    await now.getByRole("button", { name: "Add a first step" }).click();
+    await now.getByRole("listitem").filter({ hasText: "Talk on attention" }).getByRole("button", { name: "Add a first step" }).click();
     await page.getByLabel("Steps, one per line").fill("Read the papers\nDraft an outline");
     await expect(now.getByText("First steps", { exact: true })).toBeVisible();
     await expect(now.getByText("Split into steps")).toHaveCount(0);
     await now.getByRole("button", { name: "Add", exact: true }).click();
     await expect(now).toContainText("Read the papers");
-    await expect(now.getByRole("button", { name: "Done", exact: true })).toBeVisible();
+    await expect(now.getByRole("listitem").first().getByTitle("Mark done")).toBeVisible();
     await expect.poll(() => stepsOf(idea)).toEqual(expect.arrayContaining(["Read the papers", "Draft an outline"]));
   });
 
