@@ -116,7 +116,6 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
 
   const done = () => {
     if (timed) storeTimer(null);
-    if (passedDays) setPassedDays(0);
     void act("updateNode", step.id, { done: true });
   };
   const box = (minutes: number) => storeTimer(timerBox(step.id, minutes));

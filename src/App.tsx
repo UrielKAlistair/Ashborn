@@ -18,7 +18,7 @@ import { AlarmsPage } from "./pages/AlarmsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
 import { onShowOnGraph } from "./pages/home/showOnGraph";
-import { START_MINUTES, storeTimer, timerBox, useNowMemory, useTimeUpNotice } from "./pages/home/nowStore";
+import { passedOver, START_MINUTES, storePassedOver, storeTimer, timerBox, useNowMemory, useTimeUpNotice } from "./pages/home/nowStore";
 import { useNowMirror } from "./pages/home/nowMirror";
 import { buildGraphModel } from "./shared/graphModel";
 import { chooseNow } from "./shared/nowStep";
@@ -331,6 +331,13 @@ function App() {
     return { model, steps: prioritisedSteps(model, snapshot, derivePriorities(model, snapshot, nowDate)).flatMap(({ steps }) => steps) };
   }, [snapshot, nowDate]);
   const nowChoice = toDo && chooseNow(toDo.steps, nowMemory, Date.now(), nowDate);
+  // A step done anywhere (the card, the tray, the graph) starts its "passed over" count again
+  useEffect(() => {
+    if (!snapshot) return;
+    const counts = passedOver();
+    const done = Object.keys(counts).filter((id) => snapshot.nodes.find((node) => node.id === id)?.completedAt);
+    if (done.length) storePassedOver(Object.fromEntries(Object.entries(counts).filter(([id]) => !done.includes(id))));
+  }, [snapshot]);
   useNowMirror(
     toDo && nowChoice
       ? { id: nowChoice.step.id, title: nowChoice.step.title, endsAt: nowChoice.timed?.endsAt ?? null, canTick: !needsFirstStep(toDo.model, nowChoice.step) }
