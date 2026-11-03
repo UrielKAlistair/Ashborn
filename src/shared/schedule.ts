@@ -19,7 +19,7 @@ export function byTime(a: Routine, b: Routine) {
 
 // The alarms due from `from` over the next `days` days, soonest first: standalone alarms that are
 // on, timed routines, deadlines with an alarm, and meal reminders. A routine already ticked that
-// day does not ring. Alarms keep the calendar; a routine belongs to a day as the app counts days, so
+// day does not ring, nor does a ring skipped. Alarms keep the calendar; a routine belongs to a day as the app counts days, so
 // one timed before the day-start hour rings in the night after its day.
 export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): AlarmInstance[] {
   const alarms: AlarmInstance[] = [];
@@ -56,7 +56,8 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
 
   for (const reminder of mealReminders(snapshot.kitchen, from, days)) alarms.push({ ...reminder, kind: "plain" });
 
-  return alarms.filter((alarm) => alarm.at > from).sort((a, b) => a.at.getTime() - b.at.getTime());
+  const skipped = new Set(snapshot.skippedAlarms.map((skip) => skip.key));
+  return alarms.filter((alarm) => alarm.at > from && !skipped.has(alarm.key)).sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
 // The next moment the clock shows `time`: today if it is still ahead, else tomorrow

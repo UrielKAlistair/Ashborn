@@ -2,7 +2,7 @@ import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
-import { derivePriorities, needsFirstStep, prioritisedSteps } from "../../shared/priority";
+import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
 import { priorities, type AlarmKind, type Deadline, type GraphNode, type Priority, type Snapshot, type Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
@@ -187,7 +187,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                       <span className="h-px flex-1 bg-[color-mix(in_oklab,var(--mark)_25%,transparent)]" />
                     </p>
                     {steps.map((step) => {
-                      if (needsFirstStep(model, step)) return <FirstStepRow key={step.id} quest={step} snapshot={snapshot} model={model} act={act} />;
+                      if (needsFirstStep(model, step)) return <FirstStepRow key={step.id} quest={step} snapshot={snapshot} model={model} act={act} priorities={priorities} />;
                       const quest = questOf(model.byId, step);
                       const parent = model.byId.get(step.parentId!);
                       return (
@@ -196,7 +196,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                           <div className="min-w-0 flex-1">
                             <p className="text-[13px] leading-snug text-ink/90">{step.title}</p>
                             <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
-                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priorities.best.get(quest.id)).dot}`} />
                               {quest.title}
                               {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
                             </p>
@@ -210,7 +210,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
             ) : null}
           </Section>
 
-          {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} openAtFirst={todoCount === 0} /> : null}
+          {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} priorities={priorities} openAtFirst={todoCount === 0} /> : null}
           <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} openAtFirst={todoCount === 0 && unprioritised.length === 0} />
         </>
       )}
@@ -280,7 +280,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 // Ready steps without a priority, folded away by default; a P chip gives one its priority, which
 // moves it into Up next
 // Open from the start when nothing has a priority, since giving one is then the only way to a Now
-function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[]; model: GraphModel; act: Act; openAtFirst: boolean }) {
+function Unprioritised({ steps, model, act, priorities, openAtFirst }: { steps: GraphNode[]; model: GraphModel; act: Act; priorities: Priorities; openAtFirst: boolean }) {
   const [open, setOpen] = useState(openAtFirst);
   const oneTap = useOneTap();
   return (
@@ -303,7 +303,7 @@ function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[];
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] leading-snug text-ink/80">{inQuest[0].title}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priorities.best.get(quest.id)).dot}`} />
                     {needsFirstStep(model, inQuest[0]) ? "A quest with no steps yet" : quest.title}
                   </p>
                 </div>
@@ -315,7 +315,7 @@ function Unprioritised({ steps, model, act, openAtFirst }: { steps: GraphNode[];
               <div key={quest.id}>
                 <div className={rowClass}>
                   <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] leading-snug font-medium text-ink/85">
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priorities.best.get(quest.id)).dot}`} />
                     <span className="truncate">{quest.title}</span>
                     <span className="shrink-0 text-[11.5px] font-normal text-muted">
                       {inQuest.length} ready of {open}
@@ -488,7 +488,7 @@ const popoverClass = "absolute right-0 top-8 z-10 w-72 space-y-2 rounded-xl bord
 const rowClass = "flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-ink/[0.04]";
 
 // A quest in the to-do with nothing in it yet: instead of a tick, its first steps
-function FirstStepRow({ quest, snapshot, model, act }: { quest: GraphNode; snapshot: Snapshot; model: GraphModel; act: Act }) {
+function FirstStepRow({ quest, snapshot, model, act, priorities }: { quest: GraphNode; snapshot: Snapshot; model: GraphModel; act: Act; priorities: Priorities }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -505,7 +505,7 @@ function FirstStepRow({ quest, snapshot, model, act }: { quest: GraphNode; snaps
         <div className="min-w-0 flex-1">
           <p className="text-[13px] leading-snug text-ink/90">{quest.title}</p>
           <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />A quest with no steps yet
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priorities.best.get(quest.id)).dot}`} />A quest with no steps yet
           </p>
         </div>
       </div>

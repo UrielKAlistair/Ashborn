@@ -4,7 +4,7 @@ import { likelyQuest } from "../../src/shared/likelyQuest";
 import type { GraphNode, Snapshot } from "../../src/shared/types";
 
 const quest = (id: string, title: string, extra: Partial<GraphNode> = {}) =>
-  ({ id, parentId: null, title, statWeights: {}, color: null, active: true, createdAt: "2026-10-20T00:00:00", completedAt: null, shelved: false, priority: null, ownXp: 0, lastActive: "2026-10-20T00:00:00", stamps: {}, position: null, ...extra }) as GraphNode;
+  ({ id, parentId: null, title, statWeights: {}, active: true, createdAt: "2026-10-20T00:00:00", completedAt: null, shelved: false, priority: null, ownXp: 0, lastActive: "2026-10-20T00:00:00", stamps: {}, position: null, ...extra }) as GraphNode;
 
 const pick = (title: string, quests: GraphNode[]) =>
   likelyQuest(buildGraphModel({ nodes: quests, edges: [] } as unknown as Snapshot), title, "inbox")?.id ?? null;

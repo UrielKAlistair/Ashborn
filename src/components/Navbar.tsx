@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { setTheme, setTrial, themeNames, themes, trials, useTheme, useTrial, type Trial } from "../lib/useTheme";
+import { setTheme, themeNames, themes, useTheme } from "../lib/useTheme";
 import { HexTile } from "./HexTile";
-import { LeafIcon, MoonIcon, SunIcon } from "./icons";
+import { MoonIcon, SunIcon } from "./icons";
 import { desktopSections, screenAt, sectionAt, type Section } from "./sections";
 
 type NavbarProps = {
@@ -95,39 +95,15 @@ export function Navbar({
         })}
       </div>
 
-      <div className="mb-2 flex flex-col items-stretch gap-1">
-        {(Object.keys(trials) as Trial[]).map((trial) => (
-          <TrialSwitch key={trial} trial={trial} />
-        ))}
-      </div>
       <button
         type="button"
         onClick={() => setTheme(next)}
-        title={`${themeNames[next]}: switch to the ${next === "dark" ? "dark" : next === "light" ? "light" : "game-map"} theme`}
+        title={`${themeNames[next]}: switch to the ${next} theme`}
         className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-ink/8 hover:text-ink/85"
       >
-        {next === "light" ? <SunIcon className="h-[18px] w-[18px]" /> : next === "meadow" ? <LeafIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
+        {next === "light" ? <SunIcon className="h-[18px] w-[18px]" /> : <MoonIcon className="h-[18px] w-[18px]" />}
       </button>
     </aside>
-  );
-}
-
-// One trial switch: its name and the option in use; a click goes to the next option
-function TrialSwitch({ trial }: { trial: Trial }) {
-  const current = useTrial(trial);
-  const { label, options } = trials[trial];
-  const keys = Object.keys(options);
-  const name = options[current as keyof typeof options] as string;
-  return (
-    <button
-      type="button"
-      onClick={() => setTrial(trial, keys[(keys.indexOf(current) + 1) % keys.length])}
-      title={`${label}: ${name}. A trial; click for the next`}
-      className="w-[4.75rem] rounded-md px-1 py-0.5 text-left font-mono text-[9.5px] leading-tight text-muted hover:bg-ink/8 hover:text-ink/85"
-    >
-      <span className="block text-ink/50">{label}</span>
-      <span className="block truncate text-ink/85">{name}</span>
-    </button>
   );
 }
 

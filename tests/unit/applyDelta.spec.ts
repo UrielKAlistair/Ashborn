@@ -12,7 +12,6 @@ const node = (id: string, overrides: Partial<GraphNode> = {}): GraphNode => ({
   parentId: null,
   title: id,
   statWeights: {},
-  color: null,
   active: true,
   createdAt: "2026-10-20T00:00:00Z",
   completedAt: null,

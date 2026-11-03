@@ -20,7 +20,8 @@ import org.json.JSONObject;
 // (src/shared/kitchen.ts), for refreshing alarms while the app is closed. The two are kept in step
 // by shared cases: tests/unit/scheduleFixtures.spec.ts writes them, ScheduleTest checks this
 // class against them. The input is the snapshot's JSON, reduced to what the schedule reads:
-// settings, routines, routineChecks, alarms, deadlines and kitchen (recipes, defaultWeek, meals).
+// settings, routines, routineChecks, alarms, skippedAlarms, deadlines and kitchen (recipes, defaultWeek,
+// meals).
 final class Schedule {
     private static final String[] WEEKDAYS = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
     private static final String[] MEAL_SLOTS = {"breakfast", "lunch", "dinner"};
@@ -73,8 +74,10 @@ final class Schedule {
 
         alarms.addAll(mealReminders(snapshot.getJSONObject("kitchen"), from, days));
 
+        Set<String> skipped = new HashSet<>();
+        for (JSONObject skip : objects(snapshot.getJSONArray("skippedAlarms"))) skipped.add(skip.getString("key"));
         List<Alarm> due = new ArrayList<>();
-        for (Alarm alarm : alarms) if (alarm.at > from) due.add(alarm);
+        for (Alarm alarm : alarms) if (alarm.at > from && !skipped.contains(alarm.key)) due.add(alarm);
         Collections.sort(due, (a, b) -> Long.compare(a.at, b.at));
         return due;
     }

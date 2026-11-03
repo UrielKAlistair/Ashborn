@@ -15,6 +15,7 @@ const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   routineChecks: [],
   deadlines: [],
   alarms: [],
+  skippedAlarms: [],
   progressToday: { date: "2026-10-19", count: 0 },
   kitchen: emptyKitchen,
   settings: { dayStartHour: 4, timeZone: null },
@@ -23,6 +24,13 @@ const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
 
 const monday6am = new Date("2026-10-19T06:00:00"); // 2026-10-19 is a Monday
 const times = (alarms: ReturnType<typeof upcomingAlarms>) => alarms.map((alarm) => `${alarm.key} ${alarm.at.toString().slice(0, 21)}`);
+
+test("a ring skipped does not ring, and only that one", () => {
+  const wake = routine({ id: "wake", weekdays: ["Mon", "Tue"], time: "07:00", alarm: "plain" });
+  const walk = alarm({ id: "walk", time: "08:00", weekdays: ["Mon"] });
+  const skippedAlarms = [{ key: "routine:wake@2026-10-19", date: "2026-10-19" }, { key: "alarm:walk@2026-10-19", date: "2026-10-19" }];
+  expect(times(upcomingAlarms(snapshot({ routines: [wake], alarms: [walk], skippedAlarms }), monday6am, 2))).toEqual(["routine:wake@2026-10-20 Tue Oct 20 2026 07:00"]);
+});
 
 test("routines ring on their weekdays at their time, soonest first", () => {
   const wake = routine({ id: "wake", weekdays: ["Mon", "Wed"], time: "07:00", alarm: "situps" });

@@ -89,6 +89,7 @@
             "date": "2026-10-19"
           }
         ],
+        "skippedAlarms": [],
         "alarms": [],
         "deadlines": [],
         "kitchen": {
@@ -173,6 +174,7 @@
             "date": "2026-10-19"
           }
         ],
+        "skippedAlarms": [],
         "alarms": [],
         "deadlines": [],
         "kitchen": {
@@ -189,6 +191,75 @@
           "at": "2026-10-20T03:00:00",
           "title": "Routine",
           "kind": "walk"
+        }
+      ]
+    },
+    {
+      "name": "a ring skipped is silent, and the same alarm's next ring is not",
+      "input": {
+        "settings": {
+          "dayStartHour": 4,
+          "timeZone": null
+        },
+        "routines": [
+          {
+            "id": "wake",
+            "title": "Routine",
+            "cue": "",
+            "weekdays": [
+              "Mon",
+              "Tue"
+            ],
+            "time": "07:00",
+            "alarm": "plain"
+          }
+        ],
+        "routineChecks": [],
+        "skippedAlarms": [
+          {
+            "key": "routine:wake@2026-10-19",
+            "date": "2026-10-19"
+          },
+          {
+            "key": "alarm:walk@2026-10-19",
+            "date": "2026-10-19"
+          }
+        ],
+        "alarms": [
+          {
+            "id": "walk",
+            "label": "",
+            "kind": "plain",
+            "at": null,
+            "time": "08:00",
+            "weekdays": [
+              "Mon",
+              "Tue"
+            ],
+            "enabled": true
+          }
+        ],
+        "deadlines": [],
+        "kitchen": {
+          "recipes": [],
+          "defaultWeek": [],
+          "meals": []
+        }
+      },
+      "from": "2026-10-19T06:00:00",
+      "days": 2,
+      "expected": [
+        {
+          "key": "routine:wake@2026-10-20",
+          "at": "2026-10-20T07:00:00",
+          "title": "Routine",
+          "kind": "plain"
+        },
+        {
+          "key": "alarm:walk@2026-10-20",
+          "at": "2026-10-20T08:00:00",
+          "title": "Alarm",
+          "kind": "plain"
         }
       ]
     },
@@ -212,6 +283,7 @@
           }
         ],
         "routineChecks": [],
+        "skippedAlarms": [],
         "alarms": [],
         "deadlines": [],
         "kitchen": {
@@ -251,6 +323,7 @@
           }
         ],
         "routineChecks": [],
+        "skippedAlarms": [],
         "alarms": [],
         "deadlines": [],
         "kitchen": {
@@ -279,6 +352,7 @@
         },
         "routines": [],
         "routineChecks": [],
+        "skippedAlarms": [],
         "alarms": [
           {
             "id": "wake",
@@ -409,6 +483,7 @@
         },
         "routines": [],
         "routineChecks": [],
+        "skippedAlarms": [],
         "alarms": [],
         "deadlines": [
           {
@@ -479,6 +554,7 @@
         },
         "routines": [],
         "routineChecks": [],
+        "skippedAlarms": [],
         "alarms": [],
         "deadlines": [],
         "kitchen": {
@@ -693,6 +769,7 @@
           }
         ],
         "routineChecks": [],
+        "skippedAlarms": [],
         "alarms": [
           {
             "id": "seven",

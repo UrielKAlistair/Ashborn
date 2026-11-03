@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef } from "react";
 // Pan and pinch on the phone, done here rather than by React Flow. React Flow moves its camera
 // through its store, and every component subscribed to the store checks the change, in every frame
 // of a gesture; on a slow phone that alone fills the frame. Here each frame moves the map's layer
-// and the territory directly, and the store is told the camera once, when the fingers lift.
+// and the territory directly, and the store is told the camera once, when the fingers lift. While
+// it moves, the pane carries data-moving, which gives the map its own layer (index.css), as React
+// Flow's onMoveStart does on the desktop; that event never fires for a gesture made here.
 
 export type Camera = { x: number; y: number; zoom: number };
 export type CameraFeed = { subscribe: (follow: (camera: Camera) => void) => () => void };
@@ -67,6 +69,7 @@ export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: numb
       fingers.set(event.pointerId, { x: event.clientX - origin.x, y: event.clientY - origin.y });
       const { centre, spread } = shape();
       if (!moved && Math.hypot(centre.x - start.centre.x, centre.y - start.centre.y) < tapDistance && Math.abs(spread - start.spread) < tapDistance) return;
+      if (!moved) pane.setAttribute("data-moving", "");
       moved = true;
       const zoom = Math.min(maxZoom, Math.max(minZoom, start.spread > 0 ? (start.camera.zoom * spread) / start.spread : start.camera.zoom));
       const anchor = { x: (start.centre.x - start.camera.x) / start.camera.zoom, y: (start.centre.y - start.camera.y) / start.camera.zoom };
@@ -79,6 +82,7 @@ export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: numb
       if (!fingers.delete(event.pointerId)) return;
       if (fingers.size > 0) return void regrip();
       if (!moved) return;
+      pane.removeAttribute("data-moving");
       void setViewport(camera);
       // The click a lifted finger may still fire belongs to the gesture, not to what it ended on
       const swallow = (click: Event) => {
@@ -99,6 +103,7 @@ export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: numb
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
+      pane.removeAttribute("data-moving");
     };
   }, [enabled, minZoom, maxZoom, store, setViewport]);
 

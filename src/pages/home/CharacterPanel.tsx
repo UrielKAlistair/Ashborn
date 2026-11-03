@@ -1,8 +1,7 @@
 import { HEX_POINTS } from "../../components/HexTile";
-import { palettes } from "../../lib/theme";
 import { statKeys, type GraphModel } from "../../shared/graphModel";
 import { statLevel } from "../../shared/progression";
-import type { QuestColor, StatKey } from "../../shared/types";
+import type { StatKey } from "../../shared/types";
 import { Portrait, portraitTiers } from "./Portrait";
 
 // The portrait advances one sprite tier every PORTRAIT_TIER_LEVELS overall levels
@@ -10,7 +9,7 @@ const PORTRAIT_TIER_LEVELS = 5;
 // How much larger the portrait is drawn on the phone's character card
 const CARD_PORTRAIT_ZOOM = 2;
 // Each stat's bar has a colour of its own, unrelated to the colours of quests
-const statColors: Record<StatKey, QuestColor> = { STR: "red", DEX: "orange", INT: "blue", WIS: "green", CHR: "violet", MND: "teal" };
+const statBars: Record<StatKey, string> = { STR: "bg-red-300/80", DEX: "bg-orange-300/80", INT: "bg-blue-500/85", WIS: "bg-emerald-300/80", CHR: "bg-violet-300/80", MND: "bg-teal-300/80" };
 
 // The character: portrait, overall level and the six stats. On the desktop a row beside the
 // to-do list; on the phone (`card`) a tall card with a larger portrait and the stats beneath it.
@@ -49,7 +48,7 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
               <dd className={`font-mono text-ink/90 ${card ? "text-base" : "text-[13px]"}`}>{level}</dd>
             </div>
             <div className={`mt-1 overflow-hidden rounded-full bg-ink/8 ${card ? "h-1.5" : "h-1"}`}>
-              <div className={`progress-fill h-full rounded-full ${palettes[statColors[key]].bar}`} style={{ width: `${percent}%` }} />
+              <div className={`progress-fill h-full rounded-full ${statBars[key]}`} style={{ width: `${percent}%` }} />
             </div>
           </div>
         );

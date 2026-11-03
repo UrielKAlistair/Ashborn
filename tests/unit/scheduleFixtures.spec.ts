@@ -25,6 +25,7 @@ const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   routineChecks: [],
   deadlines: [],
   alarms: [],
+  skippedAlarms: [],
   progressToday: { date: "2026-10-19", count: 0 },
   kitchen: emptyKitchen,
   settings: { dayStartHour: 4, timeZone: null },
@@ -61,6 +62,19 @@ const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] 
     }),
     from: "2026-10-20T01:30:00",
     days: 1,
+  },
+  {
+    name: "a ring skipped is silent, and the same alarm's next ring is not",
+    snapshot: snapshot({
+      routines: [routine({ id: "wake", weekdays: ["Mon", "Tue"], time: "07:00", alarm: "plain" })],
+      alarms: [alarm({ id: "walk", time: "08:00", weekdays: ["Mon", "Tue"] })],
+      skippedAlarms: [
+        { key: "routine:wake@2026-10-19", date: "2026-10-19" },
+        { key: "alarm:walk@2026-10-19", date: "2026-10-19" },
+      ],
+    }),
+    from: "2026-10-19T06:00:00",
+    days: 2,
   },
   {
     name: "the day starts at 6",
@@ -154,6 +168,7 @@ test("the phone's schedule cases are written from upcomingAlarms", () => {
         settings: snapshot.settings,
         routines: snapshot.routines,
         routineChecks: snapshot.routineChecks,
+        skippedAlarms: snapshot.skippedAlarms,
         alarms: snapshot.alarms,
         deadlines: snapshot.deadlines,
         kitchen: { recipes: snapshot.kitchen.recipes, defaultWeek: snapshot.kitchen.defaultWeek, meals: snapshot.kitchen.meals },

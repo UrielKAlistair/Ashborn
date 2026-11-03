@@ -226,7 +226,7 @@ test("brain dump and sort", async () => {
     await field().fill("A second thought");
     await field().press("Enter");
     await sortButton(2).click();
-    for (const theme of ["light", "meadow"]) {
+    for (const theme of ["light"]) {
       await page.evaluate((name) => document.documentElement.setAttribute("data-theme", name), theme);
       await page.screenshot({ path: `${shots}/sort-${theme}.png` });
     }

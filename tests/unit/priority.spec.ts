@@ -11,7 +11,6 @@ const node = (id: string, parentId: string | null, fields: Partial<GraphNode> = 
   parentId,
   title: id,
   statWeights: {},
-  color: null,
   active: true,
   createdAt: "2026-10-20T00:00:00",
   completedAt: null,

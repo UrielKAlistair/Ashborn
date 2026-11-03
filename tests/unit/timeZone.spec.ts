@@ -42,6 +42,7 @@ test("the schedule's days and times follow the set zone", () => {
     routineChecks: [],
     deadlines: [],
     alarms: [],
+    skippedAlarms: [],
     progressToday: { date: "2026-10-28", count: 0 },
     kitchen: emptyKitchen,
     settings: { dayStartHour: 4, timeZone: "Asia/Kolkata" },

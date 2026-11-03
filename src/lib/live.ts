@@ -141,6 +141,11 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
         ),
       );
     }),
+    on("alarm_skips", (change) => {
+      // The row says whether the ring is skipped; a delete (only the key is sent) unskips it
+      const row = (change.eventType === "DELETE" ? change.old : change.new) as { key: string; date?: string; skipped?: boolean };
+      emit({ alarmSkip: { key: row.key, date: row.date ?? "", skipped: change.eventType !== "DELETE" && row.skipped !== false } });
+    }),
     ...kitchenTables.map((table) => on(table, kitchenChanged)),
     on("user_settings", () => emit(latest("settings", readSettings(db).then((settings) => ({ settings }))))),
   ];

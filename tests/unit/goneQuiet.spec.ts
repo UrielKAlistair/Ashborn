@@ -14,7 +14,6 @@ const node = (id: string, parentId: string | null, lastActive: string, extra: Pa
   parentId,
   title: id,
   statWeights: {},
-  color: null,
   active: true,
   createdAt: daysAgo(90),
   completedAt: null,

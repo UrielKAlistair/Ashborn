@@ -14,7 +14,7 @@ import { byTime, nextOccurrence } from "../src/shared/schedule";
 import { inboxLast, inInbox } from "../src/shared/inbox";
 import { derivePriorities, needsFirstStep, prioritisedSteps } from "../src/shared/priority";
 import { goneQuiet } from "../src/shared/goneQuiet";
-import { mealSlots, questColors, stockUnits, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
+import { mealSlots, stockUnits, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
 // The tools, acting as whoever `db` is signed in as, `userId`. `blocked` gives a reason every tool refuses
 // with, or null.
@@ -174,18 +174,17 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "update_quest",
     {
       description:
-        "Sets which stats a quest trains and how much, its colour (null is white), and whether it is shown on the dashboard. Each XP earned in the quest adds weight × XP to each stat.",
+        "Sets which stats a quest trains and how much, and whether it is shown on the dashboard. Each XP earned in the quest adds weight × XP to each stat.",
       inputSchema: {
         id,
         stat_weights: z
           .partialRecord(z.enum(statKeys), z.number().nonnegative())
           .optional()
           .describe('Weight per stat, e.g. {"INT": 0.2, "CHR": 0.1}; replaces the quest\'s weights, and {} trains nothing'),
-        color: z.enum(questColors).nullable().optional(),
         shown: z.boolean().optional(),
       },
     },
-    async ({ id, stat_weights, color, shown }) => run([() => api.updateNode(id, { statWeights: stat_weights, color, active: shown })], "Updated"),
+    async ({ id, stat_weights, shown }) => run([() => api.updateNode(id, { statWeights: stat_weights, active: shown })], "Updated"),
   );
 
   register(
@@ -564,7 +563,7 @@ function describe(snapshot: Snapshot, questId?: string) {
     const level = nodeLevel(model.totalXp.get(quest.id) ?? 0);
     const trains = trainedStats(quest.statWeights).map(([key, weight]) => `${key} ${weight}`);
     if (quest.id === snapshot.inboxId) lines.push("The Inbox: thoughts the user captured and hasn't sorted. To sort them, `move` each into a quest, or use `add_plan` and delete the original.");
-    lines.push(`# ${quest.title} [${quest.id}] Lv ${level.level}${trains.length ? `, trains ${trains.join(", ")}` : ""}${quest.color ? `, ${quest.color}` : ""}${quest.priority ? `, P${quest.priority}` : ""}${quest.shelved ? " (shelved)" : ""}`);
+    lines.push(`# ${quest.title} [${quest.id}] Lv ${level.level}${trains.length ? `, trains ${trains.join(", ")}` : ""}${quest.priority ? `, P${quest.priority}` : ""}${quest.shelved ? " (shelved)" : ""}`);
     outline(model, snapshot, quest.id, 1, lines, folds);
     lines.push("");
   }

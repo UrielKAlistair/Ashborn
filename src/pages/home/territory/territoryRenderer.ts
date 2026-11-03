@@ -1,11 +1,12 @@
 import { hexCellScale } from "./hexgrid";
+import type { Hue } from "../../../lib/theme";
 import { cellPaint, fabricAlpha, fabricOpacity, territoryCellRadius } from "./territoryGrid";
 import type { CellLook, Grid } from "./territoryGrid";
 
 // The fabric and the territories, drawn by the GPU (WebGL 1) in one pass over the canvas.
 // For each pixel the fragment shader finds the hex cell it falls in, then draws the fabric's
-// outline and, for a cell of the territory grid, that cell's fill and outline, read from two
-// textures with one texel per cell. Each frame the page sends only the camera. A cell changing
+// outline and, for a cell of the territory grid, that cell's paint, read from two textures with one
+// texel per cell: tinted (fill and outline), or on paper an even wash. Each frame the page sends only the camera. A cell changing
 // owner fades from its old paint to its new one; that fade is computed here and the (small)
 // textures re-uploaded each frame while it runs. Nothing is drawn while nothing changes.
 
@@ -33,34 +34,7 @@ uniform vec4 u_fabric;      // rgb, alpha
 uniform vec4 u_grid;        // first column, first row, columns, rows
 uniform sampler2D u_fill;   // per cell: rgb, fill alpha
 uniform sampler2D u_stroke; // per cell: rgb, outline alpha
-uniform float u_terrain;    // 1: every cell is painted as ground (grass and dirt), as on a game map
-uniform vec2 u_boost;       // territories' fill and outline alpha, scaled to show over the ground
-
-float hash(vec2 c) {
-  return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453);
-}
-
-// Smooth value noise over cells, in patches about five cells across
-float noise(vec2 c) {
-  vec2 g = c / 5.0;
-  vec2 i = floor(g);
-  vec2 f = fract(g);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
-}
-
-// Mostly grass in three shades, with patches of dirt, each cell a little different
-vec3 ground(vec2 cell) {
-  float lay = noise(cell);
-  float shade = noise(cell * 1.7 + 31.0);
-  vec3 dirt = vec3(0.83, 0.75, 0.56);
-  vec3 grass = vec3(0.60, 0.75, 0.40);
-  vec3 deep = vec3(0.48, 0.66, 0.33);
-  vec3 meadow = vec3(0.72, 0.81, 0.49);
-  vec3 green = mix(grass, shade < 0.5 ? deep : meadow, abs(shade - 0.5) * 1.6);
-  vec3 colour = mix(dirt, green, smoothstep(0.26, 0.34, lay));
-  return colour + (hash(cell) - 0.5) * 0.05;
-}
+uniform float u_paper;      // 1: territories are an even wash, without outlines, as on a printed map
 
 vec4 over(vec4 below, vec3 rgb, float alpha) {
   return vec4(rgb * alpha + below.rgb * (1.0 - alpha), alpha + below.a * (1.0 - alpha));
@@ -103,7 +77,6 @@ void main() {
 
   float inside = clamp((apothem - h) / px + 0.5, 0.0, 1.0);
   vec4 colour = vec4(0.0);
-  if (u_terrain > 0.5) colour = over(colour, ground(cell), 0.9 * inside);
 
   // The fabric's outline is one CSS pixel wide at every zoom
   colour = over(colour, u_fabric.rgb, u_fabric.a * line(abs(h - apothem), 0.5 / u_camera.z, px));
@@ -113,9 +86,9 @@ void main() {
     vec2 uv = (texel + 0.5) / u_grid.zw;
     vec4 fill = texture2D(u_fill, uv);
     vec4 stroke = texture2D(u_stroke, uv);
-    colour = over(colour, fill.rgb, min(1.0, fill.a * u_boost.x) * inside);
+    colour = over(colour, fill.rgb, fill.a * inside);
     // Outlines are one map unit wide
-    colour = over(colour, stroke.rgb, min(1.0, stroke.a * u_boost.y) * line(abs(h - apothem), 0.5, px));
+    if (u_paper < 0.5) colour = over(colour, stroke.rgb, stroke.a * line(abs(h - apothem), 0.5, px));
   }
   gl_FragColor = colour;
 }
@@ -123,9 +96,10 @@ void main() {
 
 type Camera = { x: number; y: number; zoom: number };
 
-// How the theme wants the canvas drawn: the outlines' colour and strength, whether the cells are
-// painted as ground, and how much stronger territories must be to show over it
-export type CanvasStyle = { ink: [number, number, number]; fabricAlpha: number; terrain: boolean; boost: [number, number] };
+// How the theme wants the canvas drawn: the fabric's colour and strength, whether territories are
+// paper borders or tints, and each hue's colour (0-255), from the theme
+export type RGB = [number, number, number];
+export type CanvasStyle = { ink: RGB; fabricAlpha: number; paper: boolean; hues: Record<Hue, RGB> };
 
 // The paint of one cell: rgb (0-255), fill alpha, outline alpha
 const paintSize = 5;
@@ -141,10 +115,11 @@ export class TerritoryRenderer {
   private dirty = true;
 
   private camera: Camera = { x: 0, y: 0, zoom: 1 };
-  private style: CanvasStyle = { ink: [255, 255, 255], fabricAlpha, terrain: false, boost: [1, 1] };
+  private style: CanvasStyle = { ink: [255, 255, 255], fabricAlpha, paper: false, hues: { 1: [255, 255, 255], 2: [255, 255, 255], 3: [255, 255, 255], 4: [255, 255, 255], none: [255, 255, 255] } };
 
   // Cell state, by texel (row-major over the grid's columns and rows)
   private grid: Grid | null = null;
+  private looks: CellLook[] = [];
   private texelOf = new Int32Array(0); // grid cell index -> texel
   private from = new Float32Array(0);
   private to = new Float32Array(0);
@@ -183,8 +158,10 @@ export class TerritoryRenderer {
     if (this.program) gl.deleteProgram(this.program);
   }
 
+  // Every cell is repainted at once in the new style, without fading
   setStyle(style: CanvasStyle) {
     this.style = style;
+    if (this.grid) this.paint(this.grid, this.looks, true);
     this.invalidate();
   }
 
@@ -194,19 +171,19 @@ export class TerritoryRenderer {
   }
 
   // The cells' owners. Cells whose paint changes fade to it, except when the grid itself has
-  // changed: then every cell is new and simply shows its paint.
-  paint(grid: Grid, looks: CellLook[]) {
+  // changed (or `fresh`): then every cell simply shows its paint.
+  paint(grid: Grid, looks: CellLook[], fresh = grid !== this.grid) {
     const now = performance.now();
-    const fresh = grid !== this.grid;
     if (fresh) this.allocate(grid);
+    this.looks = looks;
     const target = new Float32Array(paintSize);
     grid.cells.forEach((_, i) => {
       const t = this.texelOf[i];
       const look = looks[i];
       const at = t * paintSize;
       if (look.color) {
-        const { rgb, fill, stroke } = cellPaint(look.color, look);
-        target.set([...rgb, fill, stroke]);
+        const { fill, stroke } = cellPaint(look, this.style.paper);
+        target.set([...this.style.hues[look.color], fill, stroke]);
       } else {
         // Unowned: transparent, keeping the hue it fades out from
         target.set([this.to[at], this.to[at + 1], this.to[at + 2], 0, 0]);
@@ -308,10 +285,9 @@ export class TerritoryRenderer {
     gl.uniform3f(u.camera, this.camera.x, this.camera.y, this.camera.zoom);
     gl.uniform1f(u.radius, territoryCellRadius);
     gl.uniform1f(u.cellScale, hexCellScale);
-    const { ink: [r, g, b], terrain, boost } = this.style;
+    const { ink: [r, g, b], paper } = this.style;
     gl.uniform4f(u.fabric, r / 255, g / 255, b / 255, this.style.fabricAlpha * fabricOpacity(this.camera.zoom));
-    gl.uniform1f(u.terrain, terrain ? 1 : 0);
-    gl.uniform2f(u.boost, boost[0], boost[1]);
+    gl.uniform1f(u.paper, paper ? 1 : 0);
     const grid = this.grid;
     if (grid) gl.uniform4f(u.grid, grid.cols[0], grid.rows[0], grid.cols[1] - grid.cols[0] + 1, grid.rows[1] - grid.rows[0] + 1);
     else gl.uniform4f(u.grid, 0, 0, 0, 0);
@@ -348,7 +324,7 @@ export class TerritoryRenderer {
     gl.enableVertexAttribArray(corner);
     gl.vertexAttribPointer(corner, 2, gl.FLOAT, false, 0, 0);
 
-    for (const name of ["size", "ratio", "camera", "radius", "cellScale", "fabric", "grid", "terrain", "boost"]) {
+    for (const name of ["size", "ratio", "camera", "radius", "cellScale", "fabric", "grid", "paper"]) {
       this.uniforms[name] = gl.getUniformLocation(program, `u_${name}`);
     }
     const texture = (unit: number, name: string) => {

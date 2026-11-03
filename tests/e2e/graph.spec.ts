@@ -181,9 +181,6 @@ test("home graph", async () => {
     await page.getByLabel("INT weight").press("Enter");
     await page.getByLabel("CHR weight").fill("0.5");
     await page.getByLabel("CHR weight").press("Enter");
-    await page.getByRole("radio", { name: "violet" }).click();
-    await expect(page.getByRole("radio", { name: "violet" })).toHaveAttribute("aria-checked", "true");
-    await expect(card("Deep Learning").locator(".fill-violet-400")).toHaveCount(1);
     await card("Deep Learning").getByTitle("Level up: log a session of progress").click();
     // 20 xp in the quest: one tick and one level-up
     await expect(page.locator("dl div[title='30 xp']", { hasText: "INT" })).toHaveCount(1);
@@ -332,14 +329,18 @@ test("home graph", async () => {
 
   await test.step("alarms: a quick one, a recurring one with a challenge, switched off and on", async () => {
     await page.getByRole("button", { name: "Alarms" }).click();
-    await page.getByRole("button", { name: "In 30 min" }).click();
+    await page.getByRole("button", { name: "New alarm" }).click();
+    await page.getByRole("dialog", { name: "New alarm" }).getByRole("button", { name: "In 30 min" }).click();
+    await page.getByRole("button", { name: "All alarms", exact: true }).click();
     await expect(page.getByText(/^once, /)).toBeVisible();
 
-    await page.locator('input[type="time"]').fill("06:00");
-    await page.getByPlaceholder("Label (optional)").fill("Wake up");
-    for (const day of ["Mo", "Tu"]) await page.getByRole("button", { name: day, exact: true }).click();
-    await page.locator("select").selectOption("situps");
-    await page.getByRole("button", { name: /^Set/ }).click();
+    await page.getByRole("button", { name: "New alarm" }).click();
+    const dialog = page.getByRole("dialog", { name: "New alarm" });
+    await dialog.locator('input[type="time"]').fill("06:00");
+    await dialog.getByPlaceholder("Label (optional)").fill("Wake up");
+    for (const day of ["Mo", "Tu"]) await dialog.getByRole("button", { name: day, exact: true }).click();
+    await dialog.locator("select").selectOption("situps");
+    await dialog.getByRole("button", { name: /^Set/ }).click();
     await expect(page.getByText("Mon Tue · 15 sit-ups")).toBeVisible();
 
     const wake = page.getByRole("switch", { name: "Wake up on" });

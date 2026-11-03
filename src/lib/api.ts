@@ -21,7 +21,6 @@ import {
   type Snapshot,
   type StatWeights,
   type StockUnit,
-  type QuestColor,
   type Settings,
   type Weekday,
 } from "../shared/types";
@@ -41,7 +40,6 @@ export type NodeRow = {
   parent_id: string | null;
   title: string;
   stat_weights: StatWeights;
-  color: QuestColor | null;
   active: boolean;
   created_at: string;
   completed_at: string | null;
@@ -89,7 +87,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       // Which day it is depends on the day-start hour, so the reads of today's data wait for it
       const settings = readSettings(db);
       const date = settings.then(({ dayStartHour }) => dayOf(new Date(), dayStartHour));
-      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, progressToday, kitchen, settingsRow] = await Promise.all([
+      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, skipRows, progressToday, kitchen, settingsRow] = await Promise.all([
         // A second key for rows made at the same moment: without one, an update can move a row among them
         nodes().select().order("created_at").order("id"),
         db.from("graph_edges").select("from_id, to_id"),
@@ -97,6 +95,8 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         date.then((day) => db.from("routine_checks").select("routine_id, date").eq("date", day).eq("checked", true)),
         db.from("deadlines").select().is("done_at", null).order("due_date"),
         db.from("alarms").select().or(`at.is.null,at.gt.${new Date().toISOString()}`).order("created_at"),
+        // From yesterday: a routine's day can run past midnight
+        db.from("alarm_skips").select("key, date").eq("skipped", true).gte("date", addDays(today(), -1)),
         settings.then(({ dayStartHour }) => readProgressToday(db, dayStartHour)),
         date.then((day) => readKitchen(db, day)),
         settings,
@@ -109,6 +109,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         routineChecks: must(checkRows).map((row) => ({ routineId: row.routine_id, date: row.date })),
         deadlines: must(deadlineRows).map(toDeadline),
         alarms: must(alarmRows).map(toAlarm),
+        skippedAlarms: must(skipRows).map((row) => ({ key: row.key, date: row.date })),
         progressToday,
         kitchen,
         settings: settingsRow,
@@ -122,11 +123,11 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { nodes: [await readNode(id)] };
     },
 
-    async updateNode(id, { title, statWeights, color, active, done, shelved, priority }) {
+    async updateNode(id, { title, statWeights, active, done, shelved, priority }) {
       const at = clock().toISOString();
       const completed_at = done === undefined ? undefined : done ? at : null;
       const stat_weights = statWeights && positiveWeights(statWeights);
-      const fields = { title, stat_weights, color, active, completed_at, shelved, priority };
+      const fields = { title, stat_weights, active, completed_at, shelved, priority };
       const row = must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).eq("id", id).select().maybeSingle());
       if (!row) throw new Error("This step was deleted on another device.");
 
@@ -245,6 +246,14 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { removedAlarmIds: [id] };
     },
 
+    // Absolute and stamped, like a routine's tick: the later choice wins. Returns what the database kept.
+    async setAlarmSkip(key, date, skipped) {
+      const row = { key, date, skipped, changed_at: { skipped: clock().toISOString() } };
+      const kept = must(await db.from("alarm_skips").upsert(row, { onConflict: "user_id,key" }).select("skipped").single()) as { skipped: boolean };
+
+      return { alarmSkip: { key, date, skipped: kept.skipped } };
+    },
+
     async updateSettings({ dayStartHour, timeZone }) {
       const at = clock().toISOString();
       const fields = { day_start_hour: dayStartHour, time_zone: timeZone };
@@ -353,6 +362,7 @@ const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string
   createAlarm: (alarm) => [`alarm:${alarm.id}`],
   updateAlarm: (id) => [`alarm:${id}`],
   deleteAlarm: (id) => [`alarm:${id}`],
+  setAlarmSkip: (key) => [`skip:${key}`],
   createStockItem: () => ["kitchen"],
   updateStockItem: () => ["kitchen"],
   deleteStockItem: () => ["kitchen"],
@@ -469,7 +479,6 @@ export function toNode(row: NodeRow): GraphNode {
     parentId: row.parent_id,
     title: row.title,
     statWeights: row.stat_weights,
-    color: row.color,
     active: row.active,
     createdAt: row.created_at,
     completedAt: row.completed_at,
@@ -567,6 +576,8 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
   snapshot.edges.forEach((edge) => (removedNodes.has(edge.from) || removedNodes.has(edge.to)) && removedEdges.add(edgeKey(edge)));
   const check = delta.routineCheck;
   const wasChecked = check && snapshot.routineChecks.some((c) => c.routineId === check.routineId && c.date === check.date);
+  const skip = delta.alarmSkip;
+  const wasSkipped = skip && snapshot.skippedAlarms.some((s) => s.key === skip.key);
 
   const next: Snapshot = {
     nodes: merge(snapshot.nodes, (node) => node.id, delta.nodes?.map((node) => latestFields(snapshot.nodes.find(({ id }) => id === node.id), node)), removedNodes),
@@ -581,6 +592,10 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
         : snapshot.routineChecks,
     deadlines: merge(snapshot.deadlines, (deadline) => deadline.id, delta.deadlines, new Set(delta.removedDeadlineIds)),
     alarms: merge(snapshot.alarms, (alarm) => alarm.id, delta.alarms, new Set(delta.removedAlarmIds)),
+    skippedAlarms:
+      skip && skip.skipped !== wasSkipped
+        ? [...snapshot.skippedAlarms.filter((s) => s.key !== skip.key), ...(skip.skipped ? [{ key: skip.key, date: skip.date }] : [])]
+        : snapshot.skippedAlarms,
     progressToday: delta.progressToday && !same(delta.progressToday, snapshot.progressToday) ? delta.progressToday : snapshot.progressToday,
     kitchen: delta.kitchen && !same(delta.kitchen, snapshot.kitchen) ? delta.kitchen : snapshot.kitchen,
     settings: delta.settings && !same(delta.settings, snapshot.settings) ? delta.settings : snapshot.settings,
@@ -594,7 +609,6 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
 const STAMPED_FIELDS = [
   ["title", ["title"]],
   ["statWeights", ["stat_weights"]],
-  ["color", ["color"]],
   ["active", ["active"]],
   ["completedAt", ["completed_at"]],
   ["shelved", ["shelved"]],

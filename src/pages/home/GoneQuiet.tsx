@@ -37,7 +37,7 @@ export function GoneQuiet({ quiet, snapshot, model, act, openAtFirst }: { quiet:
   );
 }
 
-function QuietRow({ entry: { quest, days, openSteps }, snapshot, model, act, oneTap }: {
+function QuietRow({ entry: { quest, days, openSteps, priority }, snapshot, model, act, oneTap }: {
   entry: QuietQuest;
   snapshot: Snapshot;
   model: GraphModel;
@@ -49,7 +49,7 @@ function QuietRow({ entry: { quest, days, openSteps }, snapshot, model, act, one
     <div className="rounded-lg px-2 py-2 hover:bg-ink/[0.04]">
       <p className="text-[13px] leading-snug text-ink/80">{quest.title}</p>
       <p className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-muted">
-        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priority).dot}`} />
         Quiet for {days} days · {openSteps === 1 ? "1 open step" : `${openSteps} open steps`}
       </p>
       {adding ? (

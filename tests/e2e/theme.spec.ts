@@ -28,16 +28,21 @@ test("rail and theme switch", async () => {
     await expect(rail).toBeVisible({ timeout: 15_000 });
   });
 
-  await test.step("the switch goes to the light theme, a reload keeps it, then Meadow and back to Ember", async () => {
-    await page.getByTitle(/^Parchment/).click();
+  await test.step("the switch goes to the light theme, a reload keeps it, then back to dark", async () => {
+    await page.getByTitle(/^Light/).click();
     await expect.poll(theme).toBe("light");
     await page.reload();
     await expect(rail).toBeVisible({ timeout: 15_000 });
     expect(await theme()).toBe("light");
-    await page.getByTitle(/^Meadow/).click();
-    await expect.poll(theme).toBe("meadow");
-    await page.getByTitle(/^Ember/).click();
+    await page.getByTitle(/^Dark/).click();
     await expect.poll(theme).toBe("dark");
+  });
+
+  await test.step("a device that chose Meadow, the light theme's old name, opens in light", async () => {
+    await page.evaluate(() => localStorage.setItem("ashborn-theme", "meadow"));
+    await page.reload();
+    await expect(rail).toBeVisible({ timeout: 15_000 });
+    expect(await theme()).toBe("light");
   });
 
   await app.close();

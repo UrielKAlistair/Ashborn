@@ -1,21 +1,17 @@
-import type { QuestColor } from "../shared/types";
+import type { Priority } from "../shared/types";
 
-// A quest's colour, chosen in its ⋯ menu: its dot, its bar and `rgb`, which colours its hex
-// territory and the box's trial looks. Uncoloured quests
-// are drawn in the theme's ink, their territory a pale grey.
-export type Hue = QuestColor | "none";
-export type Palette = { dot: string; hexFill: string; bar: string; rgb: [number, number, number] };
+// A quest's colour is its priority's: the most urgent in it, as on the graph's rail. It colours the
+// quest's dot, its bar and its hex territory (which reads the same --priority-N from the theme). A
+// quest with none is drawn in the theme's ink.
+export type Hue = Priority | "none";
+export type Palette = { dot: string; hexFill: string; bar: string };
 
 export const palettes: Record<Hue, Palette> = {
-  red: { dot: "bg-red-400", hexFill: "fill-red-400", bar: "bg-red-300/80", rgb: [248, 113, 113] },
-  orange: { dot: "bg-orange-400", hexFill: "fill-orange-400", bar: "bg-orange-300/80", rgb: [251, 146, 60] },
-  amber: { dot: "bg-amber-400", hexFill: "fill-amber-400", bar: "bg-amber-300/80", rgb: [251, 191, 36] },
-  green: { dot: "bg-emerald-400", hexFill: "fill-emerald-400", bar: "bg-emerald-300/80", rgb: [52, 211, 153] },
-  teal: { dot: "bg-teal-400", hexFill: "fill-teal-400", bar: "bg-teal-300/80", rgb: [45, 212, 191] },
-  blue: { dot: "bg-blue-500", hexFill: "fill-blue-500", bar: "bg-blue-500/85", rgb: [59, 110, 240] },
-  violet: { dot: "bg-violet-400", hexFill: "fill-violet-400", bar: "bg-violet-300/80", rgb: [167, 139, 250] },
-  pink: { dot: "bg-pink-400", hexFill: "fill-pink-400", bar: "bg-pink-300/80", rgb: [244, 114, 182] },
-  none: { dot: "bg-ink/70", hexFill: "fill-ink/70", bar: "bg-ink/50", rgb: [226, 232, 240] },
+  1: { dot: "bg-(--priority-1)", hexFill: "fill-(--priority-1)", bar: "bg-(--priority-1)" },
+  2: { dot: "bg-(--priority-2)", hexFill: "fill-(--priority-2)", bar: "bg-(--priority-2)" },
+  3: { dot: "bg-(--priority-3)", hexFill: "fill-(--priority-3)", bar: "bg-(--priority-3)" },
+  4: { dot: "bg-(--priority-4)", hexFill: "fill-(--priority-4)", bar: "bg-(--priority-4)" },
+  none: { dot: "bg-ink/70", hexFill: "fill-ink/70", bar: "bg-ink/50" },
 };
 
-export const paletteOf = (color: QuestColor | null) => palettes[color ?? "none"];
+export const paletteOf = (priority: Priority | undefined) => palettes[priority ?? "none"];

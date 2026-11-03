@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { addDays, dayOf, startOfDay } from "../../src/shared/dates";
 
-// Folding finished chains, on data seeded straight into the test user's rows: a finished box folds
-// to one line at once and opens on a click; a finished quest leaves the graph for the Completed
-// list, can be archived and unarchived, and comes back with Reopen; an opening from an earlier day
-// no longer counts.
+// Folding finished chains, on data seeded straight into the test user's rows: a box finished today
+// folds to one line at once; steps and boxes finished on an earlier day leave the graph until their
+// quest's "done earlier" shows them, a finished box among them folded and opened on a click; a
+// finished quest leaves the graph for the Completed list, can be archived and unarchived, and comes
+// back with Reopen; an opening from an earlier day no longer counts.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 const DAY_START_HOUR = 4;
@@ -100,18 +101,15 @@ test("finished chains fold", async () => {
     await expect(card("Open quest")).toBeVisible({ timeout: 15_000 });
   });
 
-  await test.step("finished boxes fold to one line, one finished a moment ago too; yesterday's opening no longer counts", async () => {
-    await expect(card("Finished box")).toContainText("2 done");
+  await test.step("a box finished a moment ago folds to one line; what finished on an earlier day is gone", async () => {
     await expect(card("Just finished")).toContainText("1 done");
     await expect(nodes().filter({ hasText: "Just inner" })).toHaveCount(0);
-    await expect(card("Opened yesterday")).toContainText("1 done");
-    await expect(nodes().filter({ hasText: "Inner one" })).toHaveCount(0);
-    await expect(nodes().filter({ hasText: "Opened inner" })).toHaveCount(0);
+    for (const title of ["Finished box", "Opened yesterday", "Done in an open box"]) await expect(nodes().filter({ hasText: title })).toHaveCount(0);
+    await expect(card("Open quest")).toContainText("3 done earlier");
   });
 
-  await test.step("an open box, and a done step in it, stay in place", async () => {
+  await test.step("an open box and an open step stay in place", async () => {
     await expect(card("Today inner")).toBeVisible();
-    await expect(card("Done in an open box").getByTitle("Mark not done")).toBeVisible();
     await expect(card("Still open")).toBeVisible();
   });
 
@@ -130,6 +128,14 @@ test("finished chains fold", async () => {
     await page.getByRole("button", { name: "Reopen" }).click();
     await expect(card("Done quest step")).toBeVisible();
     await page.locator(".react-flow__pane").click({ position: { x: 5, y: 400 } });
+  });
+
+  await test.step("done earlier brings them back, finished boxes folded; yesterday's opening no longer counts", async () => {
+    await card("Open quest").getByRole("button", { name: "3 done earlier" }).click();
+    await expect(card("Done in an open box").getByTitle("Mark not done")).toBeVisible();
+    await expect(card("Finished box")).toContainText("2 done");
+    await expect(card("Opened yesterday")).toContainText("1 done");
+    await expect(nodes().filter({ hasText: "Opened inner" })).toHaveCount(0);
   });
 
   await test.step("a click opens a folded box, and it stays open after a reload today", async () => {

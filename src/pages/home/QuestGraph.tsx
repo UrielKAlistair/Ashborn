@@ -17,17 +17,18 @@ import {
   type NodeProps,
   type XYPosition,
 } from "@xyflow/react";
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HEX_POINTS, HexMark } from "../../components/HexTile";
-import { paletteOf, palettes } from "../../lib/theme";
+import { paletteOf } from "../../lib/theme";
 import { useToday } from "../../lib/useToday";
 import { isDone, isFinished, statKeys, type GraphModel } from "../../shared/graphModel";
+import { dayOf } from "../../shared/dates";
 import { inboxLast } from "../../shared/inbox";
 import { byPriority, derivePriorities, linkPriority } from "../../shared/priority";
 import { nodeLevel } from "../../shared/progression";
 import { packQuests, prerequisitesFirst, type Canvas, type Size } from "../../shared/questPacking";
-import { questColors, type GraphEdge, type GraphNode, type ISODate, type Priority, type QuestColor, type Snapshot, type StatKey, type StatWeights } from "../../shared/types";
+import { type GraphEdge, type GraphNode, type ISODate, type Priority, type Snapshot, type StatKey, type StatWeights } from "../../shared/types";
 import { MoveTargets, MoveToPicker } from "./Capture";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
@@ -128,6 +129,8 @@ type CardData = {
   shelved: boolean; // shelved itself, or inside a shelved box: shown greyed
   collapsed: boolean;
   folded: number | null; // a finished box folded to one line: how many steps it holds
+  earlierDone: number; // a quest: its steps finished on an earlier day, hidden unless opened today
+  showsDone: boolean; // a quest opened today: those steps are shown
   locked: boolean; // the quest it sits in, or is, keeps its steps where they are
   adding: boolean;
   menuOpen: boolean;
@@ -144,7 +147,8 @@ type PriorityLook = Priority | undefined;
 type CardActions = {
   act: Act;
   toggleCollapsed: (id: string) => void;
-  open: (id: string) => void; // a folded box, until the next day starts
+  open: (id: string) => void; // a folded box, or a quest's earlier done steps, until the next day starts
+  close: (id: string) => void;
   toggleLocked: (id: string) => void;
   setAdding: (id: string, open: boolean) => void;
   setMenu: (id: string, open: boolean) => void;
@@ -231,6 +235,12 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // A box shows all its steps, done ones greyed, most urgent first, unless the user collapsed it or
   // it is folded
   const visibleSteps = (id: string) => (collapsed.has(id) || isFolded(id) ? [] : byPriority(model.children.get(id) ?? [], priorities));
+  // A step or box finished on an earlier day leaves the graph, unless its quest is opened today
+  const doneEarlier = (node: GraphNode) => {
+    const finished = model.finishedAt.get(node.id) ?? (node.completedAt ? Date.parse(node.completedAt) : null);
+    return finished !== null && dayOf(new Date(finished), dayStartHour) < today;
+  };
+  const showsDone = (questId: string) => (opened[questId] ?? "") >= today;
 
   const quests = model.children.get(null) ?? [];
   const completed = quests.filter((quest) => quest.active && isFolded(quest.id));
@@ -239,12 +249,20 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
 
   // Rendered nodes, parents before their steps (React Flow needs that order), and the links
   // between them; worked out again only when the graph or what is open changes, not per drag move
-  const { shown, rendered, depthOf, renderedEdges, structureKey } = useMemo(() => {
+  const { shown, rendered, depthOf, renderedEdges, structureKey, earlierDone } = useMemo(() => {
     const shown = inboxLast(byPriority(quests.filter((quest) => quest.active && !isFolded(quest.id)), priorities), snapshot.inboxId);
     const rendered: Array<{ node: GraphNode; depth: number; questId: string }> = [];
+    // Per quest, how many of its steps finished on an earlier day, shown or not
+    const earlierDone = new Map<string, number>();
     const visit = (node: GraphNode, depth: number, questId: string) => {
       rendered.push({ node, depth, questId });
-      visibleSteps(node.id).forEach((step) => visit(step, depth + 1, questId));
+      visibleSteps(node.id).forEach((step) => {
+        if (doneEarlier(step)) {
+          earlierDone.set(questId, (earlierDone.get(questId) ?? 0) + 1);
+          if (!showsDone(questId)) return;
+        }
+        visit(step, depth + 1, questId);
+      });
     };
     shown.forEach((quest) => visit(quest, 0, quest.id));
     const depthOf = new Map(rendered.map(({ node, depth }) => [node.id, depth]));
@@ -254,7 +272,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       renderedEdges.map((edge) => [edge.from, edge.to]),
       addingTo,
     ]);
-    return { shown, rendered, depthOf, renderedEdges, structureKey };
+    return { shown, rendered, depthOf, renderedEdges, structureKey, earlierDone };
   }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo, priorities]);
   const topKey = shown.map((quest) => quest.id).join();
 
@@ -342,6 +360,12 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         saveOpened(next);
         return next;
       }),
+    close: (id) =>
+      setOpened((current) => {
+        const { [id]: _closed, ...next } = current;
+        saveOpened(next);
+        return next;
+      }),
     toggleLocked: (id) =>
       setUnlocked((current) => {
         const next = new Set(current);
@@ -362,6 +386,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       act: (name, ...args) => latest.current.act(name, ...args),
       toggleCollapsed: (id) => latest.current.toggleCollapsed(id),
       open: (id) => latest.current.open(id),
+      close: (id) => latest.current.close(id),
       toggleLocked: (id) => latest.current.toggleLocked(id),
       setAdding: (id, open) => latest.current.setAdding(id, open),
       setMenu: (id, open) => latest.current.setMenu(id, open),
@@ -388,6 +413,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         shelved: model.shelved.has(node.id),
         collapsed: collapsed.has(node.id),
         folded: depth > 0 && isFolded(node.id) ? subtreeOf(model, node.id).length - 1 : null,
+        earlierDone: depth === 0 ? (earlierDone.get(node.id) ?? 0) : 0,
+        showsDone: depth === 0 && showsDone(node.id),
         locked: !unlocked.has(questId),
         adding: addingTo === node.id,
         menuOpen: menuFor === node.id,
@@ -468,7 +495,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       const placement = placements[quest.id];
       if (!placement) return [];
       const rect = { ...placement.position, ...placement.size, ...moving[quest.id] };
-      return [{ id: quest.id, rect, color: quest.color ?? ("none" as const), z }];
+      return [{ id: quest.id, rect, color: priorities.best.get(quest.id) ?? ("none" as const), z }];
     });
     const previous = shownTerritories.current;
     const same = (a: TerritoryQuest, b: TerritoryQuest | undefined) =>
@@ -647,24 +674,20 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
   const { node, xp } = data;
   const { act } = data.actions;
   const level = nodeLevel(xp);
-  const palette = paletteOf(node.color);
+  const palette = paletteOf(data.look);
 
   return (
-    <div
-      data-priority={data.look}
-      className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}
-      style={{ "--quest": `rgb(${palette.rgb.join(" ")})` } as CSSProperties}
-    >
+    <div data-priority={data.look} className={`relative h-full w-full ${data.shelved ? shelvedLook : ""}`}>
       <Handles hidden={data.phone} />
       <div className="priority-mark rounded-2xl" />
 
-      <div className="quest-sheet absolute inset-0 overflow-hidden rounded-2xl border bg-card shadow-[var(--card-shadow)]" />
+      <div className="absolute inset-0 overflow-hidden rounded-2xl border border-ink/12 bg-card shadow-[var(--card-shadow)]" />
 
       <div className="group relative flex flex-col justify-between px-4 pt-3 pb-3.5" style={{ height: questHeader.height }}>
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-1 items-start gap-2">
             <HexDot className={palette.hexFill} />
-            <Title node={node} act={act} textSize="text-[14px]" className="quest-title truncate font-display leading-snug font-semibold text-ink" />
+            <Title node={node} act={act} textSize="text-[14px]" className="truncate font-display leading-snug font-semibold text-ink" />
             {data.phone ? null : (
               <button
                 type="button"
@@ -682,10 +705,26 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
           <BoxButtons data={data} />
         </div>
         <div>
-          <span className="font-mono text-[10.5px] text-muted">
-            LVL {level.level}
-            {node.shelved ? <span className="ml-2 font-sans text-ink/60">· Shelved</span> : null}
-          </span>
+          <div className="flex items-baseline justify-between">
+            <span className="font-mono text-[10.5px] text-muted">
+              LVL {level.level}
+              {node.shelved ? <span className="ml-2 text-ink/60">· Shelved</span> : null}
+            </span>
+            {data.earlierDone > 0 ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (data.showsDone) data.actions.close(node.id);
+                  else data.actions.open(node.id);
+                }}
+                title={data.showsDone ? "Hide the steps done before today" : "Show the steps done before today, until the day ends"}
+                className="nodrag font-mono text-[10.5px] text-muted hover:text-ink/85"
+              >
+                {data.showsDone ? "Hide earlier done" : `${data.earlierDone} done earlier`}
+              </button>
+            ) : null}
+          </div>
           <div className="mt-1 h-1 overflow-hidden rounded-full bg-ink/8">
             <div className={`progress-fill h-full rounded-full ${palette.bar}`} style={{ width: `${level.percent}%` }} />
           </div>
@@ -1168,10 +1207,6 @@ function MenuButton({ data }: { data: CardData }) {
             <p className="mb-1 text-[11.5px] text-muted">Priority</p>
             <PriorityPicker node={node} act={act} />
           </div>
-          <div>
-            <p className="mb-1 text-[11.5px] text-muted">Colour</p>
-            <ColorPicker node={node} act={act} />
-          </div>
           <StatWeightsEditor node={node} act={act} />
 
           <button
@@ -1291,10 +1326,6 @@ function PhoneMenu({ data }: { data: CardData }) {
                         <span className="text-[11px] font-semibold text-red-300">++</span> Level up
                       </button>
                       <div className={phoneRow}>
-                        <p className="mb-1 text-[11.5px] text-muted">Colour</p>
-                        <ColorPicker node={node} act={act} />
-                      </div>
-                      <div className={phoneRow}>
                         <StatWeightsEditor node={node} act={act} />
                       </div>
                       <button type="button" onClick={choose(() => act("updateNode", node.id, { active: false }))} className={phoneItem}>
@@ -1395,29 +1426,6 @@ function FinishedQuests({ title, quests, buttons }: { title: string; quests: Gra
         </div>
       ) : null}
     </>
-  );
-}
-
-// One swatch per colour, plus the ink for none
-function ColorPicker({ node, act }: { node: GraphNode; act: Act }) {
-  const choices: (QuestColor | null)[] = [null, ...questColors];
-  return (
-    <div className="flex w-full justify-between" role="radiogroup" aria-label="Colour">
-      {choices.map((color) => (
-        <button
-          key={color ?? "none"}
-          type="button"
-          role="radio"
-          aria-checked={node.color === color}
-          aria-label={color ?? "No colour"}
-          title={color ?? "No colour"}
-          onClick={() => void act("updateNode", node.id, { color })}
-          className={`flex h-6 w-6 items-center justify-center rounded-full border max-sm:h-10 max-sm:w-9 ${node.color === color ? "border-ink/70" : "border-transparent hover:border-ink/25"}`}
-        >
-          <span className={`h-3.5 w-3.5 rounded-full ${palettes[color ?? "none"].dot}`} />
-        </button>
-      ))}
-    </div>
   );
 }
 

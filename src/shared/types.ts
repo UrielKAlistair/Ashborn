@@ -4,8 +4,6 @@ export type StatKey = "STR" | "DEX" | "INT" | "WIS" | "CHR" | "MND";
 // Positive weights; the stats listed share a quest's XP in proportion to them
 export type StatWeights = Partial<Record<StatKey, number>>;
 export type ClockTime = string; // HH:MM, local time
-export const questColors = ["red", "orange", "amber", "green", "teal", "blue", "violet", "pink"] as const;
-export type QuestColor = (typeof questColors)[number];
 
 // How an alarm stops: a plain one is dismissed; the others only after walking or sit-ups,
 // counted by the phone's accelerometer
@@ -18,7 +16,6 @@ export type GraphNode = {
   parentId: string | null;
   title: string;
   statWeights: StatWeights; // quests only: the stats work in the quest trains; empty trains none
-  color: QuestColor | null; // quests only: the colour the user gave it; null is uncoloured, drawn in the ink
   active: boolean; // quests only: shown on the dashboard
   createdAt: string;
   completedAt: string | null; // a step is done when this is set
@@ -68,6 +65,9 @@ export type Alarm = {
 };
 
 export type AlarmPatch = Partial<Omit<Alarm, "id">>;
+
+// One ring skipped: the schedule's key for it (see AlarmInstance) and the day it rings on
+export type AlarmSkip = { key: string; date: ISODate };
 
 // Done deadlines are never sent: the app only shows open ones
 export type Deadline = {
@@ -166,6 +166,7 @@ export type Snapshot = {
   routineChecks: RoutineCheck[]; // today's
   deadlines: Deadline[];
   alarms: Alarm[]; // recurring ones, and one-offs still to ring
+  skippedAlarms: AlarmSkip[]; // rings skipped, from yesterday on
   progressToday: ProgressToday;
   kitchen: Kitchen;
   settings: Settings;
@@ -189,6 +190,7 @@ export type Delta = {
   removedDeadlineIds?: string[];
   alarms?: Alarm[];
   removedAlarmIds?: string[];
+  alarmSkip?: AlarmSkip & { skipped: boolean };
   progressToday?: ProgressToday;
   kitchen?: Kitchen; // replaces the whole Kitchen
   settings?: Settings;
@@ -199,7 +201,6 @@ export type NodePatch = {
   statWeights?: StatWeights;
   shelved?: boolean;
   priority?: Priority | null;
-  color?: QuestColor | null;
   active?: boolean;
   done?: boolean;
 };
@@ -230,6 +231,7 @@ export type AshbornApi = {
   createAlarm(alarm: Alarm): Promise<Delta>; // the id is made by the caller, so it works offline
   updateAlarm(id: string, patch: AlarmPatch): Promise<Delta>;
   deleteAlarm(id: string): Promise<Delta>;
+  setAlarmSkip(key: string, date: ISODate, skipped: boolean): Promise<Delta>;
   updateSettings(patch: Partial<Settings>): Promise<Delta>;
 
   // The Kitchen. Cooking, uncooking and adjusting stock work offline; the rest needs a connection.

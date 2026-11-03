@@ -156,7 +156,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
         {step.title}
       </button>
       <p className="mt-1 flex items-center gap-1.5 text-[12px] text-muted">
-        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(quest.color).dot}`} />
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priorities.best.get(quest.id)).dot}`} />
         <span className="truncate">
           {firstStep ? "A quest with no steps yet" : (
             <>

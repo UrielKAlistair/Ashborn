@@ -10,6 +10,7 @@ export const backupTables: { table: string; key: string[] }[] = [
   { table: "routine_checks", key: ["routine_id", "date"] },
   { table: "deadlines", key: ["id"] },
   { table: "alarms", key: ["id"] },
+  { table: "alarm_skips", key: ["user_id", "key"] },
   { table: "stock_items", key: ["id"] },
   { table: "recipes", key: ["id"] },
   { table: "recipe_ingredients", key: ["id"] },

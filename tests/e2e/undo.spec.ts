@@ -142,7 +142,7 @@ test("undo a tick", async () => {
 
   await test.step("it reads in every theme, and on the phone it sits above the tabs", async () => {
     await expect(graphTick("First step")).toHaveAttribute("title", "Mark not done");
-    for (const theme of ["light", "meadow"]) {
+    for (const theme of ["light"]) {
       await page.evaluate((name) => document.documentElement.setAttribute("data-theme", name), theme);
       await graphTick("The only step").click();
       await expect(toast()).toHaveCSS("opacity", "1");

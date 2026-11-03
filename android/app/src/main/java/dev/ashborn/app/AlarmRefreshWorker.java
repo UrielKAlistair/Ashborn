@@ -112,6 +112,7 @@ public class AlarmRefreshWorker extends Worker {
             .put("settings", new JSONObject().put("dayStartHour", dayStartHour))
             .put("routines", get(rest, key, access, "routines?select=id,title,weekdays,time,alarm&order=created_at"))
             .put("routineChecks", get(rest, key, access, "routine_checks?select=routineId:routine_id,date&checked=is.true&date=gte." + firstDay))
+            .put("skippedAlarms", get(rest, key, access, "alarm_skips?select=key,date&skipped=is.true&date=gte." + Schedule.addDays(today, -1)))
             .put("alarms", get(rest, key, access, "alarms?select=id,label,kind,at,time,weekdays,enabled&or=(at.is.null,at.gt." + utc(now) + ")&order=created_at"))
             .put("deadlines", get(rest, key, access, "deadlines?select=id,title,dueDate:due_date,alarmTime:alarm_time&done_at=is.null&order=due_date"))
             .put("kitchen", new JSONObject().put("recipes", recipes).put("defaultWeek", defaultWeek).put("meals", meals));

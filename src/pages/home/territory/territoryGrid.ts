@@ -1,4 +1,4 @@
-import { palettes, type Hue } from "../../../lib/theme";
+import type { Hue } from "../../../lib/theme";
 import { hexCentre, hexColumnWidth, hexRowHeight } from "./hexgrid";
 
 // Territories on the hex grid, as on the homepage's trail. Every cell asks one question: which
@@ -99,11 +99,11 @@ export function computeOwners(grid: Grid, quests: TerritoryQuest[]): CellLook[] 
   return looks;
 }
 
-// An owned cell's colour, with the opacities of its fill and outline: stronger near a quest
-// and along a territory's border
-export function cellPaint(color: Hue, look: CellLook) {
+// An owned cell's fill and outline opacities. Tinted (dark): stronger near a quest and along a
+// territory's border. On paper (light): an even wash, no outline.
+export function cellPaint(look: CellLook, paper: boolean) {
+  if (paper) return { fill: paperWash, stroke: 0 };
   return {
-    rgb: palettes[color].rgb,
     fill: 0.012 + look.level * 0.012 + (look.frontier ? 0.012 : 0),
     stroke: 0.05 + look.level * 0.03 + (look.frontier ? 0.06 : 0),
   };
@@ -112,4 +112,5 @@ export function cellPaint(color: Hue, look: CellLook) {
 // The bare fabric: every cell's outline, faintly, everywhere. It fades out when zoomed far out,
 // where the cells would shrink to a few pixels and shimmer.
 export const fabricAlpha = 0.055;
+const paperWash = 0.1;
 export const fabricOpacity = (zoom: number) => Math.min(1, Math.max(0, (zoom - 0.2) / 0.25));
