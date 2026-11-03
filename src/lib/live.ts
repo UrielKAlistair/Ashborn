@@ -3,6 +3,7 @@ import { today } from "../shared/dates";
 import { PROGRESS_UNIT } from "../shared/progression";
 import type { Delta, Snapshot } from "../shared/types";
 import { readKitchen, readProgressToday, readSettings, toAlarm, toDeadline, toEdge, toNode, toRoutine, type AlarmRow, type DeadlineRow, type NodeRow, type RoutineRow } from "./api";
+import { isConnectionError } from "./offline";
 
 type Row = Record<string, unknown>;
 type EdgeRow = { from_id: string; to_id: string };
@@ -20,10 +21,13 @@ const KITCHEN_SETTLE_MS = 300;
 // insert or update of a row not on screen is read again first, and shown only if the row exists,
 // lest it bring back a row already deleted.
 export function watchChanges(db: SupabaseClient, current: () => Snapshot | null, onDelta: (delta: Delta) => void, onSubscribed: () => void) {
+  // A change whose read failed on the network is left to the next read; any other failure is reported
   const emit = (delta: Delta | Promise<Delta>) =>
     void Promise.resolve(delta)
       .then(onDelta)
-      .catch((reason) => console.error("A live change could not be shown", reason));
+      .catch((reason) => {
+        if (!isConnectionError(reason)) console.error("A live change could not be shown", reason);
+      });
 
   // What a read found, unless a newer read of the same thing has started: reads can finish out of order
   const startedReads = new Map<string, number>();
