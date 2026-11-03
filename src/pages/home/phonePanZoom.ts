@@ -4,9 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 // Pan and pinch on the phone, done here rather than by React Flow. React Flow moves its camera
 // through its store, and every component subscribed to the store checks the change, in every frame
 // of a gesture; on a slow phone that alone fills the frame. Here each frame moves the map's layer
-// and the territory directly, and the store is told the camera once, when the fingers lift. While
-// it moves, the pane carries data-moving, which gives the map its own layer (index.css), as React
-// Flow's onMoveStart does on the desktop; that event never fires for a gesture made here.
+// and the territory directly, and the store is told the camera once, when the fingers lift; a
+// gesture that changed the zoom then sharpens the map.
 
 export type Camera = { x: number; y: number; zoom: number };
 export type CameraFeed = { subscribe: (follow: (camera: Camera) => void) => () => void };
@@ -15,6 +14,13 @@ type Point = { x: number; y: number };
 
 // Below this many pixels of travel a touch is a tap, left to the buttons under it
 const tapDistance = 4;
+
+// The map's layer (index.css) keeps the scale it was drawn at, which blurs it after a zoom; dropping
+// the layer for a frame redraws it at the new scale. A pan keeps the scale, and needs none of this.
+export function sharpen(pane: HTMLElement) {
+  pane.setAttribute("data-sharpen", "");
+  requestAnimationFrame(() => requestAnimationFrame(() => pane.removeAttribute("data-sharpen")));
+}
 
 export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: number) {
   const store = useStoreApi();
@@ -39,6 +45,7 @@ export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: numb
     let origin: Point = { x: 0, y: 0 }; // the pane's corner on screen, as the gesture began
     let camera: Camera = { x: 0, y: 0, zoom: 1 };
     let moved = false;
+    let zoomAtStart = 1;
     // The camera and the fingers' centre and spread when the current set of fingers went down; the
     // map point under that centre stays under the fingers' centre, scaled by their spread
     let start = { camera, centre: origin, spread: 0 };
@@ -56,6 +63,7 @@ export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: numb
       if (fingers.size === 0) {
         const [x, y, zoom] = store.getState().transform;
         camera = { x, y, zoom };
+        zoomAtStart = zoom;
         const rect = pane.getBoundingClientRect();
         origin = { x: rect.left, y: rect.top };
         moved = false;
@@ -69,7 +77,6 @@ export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: numb
       fingers.set(event.pointerId, { x: event.clientX - origin.x, y: event.clientY - origin.y });
       const { centre, spread } = shape();
       if (!moved && Math.hypot(centre.x - start.centre.x, centre.y - start.centre.y) < tapDistance && Math.abs(spread - start.spread) < tapDistance) return;
-      if (!moved) pane.setAttribute("data-moving", "");
       moved = true;
       const zoom = Math.min(maxZoom, Math.max(minZoom, start.spread > 0 ? (start.camera.zoom * spread) / start.spread : start.camera.zoom));
       const anchor = { x: (start.centre.x - start.camera.x) / start.camera.zoom, y: (start.centre.y - start.camera.y) / start.camera.zoom };
@@ -82,8 +89,8 @@ export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: numb
       if (!fingers.delete(event.pointerId)) return;
       if (fingers.size > 0) return void regrip();
       if (!moved) return;
-      pane.removeAttribute("data-moving");
       void setViewport(camera);
+      if (camera.zoom !== zoomAtStart) sharpen(pane);
       // The click a lifted finger may still fire belongs to the gesture, not to what it ended on
       const swallow = (click: Event) => {
         click.stopPropagation();
@@ -103,7 +110,6 @@ export function usePhonePanZoom(enabled: boolean, minZoom: number, maxZoom: numb
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
-      pane.removeAttribute("data-moving");
     };
   }, [enabled, minZoom, maxZoom, store, setViewport]);
 

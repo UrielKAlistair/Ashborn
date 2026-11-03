@@ -35,7 +35,7 @@ import { InlineInput } from "./InlineInput";
 import { SplitContext, SplitSteps } from "./SplitSteps";
 import { useIsNowStep } from "./nowMirror";
 import { onShowOnGraph, takeWaitingShow } from "./showOnGraph";
-import { usePhonePanZoom } from "./phonePanZoom";
+import { sharpen, usePhonePanZoom } from "./phonePanZoom";
 import Territories from "./territory/Territories";
 import type { TerritoryQuest } from "./territory/territoryGrid";
 import { Tick } from "./Tick";
@@ -225,6 +225,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // Hidden until the first layout is fitted: before it, every node sits at the origin
   const [shownYet, setShownYet] = useState(false);
   const phonePanZoom = usePhonePanZoom(phone, zoomRange.min, zoomRange.max);
+  const zoomAtMoveStart = useRef(1);
 
   // A box whose steps are all done folds at once, unless opened today. A folded quest leaves the
   // graph for the Completed list.
@@ -545,8 +546,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         startedOnIncoming.current = handleType === "target";
       }}
       onConnect={connect}
-      onMoveStart={() => phonePanZoom.ref.current?.setAttribute("data-moving", "")}
-      onMoveEnd={() => phonePanZoom.ref.current?.removeAttribute("data-moving")}
+      onMoveStart={(_event, viewport) => (zoomAtMoveStart.current = viewport.zoom)}
+      onMoveEnd={(_event, viewport) => viewport.zoom !== zoomAtMoveStart.current && phonePanZoom.ref.current && sharpen(phonePanZoom.ref.current)}
       onEdgeClick={(_event, edge) => {
         setMenuFor(null);
         setSelectedEdge({ from: edge.source, to: edge.target });

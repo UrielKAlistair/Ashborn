@@ -118,11 +118,14 @@ body {
   background-color: color-mix(in oklab, var(--color-ink) 24%, transparent);
 }
 
-/* While the quest graph pans or zooms its camera is its own compositor layer, so a move shifts the
-   cards already drawn instead of repainting them in every frame. Only while moving: a layer keeps
-   the scale it was drawn at, so a zoom held still would stay blurred. */
-.react-flow[data-moving] .react-flow__viewport {
+/* The quest graph's camera is its own compositor layer, so a pan or zoom shifts the cards already
+   drawn instead of repainting them in every frame. A layer keeps the scale it was drawn at, so after
+   a zoom it is dropped for a frame (data-sharpen, phonePanZoom.ts's sharpen) and redrawn sharp. */
+.react-flow__viewport {
   will-change: transform;
+}
+.react-flow[data-sharpen] .react-flow__viewport {
+  will-change: auto;
 }
 
 /* React Flow's zoom buttons, in the theme */
