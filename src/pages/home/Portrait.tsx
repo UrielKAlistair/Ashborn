@@ -81,7 +81,8 @@ function Figure({ src, cell, scale }: { src: string; cell: number | null; scale:
       const frameMs = 1000 / FRAMES_PER_SECOND;
       let shown = -1;
       const draw = (now: number) => {
-        const elapsed = now - start;
+        // A frame's timestamp is when the frame began, which can be before `start`
+        const elapsed = Math.max(0, now - start);
         const frame = Math.floor(elapsed / frameMs) % frames.length;
         if (frame !== shown) {
           const at = frames[frame];
