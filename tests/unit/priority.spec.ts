@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { buildGraphModel } from "../../src/shared/graphModel";
 import { emptyKitchen } from "../../src/shared/kitchen";
-import { byPriority, deadlinePriority, derivePriorities, needsFirstStep, prioritisedSteps } from "../../src/shared/priority";
+import { byPriority, deadlinePriority, derivePriorities, linkPriority, needsFirstStep, prioritisedSteps } from "../../src/shared/priority";
 import type { Deadline, GraphEdge, GraphNode, Priority, Snapshot } from "../../src/shared/types";
 
 const today = "2026-11-02";
@@ -144,4 +144,18 @@ test("the graph marks a chain but not the steps inside the box it was set on", (
     [{ from: "x", to: "y" }],
   );
   expect(asObject(priorities.marked)).toEqual({ quest: 1, x: 3, y: 3 });
+});
+
+test("a step's own priority is marked inside a box of the same priority", () => {
+  const { priorities } = setup([node("quest", null, { priority: 1 }), node("s", "quest", { priority: 1 })]);
+  expect(asObject(priorities.marked)).toEqual({ quest: 1, s: 1 });
+});
+
+test("a link takes its chain's colour when one end is marked, and stays plain inside the box", () => {
+  const { priorities } = setup(
+    [node("Q", null, { priority: 1 }), node("s", "Q"), node("t", "Q"), node("R", null), node("p", "R")],
+    [{ from: "p", to: "s" }, { from: "s", to: "t" }],
+  );
+  expect(linkPriority(priorities, "p", "s")).toBe(1);
+  expect(linkPriority(priorities, "s", "t")).toBeUndefined();
 });

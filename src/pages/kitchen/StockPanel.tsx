@@ -34,7 +34,7 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
   return (
     <div role="group" aria-label={item.name} className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="truncate text-[13px] text-ink/85">{item.name}</p>
+        <p className="min-w-0 text-[13px] text-ink/85 [overflow-wrap:anywhere]">{item.name}</p>
         <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 text-[11.5px] text-muted hover:text-ink/85 max-sm:min-h-11 max-sm:px-2">
           {editing ? "Done" : "Edit"}
         </button>

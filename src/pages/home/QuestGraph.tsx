@@ -24,7 +24,7 @@ import { paletteOf, palettes } from "../../lib/theme";
 import { useToday } from "../../lib/useToday";
 import { isDone, isFinished, statKeys, type GraphModel } from "../../shared/graphModel";
 import { inboxLast } from "../../shared/inbox";
-import { byPriority, derivePriorities } from "../../shared/priority";
+import { byPriority, derivePriorities, linkPriority } from "../../shared/priority";
 import { nodeLevel } from "../../shared/progression";
 import { packQuests, prerequisitesFirst, type Canvas, type Size } from "../../shared/questPacking";
 import { questColors, type GraphEdge, type GraphNode, type ISODate, type Priority, type QuestColor, type Snapshot, type StatKey, type StatWeights } from "../../shared/types";
@@ -440,7 +440,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         const depth = depthOf.get(edge.from) ?? 0;
         // A link out of a done step is a met prerequisite
         const met = model.byId.get(edge.from)?.completedAt;
-        const priority = priorities.marked.get(edge.to);
+        const priority = linkPriority(priorities, edge.from, edge.to);
         const color = met ? linkDone : priority ? `var(--priority-${priority})` : linkOpen;
         return {
           id: `${edge.from}->${edge.to}`,

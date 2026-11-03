@@ -8,7 +8,7 @@ import type { GraphNode, ISODate, Priority, Snapshot } from "./types";
 export type Priorities = {
   effective: Map<string, Priority>; // what covers the node; absent: nothing does
   best: Map<string, Priority>; // the most urgent in the node and everything inside it
-  marked: Map<string, Priority>; // what the graph marks: covered, but not as a step inside the node it was set on
+  marked: Map<string, Priority>; // what the graph marks: set or raised on the node, or covering it from outside its box
   origin: Map<string, PriorityOrigin>; // where a covered node's priority comes from
 };
 
@@ -62,9 +62,17 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot, date: IS
     for (let parent = model.byId.get(id)?.parentId; parent; parent = model.byId.get(parent)?.parentId) if (parent === boxId) return true;
     return false;
   };
-  const marked = new Map([...effective].filter(([id]) => !inside(id, origin.get(id)!.nodeId)));
+  const own = new Set([...set, ...raised].map(({ id }) => id));
+  const marked = new Map([...effective].filter(([id]) => own.has(id) || !inside(id, origin.get(id)!.nodeId)));
 
   return { effective, best, marked, origin };
+}
+
+// The colour of a link on the graph: a chain's, when one end is marked and both are in the same chain;
+// a link inside a box that holds its priority stays plain
+export function linkPriority({ effective, marked, origin }: Priorities, from: string, to: string): Priority | undefined {
+  const sameChain = origin.has(to) && origin.get(from)?.nodeId === origin.get(to)?.nodeId;
+  return sameChain && (marked.has(from) || marked.has(to)) ? effective.get(to) : undefined;
 }
 
 // Most urgent first, the given order kept among equals; no priority comes last
