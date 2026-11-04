@@ -2,6 +2,11 @@ import { addDays, atTime, dayOf, startOfDay, toISODate, weekdayOf } from "./date
 import { mealReminders } from "./kitchen.js";
 import type { AlarmKind, ISODate, Routine, Snapshot } from "./types.js";
 
+// How far back the schedule handed to the phone reaches: the rings already rung that are still due
+// say which snoozes may ring again (none whose ring was ticked, skipped or removed since), so the
+// snapshot holds the one-off alarms and routine ticks of that span too
+export const RING_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
 // One ring of an alarm: a timed routine on one of its days, a deadline on its due day, or a
 // reminder of a recipe for a planned meal
 export type AlarmInstance = {

@@ -97,25 +97,22 @@ test("agent tools", async () => {
     expect(body).not.toMatch(/Kernel PCA \[[^\]]+\] P/);
   });
 
-  await test.step("a deadline links to a step: as it nears the step joins Up next, saying why, and unlinking or deleting it takes it out", async () => {
+  await test.step("a deadline links to a step and raises nothing; unlinking and deleting work, and `delete` refuses it", async () => {
     const soon = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-    const added = await call("add_deadline", { title: "Soon", due_date: soon, node_id: id("kernel") });
-    expect(added.body).toMatch(/Kernel trick \[[^\]]+\]: P1, raised by deadline "Soon"/);
+    expect((await call("add_deadline", { title: "Soon", due_date: soon, node_id: id("kernel") })).ok).toBe(true);
     let { body } = await call("overview");
-    expect(body.split("\n\n")[0]).toMatch(/- P1 Kernel trick \[[^\]]+\] \(raised by deadline "Soon"/);
-    expect(body).toContain(", linked to Kernel trick (raising its chain as it nears): due");
+    expect(body.split("\n\n")[0]).not.toContain("Kernel trick");
+    expect(body).toContain(", linked to Kernel trick: due");
     expect((await call("overview", { quest_id: id("dl") })).body).toMatch(/^Deadlines linked to this quest:\n- Soon \[/m);
     const deadlineId = /- Soon \[([^\]]+)\]/.exec(body)![1];
-    const unlinked = await call("link_deadline", { id: deadlineId, node_id: null });
-    expect(unlinked.body).toMatch(/Kernel trick \[[^\]]+\]: no priority/);
+    expect((await call("link_deadline", { id: deadlineId, node_id: null })).ok).toBe(true);
     ({ body } = await call("overview"));
-    expect(body.split("\n\n")[0]).not.toContain("Kernel trick");
+    expect(body).toMatch(/- Soon \[[^\]]+\]: due/);
 
-    // `delete` takes only quests and steps; a deadline has its own, which ends its raise
-    expect((await call("link_deadline", { id: deadlineId, node_id: id("kernel") })).ok).toBe(true);
+    // `delete` takes only quests and steps; a deadline has its own, which refuses an unknown id
     expect((await call("delete", { id: deadlineId })).ok).toBe(false);
-    const deleted = await call("delete_deadline", { id: deadlineId });
-    expect(deleted.body).toMatch(/Kernel trick \[[^\]]+\]: no priority/);
+    expect((await call("delete_deadline", { id: deadlineId })).ok).toBe(true);
+    expect((await call("delete_deadline", { id: deadlineId })).ok).toBe(false);
     expect((await call("overview")).body).not.toContain("- Soon [");
   });
 
@@ -180,6 +177,31 @@ test("agent tools", async () => {
     const { body } = await call("overview");
     expect(body).not.toContain("Kernel");
     expect(body).toContain("Submit draft");
+  });
+
+  await test.step("completing a box completes every open step inside it; reopening it reopens only the box", async () => {
+    const added = await call("add_plan", {
+      parent_id: null,
+      steps: [
+        { ref: "pointers", title: "Two pointers" },
+        { ref: "set", title: "Problem set", parent: "pointers" },
+        { ref: "p1", title: "Problem 1", parent: "set" },
+        { ref: "p2", title: "Problem 2", parent: "set" },
+        { ref: "deeper", title: "Variants", parent: "set" },
+        { ref: "p3", title: "Problem 3", parent: "deeper" },
+        { ref: "later", title: "Write it up", parent: "pointers" },
+      ],
+    });
+    const ref = (name: string) => added.body.match(new RegExp(`^${name}: .*\\[([0-9a-f-]+)\\]`, "m"))![1];
+    expect((await call("complete", { ids: [ref("set")] })).ok).toBe(true);
+    let { body } = await call("overview", { quest_id: ref("pointers") });
+    for (const title of ["Problem set", "Problem 1", "Problem 2", "Variants", "Problem 3"]) expect(body).toContain(`- [x] ${title}`);
+    expect(body).toContain("- [ ] Write it up");
+    expect((await call("reopen", { ids: [ref("set")] })).ok).toBe(true);
+    ({ body } = await call("overview", { quest_id: ref("pointers") }));
+    expect(body).toContain("- [ ] Problem set");
+    expect(body).toContain("- [x] Problem 1");
+    expect((await call("delete", { id: ref("pointers") })).ok).toBe(true);
   });
 
   await test.step("kitchen: a recipe deducts its tracked ingredients when its meal is cooked, and unticking restores them", async () => {

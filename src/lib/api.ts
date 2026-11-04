@@ -1,7 +1,9 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { addDays, dayOf, DEFAULT_DAY_START_HOUR, startOfDay, today } from "../shared/dates";
+import { openInside } from "../shared/graphModel";
 import { recipeProblems, sameKind } from "../shared/kitchen";
 import { PROGRESS_UNIT } from "../shared/progression";
+import { RING_LOOKBACK_MS } from "../shared/schedule";
 import {
   mealDaysAhead,
   mealDaysBack,
@@ -92,9 +94,10 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         nodes().select().order("created_at").order("id"),
         db.from("graph_edges").select("from_id, to_id"),
         db.from("routines").select().order("created_at"),
-        date.then((day) => db.from("routine_checks").select("routine_id, date").eq("date", day).eq("checked", true)),
+        // From yesterday, and one-offs from a day back: the phone's schedule reaches back that far
+        date.then((day) => db.from("routine_checks").select("routine_id, date").gte("date", addDays(day, -1)).eq("checked", true)),
         db.from("deadlines").select().is("done_at", null).order("due_date"),
-        db.from("alarms").select().or(`at.is.null,at.gt.${new Date().toISOString()}`).order("created_at"),
+        db.from("alarms").select().or(`at.is.null,at.gt.${new Date(Date.now() - RING_LOOKBACK_MS).toISOString()}`).order("created_at"),
         // From yesterday: a routine's day can run past midnight
         db.from("alarm_skips").select("key, date").eq("skipped", true).gte("date", addDays(today(), -1)),
         settings.then(({ dayStartHour }) => readProgressToday(db, dayStartHour)),
@@ -130,8 +133,14 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const fields = { title, stat_weights, active, completed_at, shelved, priority };
       const row = must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).eq("id", id).select().maybeSingle());
       if (!row) throw new Error("This step was deleted on another device.");
+      // A box ticked done means everything in it is done: everything in it when the tick was made, so a
+      // tick sent from the offline queue leaves alone the steps added since on another device
+      const inside = done ? openInside((must(await nodes().select("id, parent_id, completed_at").lte("created_at", at)) as NodeRow[]).map((tree) => ({ id: tree.id, parentId: tree.parent_id, completedAt: tree.completed_at })), id) : [];
+      const ticked = inside.length
+        ? (must(await nodes().update({ completed_at: at, changed_at: stamps({ completed_at: at }, at) }).in("id", inside).is("completed_at", null).select()) as NodeRow[])
+        : [];
 
-      return { nodes: [toNode(row as NodeRow)], progressToday: done === undefined ? undefined : await readProgressToday(db) };
+      return { nodes: [row as NodeRow, ...ticked].map(toNode), progressToday: done === undefined ? undefined : await readProgressToday(db) };
     },
 
     async deleteNode(id) {
@@ -141,14 +150,14 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     },
 
     async moveNode(id, parentId) {
-      const removed = must(await db.rpc("move_node", { target: id, new_parent: parentId })) as Array<{ from_id: string; to_id: string }>;
+      const removed = must(await db.rpc("move_node", { target: id, new_parent: parentId, at: clock().toISOString() })) as Array<{ from_id: string; to_id: string }>;
 
       return { nodes: [await readNode(id)], removedEdges: removed.map(toEdge) };
     },
 
     async placeNodes(places) {
       const rows = places.map(({ id, position }) => ({ id, ...position }));
-      const placed = must(await db.rpc("place_nodes", { places: rows })) as string[];
+      const placed = must(await db.rpc("place_nodes", { places: rows, at: clock().toISOString() })) as string[];
 
       return { nodes: (must(await nodes().select().in("id", placed)) as NodeRow[]).map(toNode) };
     },

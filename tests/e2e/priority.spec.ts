@@ -106,13 +106,13 @@ test("priorities", async () => {
     await expect(page.locator(".react-flow__node-step", { hasText: "Course 1" }).locator("[data-priority]")).toHaveCount(0);
   });
 
-  await test.step("a deadline linked in the app raises its chain as it nears", async () => {
+  await test.step("a deadline linked in the app only groups: its chain stays off Up next", async () => {
     await db.from("deadlines").insert({ title: "Apply by", due_date: addDays(today(), 3) });
     const picker = page.locator("section", { hasText: "Up next" }).last().getByLabel("Deadline for");
     await expect(picker).toBeVisible({ timeout: 10_000 });
     await picker.selectOption(ids.apply);
-    await expect(upNext()).toContainText("Apply to DTL");
     await expect.poll(async () => (await db.from("deadlines").select("node_id").eq("title", "Apply by").single()).data?.node_id).toBe(ids.apply);
+    await expect(upNext()).not.toContainText("Apply to DTL");
   });
 
   await page.waitForTimeout(800);

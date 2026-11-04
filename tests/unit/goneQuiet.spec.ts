@@ -40,7 +40,7 @@ function quiet(nodes: GraphNode[], edges: GraphEdge[] = [], deadlines: Deadline[
     inboxId: "inbox",
   };
   const model = buildGraphModel(snapshot);
-  return goneQuiet(model, snapshot, derivePriorities(model, snapshot, date), date).map(({ quest, days, openSteps }) => [quest.id, days, openSteps]);
+  return goneQuiet(model, snapshot, derivePriorities(model, snapshot), date).map(({ quest, days, openSteps }) => [quest.id, days, openSteps]);
 }
 
 test("a quest with open steps untouched for a week is quiet, longest first", () => {
@@ -78,8 +78,7 @@ test("a quest on the to-do isn't dropping silently; a priority that reaches noth
   expect(quiet([node("q", null, old, { priority: 2 }), node("a", "q", old)])).toEqual([]);
   // The priority sits on a step whose prerequisite is what is ready, so the walk covers that too: on the to-do
   expect(quiet([node("q", null, old), node("a", "q", old), node("b", "q", old, { priority: 2 })], [{ from: "a", to: "b" }])).toEqual([]);
-  // A deadline near enough to raise it puts it on the to-do; a far one doesn't
-  const deadline = (dueDate: string): Deadline => ({ id: "d", title: "d", dueDate, alarmTime: null, nodeId: "q" }) as Deadline;
-  expect(quiet([node("q", null, old), node("a", "q", old)], [], [deadline(addDays(date, 3))])).toEqual([]);
-  expect(quiet([node("q", null, old), node("a", "q", old)], [], [deadline(addDays(date, 60))]).map(([id]) => id)).toEqual(["q"]);
+  // A deadline raises nothing, so a near one linked to it leaves it quiet
+  const deadline: Deadline = { id: "d", title: "d", dueDate: addDays(date, 1), alarmTime: null, nodeId: "q" };
+  expect(quiet([node("q", null, old), node("a", "q", old)], [], [deadline]).map(([id]) => id)).toEqual(["q"]);
 });

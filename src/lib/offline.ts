@@ -1,4 +1,5 @@
 import { today } from "../shared/dates";
+import { openInside } from "../shared/graphModel";
 import { cooked, read, recipeProblems, shownMeal, uncooked } from "../shared/kitchen";
 import { PROGRESS_UNIT } from "../shared/progression";
 import type {
@@ -74,7 +75,11 @@ const preview: Record<Mutation, Preview> = {
       // As the server counts it: a tick or a new title is work, a priority or shelving isn't
       lastActive: ticked || fields.title !== undefined ? at : node.lastActive,
     };
-    return { nodes: [updated], progressToday: step ? countedToday(snapshot, step) : undefined };
+    // As the server does it: a box ticked done ticks everything open inside it
+    const inside = done ? openInside(snapshot.nodes, id).map((insideId) => existing(snapshot.nodes, insideId, "This step")) : [];
+    const ticks = step + inside.length;
+    const tickedInside = inside.map((node) => ({ ...node, completedAt: at, ownXp: node.ownXp + PROGRESS_UNIT, lastActive: at }));
+    return { nodes: [updated, ...tickedInside], progressToday: ticks ? countedToday(snapshot, ticks) : undefined };
   },
   deleteNode: (snapshot, [id]) => ({ removedNodeIds: [id, ...descendants(snapshot.nodes, id)] }),
   moveNode: (snapshot, [id, parentId], at) => ({

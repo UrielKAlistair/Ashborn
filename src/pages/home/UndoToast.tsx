@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { openInside } from "../../shared/graphModel";
 import type { NodePatch, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
 
 const TOAST_MS = 6000;
 
-type Undoable = { id: string; label: string; undo: NodePatch };
+// `undo` is applied to each of `ids`: a ticked box and the steps its tick ticked
+type Undoable = { ids: string[]; label: string; undo: NodePatch };
 
 // Wraps `act` so that ticking a step done, giving it a priority or shelving it, from anywhere in the
 // app, offers to undo it: each can move it out of sight. Stays the same function while `act` does, so the
@@ -19,10 +21,14 @@ export function useUndoableChanges(act: Act, snapshot: Snapshot | null) {
       if (name === "updateNode") {
         const [id, patch] = args as [string, NodePatch];
         const node = latest.current?.nodes.find((candidate) => candidate.id === id);
-        if (node && patch.done) setUndoable({ id, label: `Done: ${node.title}`, undo: { done: false } });
-        else if (node && patch.priority && patch.priority !== node.priority) setUndoable({ id, label: `P${patch.priority}: ${node.title}`, undo: { priority: node.priority } });
-        else if (node && patch.shelved) setUndoable({ id, label: `Shelved: ${node.title}`, undo: { shelved: false } });
-        else if (patch.done === false || patch.priority === null || patch.shelved === false) setUndoable((current) => (current?.id === id ? null : current));
+        if (node && patch.done) {
+          const inside = openInside(latest.current!.nodes, id);
+          const label = `Done: ${node.title}${inside.length ? ` and ${inside.length} ${inside.length === 1 ? "step" : "steps"} in it` : ""}`;
+          const ids = [...(node.completedAt ? [] : [id]), ...inside];
+          if (ids.length) setUndoable({ ids, label, undo: { done: false } });
+        } else if (node && patch.priority && patch.priority !== node.priority) setUndoable({ ids: [id], label: `P${patch.priority}: ${node.title}`, undo: { priority: node.priority } });
+        else if (node && patch.shelved) setUndoable({ ids: [id], label: `Shelved: ${node.title}`, undo: { shelved: false } });
+        else if (patch.done === false || patch.priority === null || patch.shelved === false) setUndoable((current) => (current?.ids[0] === id ? null : current));
       }
       return act(name, ...args);
     },
@@ -48,7 +54,7 @@ export function UndoToast({ undoable, act, onDismiss, phone }: { undoable: Undoa
         <button
           type="button"
           onClick={() => {
-            void act("updateNode", undoable.id, undoable.undo);
+            for (const id of undoable.ids) void act("updateNode", id, undoable.undo);
             onDismiss();
           }}
           className="pointer-events-auto min-h-9 shrink-0 rounded-lg px-2.5 font-medium text-ember hover:bg-ink/6"

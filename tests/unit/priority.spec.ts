@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { buildGraphModel } from "../../src/shared/graphModel";
 import { emptyKitchen } from "../../src/shared/kitchen";
-import { byPriority, deadlinePriority, derivePriorities, linkPriority, needsFirstStep, prioritisedSteps } from "../../src/shared/priority";
+import { byPriority, derivePriorities, linkPriority, needsFirstStep, prioritisedSteps } from "../../src/shared/priority";
 import type { Deadline, GraphEdge, GraphNode, Priority, Snapshot } from "../../src/shared/types";
 
 const today = "2026-11-02";
@@ -38,7 +38,7 @@ function setup(nodes: GraphNode[], edges: GraphEdge[] = [], deadlines: Deadline[
     inboxId: "user",
   } as unknown as Snapshot;
   const model = buildGraphModel(snapshot);
-  return { snapshot, model, priorities: derivePriorities(model, snapshot, today) };
+  return { snapshot, model, priorities: derivePriorities(model, snapshot) };
 }
 const asObject = (map: Map<string, Priority>) => Object.fromEntries(map);
 
@@ -74,20 +74,10 @@ test("where chains meet, the more urgent wins, whichever was walked first", () =
   expect(priorities.effective.get("low")).toBe(4);
 });
 
-test("deadline thresholds", () => {
-  expect([-3, 0, 1, 2, 3, 4, 7, 8, 14, 15].map(deadlinePriority)).toEqual([1, 1, 1, 2, 2, 3, 3, 4, 4, null]);
-});
-
-test("a linked deadline raises a chain, and the higher of it and the set priority holds", () => {
-  const nodes = [node("quest", null), node("a", "quest"), node("b", "quest", { priority: 3 })];
+test("a deadline raises nothing, however near: only the priority set holds", () => {
+  const nodes = [node("quest", null), node("a", "quest"), node("b", "quest", { priority: 3 }), node("c", "quest")];
   const edges = [{ from: "a", to: "b" }];
-  expect(asObject(setup(nodes, edges, [deadline("b", "2026-11-03")]).priorities.effective)).toEqual({ a: 1, b: 1 });
-  expect(asObject(setup(nodes, edges, [deadline("b", "2026-11-30")]).priorities.effective)).toEqual({ a: 3, b: 3 });
-  expect(asObject(setup(nodes, edges, [deadline(null, "2026-11-03")]).priorities.effective)).toEqual({ a: 3, b: 3 });
-});
-
-test("a deadline linked to a node since deleted does nothing", () => {
-  expect(setup([node("quest", null)], [], [deadline("gone", "2026-11-03")]).priorities.effective.size).toBe(0);
+  expect(asObject(setup(nodes, edges, [deadline("b", today), deadline("c", today)]).priorities.effective)).toEqual({ a: 3, b: 3 });
 });
 
 test("the to-do holds only ready covered steps, grouped most urgent first", () => {
@@ -126,15 +116,10 @@ test("quests and steps sort by the best priority inside them, keeping order amon
   expect(byPriority(quests, priorities).map(({ id }) => id)).toEqual(["first", "second", "plain", "other"]);
 });
 
-test("each covered node knows where its priority comes from: the node set, or the deadline that raised it", () => {
-  const { priorities } = setup(
-    [node("q", null), node("a", "q"), node("b", "q", { priority: 2 }), node("c", "q"), node("d", "q")],
-    [{ from: "a", to: "b" }, { from: "c", to: "d" }],
-    [deadline("d", "2026-11-03")],
-  );
-  expect(priorities.origin.get("a")).toEqual({ nodeId: "b", deadlineId: null });
-  expect(priorities.origin.get("b")).toEqual({ nodeId: "b", deadlineId: null });
-  expect(priorities.origin.get("c")).toEqual({ nodeId: "d", deadlineId: "d-2026-11-03" });
+test("each covered node knows the node its priority was set on", () => {
+  const { priorities } = setup([node("q", null), node("a", "q"), node("b", "q", { priority: 2 })], [{ from: "a", to: "b" }]);
+  expect(priorities.origin.get("a")).toBe("b");
+  expect(priorities.origin.get("b")).toBe("b");
 });
 
 test("the graph marks a chain but not the steps inside the box it was set on", () => {

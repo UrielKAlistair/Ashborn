@@ -8,7 +8,9 @@ export function AlarmScreen({ alarm, onStop, onSnooze }: { alarm: RingingAlarm; 
   const target = alarm.kind === "walk" ? STEPS_TO_STOP : alarm.kind === "situps" ? SITUPS_TO_STOP : 0;
   const [count, setCount] = useState(0);
 
+  // A harder stop joining the ring starts the count again, so the old count can't meet the new target
   useEffect(() => {
+    setCount(0);
     if (alarm.kind === "plain") return;
     const counter = alarm.kind === "walk" ? stepCounter() : situpCounter();
     const onMotion = (event: DeviceMotionEvent) => {

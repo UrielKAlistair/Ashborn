@@ -54,9 +54,7 @@ public class AlarmPlugin extends Plugin {
 
     @PluginMethod
     public void stop(PluginCall call) {
-        getContext().startService(new Intent(getContext(), AlarmService.class).setAction(AlarmService.ACTION_STOP));
-        getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).showOverLockScreen(false));
-        call.resolve();
+        end(call, AlarmService.ACTION_STOP);
     }
 
     @PluginMethod
@@ -72,9 +70,21 @@ public class AlarmPlugin extends Plugin {
 
     @PluginMethod
     public void snooze(PluginCall call) {
-        getContext().startService(new Intent(getContext(), AlarmService.class).setAction(AlarmService.ACTION_SNOOZE));
-        getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).showOverLockScreen(false));
-        call.resolve();
+        end(call, AlarmService.ACTION_SNOOZE);
+    }
+
+    // Stops or snoozes the ring the screen showed (`kind`); refused, with `stopped` false, when a
+    // harder ring has joined it since
+    private void end(PluginCall call, String action) {
+        String kind = call.getString("kind");
+        boolean stopped = Alarm.stopAllowed(kind, AlarmScheduler.ringingParts(getContext()));
+        if (stopped) {
+            getContext().startService(new Intent(getContext(), AlarmService.class).setAction(action).putExtra(AlarmService.EXTRA_SHOWN_KIND, kind));
+            getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).showOverLockScreen(false));
+        }
+        JSObject result = new JSObject();
+        result.put("stopped", stopped);
+        call.resolve(result);
     }
 
     // Notifications must be allowed for an alarm to show; on Android 14+ showing over the lock

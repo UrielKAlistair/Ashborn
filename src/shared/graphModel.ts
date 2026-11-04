@@ -16,6 +16,11 @@ export type GraphModel = {
 
 export const isDone = (node: GraphNode) => node.completedAt !== null;
 
+// The open nodes under `id`, at any depth: ticking a box done ticks these too
+export function openInside(nodes: Pick<GraphNode, "id" | "parentId" | "completedAt">[], id: string): string[] {
+  return nodes.filter((node) => node.parentId === id).flatMap((node) => [...(node.completedAt ? [] : [node.id]), ...openInside(nodes, node.id)]);
+}
+
 // A finished box folds: to one line inside a quest, or, for a quest, out of the graph into Completed
 export function isFinished(model: GraphModel, id: string) {
   return model.finishedAt.has(id);

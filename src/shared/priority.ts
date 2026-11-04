@@ -1,43 +1,26 @@
-import { daysBetween } from "./dates";
 import { isDone, questOf, type GraphModel } from "./graphModel";
-import type { GraphNode, ISODate, Priority, Snapshot } from "./types";
+import type { GraphNode, Priority, Snapshot } from "./types";
 
-// A priority belongs to a chain: set on a node, or raised by a deadline linked to it, it covers the
-// node's open prerequisites, transitively, and the steps inside it.
+// A priority belongs to a chain: set on a node, it covers the node's open prerequisites,
+// transitively, and the steps inside it. Only the user sets one; a deadline raises nothing.
 
 export type Priorities = {
   effective: Map<string, Priority>; // what covers the node; absent: nothing does
   best: Map<string, Priority>; // the most urgent in the node and everything inside it
-  marked: Map<string, Priority>; // what the graph marks: set or raised on the node, or covering it from outside its box
-  origin: Map<string, PriorityOrigin>; // where a covered node's priority comes from
+  marked: Map<string, Priority>; // what the graph marks: set on the node, or covering it from outside its box
+  origin: Map<string, string>; // the node a covered node's priority was set on
 };
 
-// The node a priority was set on, or the node a deadline raised it on (with the deadline)
-export type PriorityOrigin = { nodeId: string; deadlineId: string | null };
-
-// The nearer the deadline, the higher the priority; further out than this raises nothing
-export function deadlinePriority(daysLeft: number): Priority | null {
-  if (daysLeft <= 1) return 1;
-  if (daysLeft <= 3) return 2;
-  if (daysLeft <= 7) return 3;
-  if (daysLeft <= 14) return 4;
-  return null;
-}
-
-export function derivePriorities(model: GraphModel, snapshot: Snapshot, date: ISODate): Priorities {
+export function derivePriorities(model: GraphModel, snapshot: Snapshot): Priorities {
   const prerequisites = new Map<string, string[]>();
   for (const { from, to } of snapshot.edges) prerequisites.set(to, [...(prerequisites.get(to) ?? []), from]);
 
-  const set = snapshot.nodes.flatMap((node) => (node.priority ? [{ id: node.id, priority: node.priority, deadlineId: null }] : []));
-  const raised = snapshot.deadlines.flatMap((deadline) => {
-    const priority = deadlinePriority(daysBetween(date, deadline.dueDate));
-    return deadline.nodeId && priority ? [{ id: deadline.nodeId, priority, deadlineId: deadline.id }] : [];
-  });
+  const set = snapshot.nodes.flatMap((node) => (node.priority ? [{ id: node.id, priority: node.priority }] : []));
 
   // Most urgent first, so a node's first visit is its highest priority and ends the walk there
   const effective = new Map<string, Priority>();
-  const origin = new Map<string, PriorityOrigin>();
-  const cover = (id: string, priority: Priority, from: PriorityOrigin) => {
+  const origin = new Map<string, string>();
+  const cover = (id: string, priority: Priority, from: string) => {
     const node = model.byId.get(id);
     if (!node || isDone(node) || effective.has(id)) return;
     effective.set(id, priority);
@@ -45,9 +28,7 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot, date: IS
     (prerequisites.get(id) ?? []).forEach((before) => cover(before, priority, from));
     (model.children.get(id) ?? []).forEach((step) => cover(step.id, priority, from));
   };
-  [...set, ...raised]
-    .sort((a, b) => a.priority - b.priority)
-    .forEach(({ id, priority, deadlineId }) => cover(id, priority, { nodeId: id, deadlineId }));
+  [...set].sort((a, b) => a.priority - b.priority).forEach(({ id, priority }) => cover(id, priority, id));
 
   const best = new Map<string, Priority>();
   const bestIn = (node: GraphNode): Priority | undefined => {
@@ -62,8 +43,8 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot, date: IS
     for (let parent = model.byId.get(id)?.parentId; parent; parent = model.byId.get(parent)?.parentId) if (parent === boxId) return true;
     return false;
   };
-  const own = new Set([...set, ...raised].map(({ id }) => id));
-  const marked = new Map([...effective].filter(([id]) => own.has(id) || !inside(id, origin.get(id)!.nodeId)));
+  const own = new Set(set.map(({ id }) => id));
+  const marked = new Map([...effective].filter(([id]) => own.has(id) || !inside(id, origin.get(id)!)));
 
   return { effective, best, marked, origin };
 }
@@ -71,7 +52,7 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot, date: IS
 // The colour of a link on the graph: a chain's, when one end is marked and both are in the same chain;
 // a link inside a box that holds its priority stays plain
 export function linkPriority({ effective, marked, origin }: Priorities, from: string, to: string): Priority | undefined {
-  const sameChain = origin.has(to) && origin.get(from)?.nodeId === origin.get(to)?.nodeId;
+  const sameChain = origin.has(to) && origin.get(from) === origin.get(to);
   return sameChain && (marked.has(from) || marked.has(to)) ? effective.get(to) : undefined;
 }
 

@@ -251,7 +251,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // graph for the Completed list.
   const isFolded = (id: string) => isFinished(model, id) && (opened[id] ?? "") < today;
 
-  const priorities = useMemo(() => derivePriorities(model, snapshot, today), [model, snapshot.edges, snapshot.deadlines, today]);
+  const priorities = useMemo(() => derivePriorities(model, snapshot), [model, snapshot.edges]);
 
   // A box shows all its steps, done ones greyed, most urgent first, unless the user collapsed it or
   // it is folded

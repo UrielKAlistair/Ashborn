@@ -23,7 +23,7 @@ test("focus", async () => {
   await insert("graph_nodes", [
     { id: id.survey, title: "Read the survey", parent_id: id.quest },
     { id: id.talk, title: "Give the talk", parent_id: id.quest, priority: 1 },
-    { id: id.apply, title: "Apply to DTL", parent_id: id.quest },
+    { id: id.apply, title: "Apply to DTL", parent_id: id.quest, priority: 2 },
     { id: crypto.randomUUID(), title: "Tidy the notes", parent_id: id.quest },
     { id: crypto.randomUUID(), title: "Water the plants", parent_id: id.quest },
   ]);

@@ -168,7 +168,9 @@ function createWindow() {
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (new URL(url).origin === new URL(mainWindow!.webContents.getURL()).origin) return;
+    // Every file's origin is "null", so a file must also be the app's own page
+    const [to, from] = [new URL(url), new URL(mainWindow!.webContents.getURL())];
+    if (to.origin === from.origin && (to.protocol !== "file:" || to.pathname === from.pathname)) return;
     event.preventDefault();
     if (/^https?:/.test(url)) void shell.openExternal(url);
   });

@@ -4,14 +4,13 @@ import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
-import { priorities, type AlarmKind, type Deadline, type GraphNode, type Priority, type Snapshot, type Weekday } from "../../shared/types";
+import { priorities, type AlarmKind, type GraphNode, type Priority, type Snapshot, type Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
 import { Capture, NodePicker } from "./Capture";
 import { FocusCard } from "./FocusCard";
 import { goneQuiet } from "../../shared/goneQuiet";
 import { inInbox } from "../../shared/inbox";
-import { likelyQuest } from "../../shared/likelyQuest";
 import { GoneQuiet } from "./GoneQuiet";
 import { useOneTap } from "./oneTap";
 import { SplitSteps } from "./SplitSteps";
@@ -19,8 +18,6 @@ import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
 const DEADLINE_HORIZON_DAYS = 21;
-// An unlinked deadline this close comes up top, since it raises nothing and Now can't show it
-const UNLINKED_URGENT_DAYS = 2;
 
 export const alarmLabels: Record<AlarmKind, string> = { none: "No alarm", plain: "Alarm", walk: "Alarm, walk to stop", situps: "Alarm, sit-ups to stop" };
 
@@ -49,7 +46,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   // Worked out again when the data or the day changes, not when a section opens or closes
   const { priorities, todo, quiet, unprioritised } = useMemo(() => {
     // Steps you can do now, of the chains that have a priority
-    const priorities = derivePriorities(model, snapshot, date);
+    const priorities = derivePriorities(model, snapshot);
     const todo = prioritisedSteps(model, snapshot, priorities);
     // Ready steps and empty quests nothing covers yet, so a priority can be given here without the
     // graph; untriaged Inbox items are left to the Inbox, and quiet quests' steps to Gone quiet
@@ -83,7 +80,6 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
     snapshot.routineChecks.filter((check) => check.date === date).map((check) => check.routineId),
   );
   const deadlines = snapshot.deadlines.filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS);
-  const unlinkedUrgent = deadlines.filter((deadline) => !deadline.nodeId && daysBetween(date, deadline.dueDate) <= UNLINKED_URGENT_DAYS);
 
   return (
     <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-ink/8 bg-panel px-4 py-4">
@@ -165,8 +161,6 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                     {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
                   </p>
                   <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
-                  {/* Unlinked, it raises nothing: linked to the quest it names, or made one, it reaches Now */}
-                  {deadline.nodeId ? null : <LinkDeadline deadline={deadline} model={model} act={act} inboxId={snapshot.inboxId} />}
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
@@ -176,21 +170,6 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       </Section>
 
       <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
-      {unlinkedUrgent.length > 0 ? (
-        <section aria-label="Due soon, linked to nothing" className="-mt-2 space-y-1 rounded-xl border border-amber-300/40 bg-[color-mix(in_oklab,var(--color-amber-300)_8%,transparent)] px-3 py-2.5">
-          {unlinkedUrgent.map((deadline) => {
-            const days = daysBetween(date, deadline.dueDate);
-            return (
-              <div key={deadline.id}>
-                <p className="text-[13px] leading-snug text-ink/90">
-                  {deadline.title} <span className="text-[12px] text-amber-200">{days < 0 ? `${-days}d late` : days === 0 ? "due today" : days === 1 ? "due tomorrow" : `due in ${days}d`}, linked to nothing</span>
-                </p>
-                <LinkDeadline deadline={deadline} model={model} act={act} inboxId={snapshot.inboxId} />
-              </div>
-            );
-          })}
-        </section>
-      ) : null}
       {sorting ? null : <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} onBoxed={setBoxed} />}
 
       {boxed ? (
@@ -600,27 +579,3 @@ function FormButtons({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (
   );
 }
 
-// One tap to give an unlinked deadline a quest: the one its title names, if one does, or a new one of
-// its name, which Now then asks a first step for
-function LinkDeadline({ deadline, model, act, inboxId }: { deadline: Deadline; model: GraphModel; act: Act; inboxId: string }) {
-  const named = likelyQuest(model, deadline.title, inboxId);
-  const makeQuest = async () => {
-    // The link refers to the quest, so the quest is saved first
-    const questId = crypto.randomUUID();
-    await act("createNode", deadline.title, null, questId);
-    await act("linkDeadline", deadline.id, questId);
-  };
-  const linkClass = "rounded-md px-1 py-0.5 text-[11.5px] hover:bg-ink/6 pointer-coarse:min-h-8";
-  return (
-    <div className="-ml-1 mt-0.5 flex flex-wrap items-center gap-x-1">
-      {named ? (
-        <button type="button" onClick={() => void act("linkDeadline", deadline.id, named.id)} className={`${linkClass} text-ember`}>
-          + Link to {named.title}
-        </button>
-      ) : null}
-      <button type="button" onClick={makeQuest} className={`${linkClass} ${named ? "text-muted" : "text-ember"}`}>
-        {named ? "or make it a quest" : "+ Make it a quest"}
-      </button>
-    </div>
-  );
-}

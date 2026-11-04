@@ -201,15 +201,16 @@ test("home graph", async () => {
     await expect(upNext().getByText("CNN basics", { exact: true })).toHaveCount(0);
   });
 
-  await test.step("ticking a box keeps its inner steps; the eye and + work on nested boxes", async () => {
-    // Both reach the server before the step ends (the tick first, then the untick, which waits
-    // behind it on the same row), so the offline step doesn't catch the untick on its way
-    const boxDone = async () => (await db.from("graph_nodes").select("completed_at").eq("title", "CNN basics").single()).data?.completed_at;
+  await test.step("ticking a box ticks its steps and Undo reopens them all; the eye and + work on nested boxes", async () => {
+    // Every change reaches the server before the step ends, so the offline step doesn't catch one on its way
+    const doneAt = (title: string) => async () => (await db.from("graph_nodes").select("completed_at").eq("title", title).single()).data?.completed_at;
     await card("CNN basics").getByTitle("Mark done").first().click();
+    await expect.poll(doneAt("CNN basics")).not.toBeNull();
+    await expect.poll(doneAt("Convolution as a matrix product")).not.toBeNull();
+    await page.getByRole("status").filter({ hasText: "Done: CNN basics and 1 step in it" }).getByRole("button", { name: "Undo" }).click();
+    await expect.poll(doneAt("CNN basics")).toBeNull();
+    await expect.poll(doneAt("Convolution as a matrix product")).toBeNull();
     await expect(card("Convolution as a matrix")).toBeVisible();
-    await expect.poll(boxDone).not.toBeNull();
-    await card("CNN basics").getByTitle("Mark not done").first().click();
-    await expect.poll(boxDone).toBeNull();
     await card("CNN basics").getByTitle("Hide steps").click();
     await expect(nodes().filter({ hasText: "Convolution as a matrix" })).toHaveCount(0);
     await card("CNN basics").getByTitle("Add a step inside").click();

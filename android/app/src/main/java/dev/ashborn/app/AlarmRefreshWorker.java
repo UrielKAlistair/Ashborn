@@ -38,8 +38,9 @@ public class AlarmRefreshWorker extends Worker {
     private static final String URL_KEY = "url";
     private static final String PUBLISHABLE_KEY = "publishableKey";
     private static final String REFRESH_TOKEN = "refreshToken";
-    // As src/lib/alarms.ts's SCHEDULE_DAYS and DEFAULT_DAY_START_HOUR in src/shared/dates.ts
+    // As SCHEDULE_DAYS in src/lib/alarms.ts, RING_LOOKBACK_MS in src/shared/schedule.ts and DEFAULT_DAY_START_HOUR in src/shared/dates.ts
     private static final int SCHEDULE_DAYS = 7;
+    private static final long RING_LOOKBACK_MS = 24 * 60 * 60_000L;
     private static final int DEFAULT_DAY_START_HOUR = 4;
     private static final int TIMEOUT_MS = 15_000;
 
@@ -81,9 +82,9 @@ public class AlarmRefreshWorker extends Worker {
             }
             // The old token is spent the moment the server answers, so the new one is stored first
             prefs.edit().putString(REFRESH_TOKEN, session.getString("refresh_token")).commit();
-            long now = System.currentTimeMillis();
-            JSONObject snapshot = read(url + "/rest/v1/", key, session.getString("access_token"), now);
-            AlarmScheduler.schedule(context, Schedule.upcoming(snapshot, now, SCHEDULE_DAYS));
+            long from = System.currentTimeMillis() - RING_LOOKBACK_MS;
+            JSONObject snapshot = read(url + "/rest/v1/", key, session.getString("access_token"), from);
+            AlarmScheduler.schedule(context, Schedule.upcoming(snapshot, from, SCHEDULE_DAYS + 1));
             return Result.success();
         } catch (IOException | JSONException | RuntimeException e) {
             Log.e("Ashborn", "Background alarm refresh failed", e);
@@ -91,12 +92,12 @@ public class AlarmRefreshWorker extends Worker {
         }
     }
 
-    // The snapshot's fields that Schedule reads, from the same rows the app's getSnapshot reads
-    private static JSONObject read(String rest, String key, String access, long now) throws IOException, JSONException {
+    // The snapshot's fields that Schedule reads from `from` on, from the same rows the app's getSnapshot reads
+    private static JSONObject read(String rest, String key, String access, long from) throws IOException, JSONException {
         JSONArray settings = get(rest, key, access, "user_settings?select=day_start_hour");
         int dayStartHour = settings.length() > 0 ? settings.getJSONObject(0).getInt("day_start_hour") : DEFAULT_DAY_START_HOUR;
-        String firstDay = Schedule.dayOf(now, dayStartHour);
-        String today = Schedule.dayOf(now, 0);
+        String firstDay = Schedule.dayOf(from, dayStartHour);
+        String today = Schedule.dayOf(from, 0);
 
         JSONArray recipes = get(rest, key, access, "recipes?select=id,title,recipe_reminders(id,label,offsetMinutes:offset_minutes,anchorId:anchor_id)&order=created_at&recipe_reminders.order=position");
         for (int i = 0; i < recipes.length(); i++) {
@@ -105,7 +106,7 @@ public class AlarmRefreshWorker extends Worker {
         }
         JSONArray defaultWeek = get(rest, key, access, "default_meals?select=weekday,slot,default_meal_recipes(recipe_id)");
         for (int i = 0; i < defaultWeek.length(); i++) recipeIds(defaultWeek.getJSONObject(i), "default_meal_recipes");
-        JSONArray meals = get(rest, key, access, "meals?select=date,slot,status,meal_recipes(recipe_id)&date=gte." + Schedule.addDays(today, -1) + "&date=lte." + Schedule.addDays(today, SCHEDULE_DAYS - 1));
+        JSONArray meals = get(rest, key, access, "meals?select=date,slot,status,meal_recipes(recipe_id)&date=gte." + Schedule.addDays(today, -1) + "&date=lte." + Schedule.addDays(today, SCHEDULE_DAYS));
         for (int i = 0; i < meals.length(); i++) recipeIds(meals.getJSONObject(i), "meal_recipes");
 
         return new JSONObject()
@@ -113,7 +114,7 @@ public class AlarmRefreshWorker extends Worker {
             .put("routines", get(rest, key, access, "routines?select=id,title,weekdays,time,alarm&order=created_at"))
             .put("routineChecks", get(rest, key, access, "routine_checks?select=routineId:routine_id,date&checked=is.true&date=gte." + firstDay))
             .put("skippedAlarms", get(rest, key, access, "alarm_skips?select=key,date&skipped=is.true&date=gte." + Schedule.addDays(today, -1)))
-            .put("alarms", get(rest, key, access, "alarms?select=id,label,kind,at,time,weekdays,enabled&or=(at.is.null,at.gt." + utc(now) + ")&order=created_at"))
+            .put("alarms", get(rest, key, access, "alarms?select=id,label,kind,at,time,weekdays,enabled&or=(at.is.null,at.gt." + utc(from) + ")&order=created_at"))
             .put("deadlines", get(rest, key, access, "deadlines?select=id,title,dueDate:due_date,alarmTime:alarm_time&done_at=is.null&order=due_date"))
             .put("kitchen", new JSONObject().put("recipes", recipes).put("defaultWeek", defaultWeek).put("meals", meals));
     }

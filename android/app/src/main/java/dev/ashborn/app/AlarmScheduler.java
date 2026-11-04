@@ -9,11 +9,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
-// Keeps Android's alarm clock in step with the app: the scheduled alarms and the one ringing
+// Keeps Android's alarm clock in step with the app: the scheduled alarms and the rings going off
 // now are stored on the phone, so they survive the app closing and are re-armed after a reboot.
 // The app and the background refresh both schedule, so scheduling is synchronized.
 final class AlarmScheduler {
@@ -29,28 +31,42 @@ final class AlarmScheduler {
     private AlarmScheduler() {}
 
     // Replaces every scheduled alarm with `alarms`, plus the snoozed alarms still to ring, which
-    // the app's schedule does not know about
+    // the app's schedule does not know about. `alarms` reaches a day back (RING_LOOKBACK_MS in
+    // src/shared/schedule.ts), so it also holds the rings already rung that are still due; it is stored
+    // whole, for snoozing and re-arming after a reboot.
     static synchronized void schedule(Context context, List<Alarm> alarms) throws JSONException {
         AlarmManager manager = context.getSystemService(AlarmManager.class);
+        List<Alarm> snoozed = load(context, SNOOZED);
         for (Alarm old : load(context, SCHEDULED)) manager.cancel(fireIntent(context, old));
+        for (Alarm old : snoozed) manager.cancel(fireIntent(context, old));
 
         long now = System.currentTimeMillis();
         Map<String, Alarm> byKey = new LinkedHashMap<>();
-        for (Alarm alarm : alarms) byKey.put(alarm.key, alarm);
-        JSONArray snoozed = new JSONArray();
-        for (Alarm alarm : load(context, SNOOZED)) {
-            if (alarm.at <= now) continue;
+        JSONArray scheduled = new JSONArray();
+        for (Alarm alarm : alarms) {
             byKey.put(alarm.key, alarm);
-            snoozed.put(alarm.toJson());
+            scheduled.put(alarm.toJson());
+        }
+        JSONArray stillSnoozed = new JSONArray();
+        for (Alarm alarm : stillSnoozed(snoozed, byKey.keySet(), now)) {
+            byKey.put(alarm.key, alarm);
+            stillSnoozed.put(alarm.toJson());
         }
 
-        JSONArray kept = new JSONArray();
         for (Alarm alarm : byKey.values()) {
-            if (alarm.at <= now) continue;
-            manager.setAlarmClock(new AlarmManager.AlarmClockInfo(alarm.at, openAppIntent(context)), fireIntent(context, alarm));
-            kept.put(alarm.toJson());
+            if (alarm.at > now) manager.setAlarmClock(new AlarmManager.AlarmClockInfo(alarm.at, openAppIntent(context)), fireIntent(context, alarm));
         }
-        prefs(context).edit().putString(SCHEDULED, kept.toString()).putString(SNOOZED, snoozed.toString()).apply();
+        prefs(context).edit().putString(SCHEDULED, scheduled.toString()).putString(SNOOZED, stillSnoozed.toString()).apply();
+    }
+
+    // The snoozes still to ring: those due later whose ring is still in the schedule, so one whose
+    // ring was ticked, skipped or removed since stops coming back
+    static List<Alarm> stillSnoozed(List<Alarm> snoozed, Set<String> scheduled, long now) {
+        List<Alarm> kept = new ArrayList<>();
+        for (Alarm alarm : snoozed) {
+            if (alarm.at > now && scheduled.contains(alarm.key.substring(SNOOZE_PREFIX.length()))) kept.add(alarm);
+        }
+        return kept;
     }
 
     // After a reboot Android has forgotten the alarms; set the stored ones again
@@ -58,31 +74,50 @@ final class AlarmScheduler {
         schedule(context, load(context, SCHEDULED));
     }
 
-    // Rings `alarm` again in ten minutes. Snoozing a snoozed alarm moves it rather than adding one.
-    static synchronized void snooze(Context context, Alarm alarm) throws JSONException {
-        String key = alarm.key.startsWith(SNOOZE_PREFIX) ? alarm.key : SNOOZE_PREFIX + alarm.key;
-        List<Alarm> snoozed = new ArrayList<>();
-        for (Alarm other : load(context, SNOOZED)) if (!other.key.equals(key)) snoozed.add(other);
-        snoozed.add(new Alarm(key, System.currentTimeMillis() + SNOOZE_MS, alarm.title, alarm.kind));
+    // Rings `parts` again in ten minutes, each under its own key, so they go off together again
+    static synchronized void snooze(Context context, List<Alarm> parts) throws JSONException {
         JSONArray array = new JSONArray();
-        for (Alarm other : snoozed) array.put(other.toJson());
+        for (Alarm alarm : snoozedWith(load(context, SNOOZED), parts, System.currentTimeMillis() + SNOOZE_MS)) array.put(alarm.toJson());
         prefs(context).edit().putString(SNOOZED, array.toString()).apply();
         schedule(context, load(context, SCHEDULED));
     }
 
-    static void setRinging(Context context, Alarm alarm) throws JSONException {
+    // `snoozed` with each of `parts` due again at `at`; snoozing a snoozed ring moves it rather than adding one
+    static List<Alarm> snoozedWith(List<Alarm> snoozed, List<Alarm> parts, long at) {
+        Set<String> keys = new HashSet<>();
+        List<Alarm> added = new ArrayList<>();
+        for (Alarm part : parts) {
+            String key = part.key.startsWith(SNOOZE_PREFIX) ? part.key : SNOOZE_PREFIX + part.key;
+            keys.add(key);
+            added.add(new Alarm(key, at, part.title, part.kind));
+        }
+        List<Alarm> result = new ArrayList<>();
+        for (Alarm other : snoozed) if (!keys.contains(other.key)) result.add(other);
+        result.addAll(added);
+        return result;
+    }
+
+    // The rings going off now, for the app; none clears them
+    static void setRinging(Context context, List<Alarm> parts) throws JSONException {
+        JSONArray array = new JSONArray();
+        for (Alarm part : parts) array.put(part.toJson());
         SharedPreferences.Editor editor = prefs(context).edit();
-        if (alarm == null) editor.remove(RINGING);
-        else editor.putString(RINGING, alarm.toJson().toString());
+        if (parts.isEmpty()) editor.remove(RINGING);
+        else editor.putString(RINGING, array.toString());
         editor.apply();
     }
 
+    // The rings going off now, joined into one; null when none is
     static Alarm ringing(Context context) {
-        String json = prefs(context).getString(RINGING, null);
+        List<Alarm> parts = ringingParts(context);
+        return parts.isEmpty() ? null : Alarm.joined(parts);
+    }
+
+    static List<Alarm> ringingParts(Context context) {
         try {
-            return json == null ? null : Alarm.fromJson(new JSONObject(json));
+            return load(context, RINGING);
         } catch (JSONException e) {
-            return null;
+            return new ArrayList<>();
         }
     }
 

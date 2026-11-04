@@ -36,14 +36,17 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     new Set(((await db.from("graph_nodes").select("id").in("id", nodeIds).not("completed_at", "is", null)).data ?? []).map((row: { id: string }) => row.id));
   // Each node's priority as it now stands and where it comes from, read after a change, so a reply
   // shows what the change did
+  // Whether a deadline id names one of the user's deadlines, so a wrong id is refused rather than
+  // answered "Deleted."
+  const deadlineExists = async (deadlineId: string) => Boolean((await db.from("deadlines").select("id").eq("id", deadlineId).maybeSingle()).data);
   const prioritiesNow = async (nodeIds: string[]) => {
     const snapshot = await api.getSnapshot(userId);
     setDayStartHour(snapshot.settings.dayStartHour);
     const model = buildGraphModel(snapshot);
-    const priorities = derivePriorities(model, snapshot, today());
+    const priorities = derivePriorities(model, snapshot);
     return nodeIds.flatMap((nodeId) => {
       const node = model.byId.get(nodeId);
-      return node ? [`- ${node.title} [${nodeId}]: ${priorityText(model, snapshot, priorities, nodeId)}`] : [];
+      return node ? [`- ${node.title} [${nodeId}]: ${priorityText(model, priorities, nodeId)}`] : [];
     });
   };
 
@@ -107,7 +110,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
 
   register(
     "complete",
-    { description: "Marks steps done. Steps already done keep the time they were done.", inputSchema: { ids } },
+    { description: "Marks steps done. Marking a box (a quest or a step with steps) done also marks every open step inside it done, as the user means by ticking it. Steps already done keep the time they were done.", inputSchema: { ids } },
     async ({ ids }) => {
       const done = await doneIds(ids);
       return run(ids.filter((nodeId) => !done.has(nodeId)).map((nodeId) => () => api.updateNode(nodeId, { done: true })), "Done");
@@ -144,7 +147,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
 
   register(
     "reopen",
-    { description: "Marks done steps as not done.", inputSchema: { ids } },
+    { description: "Marks done steps as not done. Reopening a box reopens only the box, not the steps inside it.", inputSchema: { ids } },
     async ({ ids }) => {
       const done = await doneIds(ids);
       return run(ids.filter((nodeId) => done.has(nodeId)).map((nodeId) => () => api.updateNode(nodeId, { done: false })), "Reopened");
@@ -221,39 +224,33 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "add_deadline",
     {
       description:
-        "Adds a dated obligation, optionally with an alarm at a time on its due day (rings on the phone). Linking it to a quest or step (`node_id`) is not just grouping: it raises that chain's priority as the date nears (within 14 days P4, 7 P3, 3 P2, 1 P1), above any priority set by hand. Leave it unlinked unless the work in that chain must be done by the date. For a ring with no deadline, use add_alarm with a date.",
-      inputSchema: { title: z.string().min(1), due_date: date, alarm_time: clock.optional(), node_id: id.optional().describe("Raises this chain's priority as the date nears") },
+        "Adds a dated obligation, optionally with an alarm at a time on its due day (rings on the phone). Linking it to a quest or step (`node_id`) only groups it there; a deadline never changes a priority, which only the user sets. For a ring with no deadline, use add_alarm with a date.",
+      inputSchema: { title: z.string().min(1), due_date: date, alarm_time: clock.optional(), node_id: id.optional().describe("The quest or step it belongs to") },
     },
     async ({ title, due_date, alarm_time, node_id }) => {
       const deadlineId = crypto.randomUUID();
-      const result = await run([() => api.createDeadline({ id: deadlineId, title, dueDate: due_date, alarmTime: alarm_time ?? null, nodeId: node_id ?? null })], `Added deadline [${deadlineId}]`);
-      return "isError" in result || !node_id ? result : text([`Added deadline [${deadlineId}]. The linked chain now stands at:`, ...(await prioritiesNow([node_id]))].join("\n"));
+      return run([() => api.createDeadline({ id: deadlineId, title, dueDate: due_date, alarmTime: alarm_time ?? null, nodeId: node_id ?? null })], `Added deadline [${deadlineId}]`);
     },
   );
 
   register(
     "link_deadline",
     {
-      description: "Links a deadline to a quest or step, whose chain's priority it raises as it nears; null or no node_id unlinks it, ending the raise.",
+      description: "Links a deadline to the quest or step it belongs to, which groups it there and changes no priority; null or no node_id unlinks it.",
       inputSchema: { id: z.string().describe("A deadline id, as shown by `overview`"), node_id: id.nullish() },
     },
     async ({ id, node_id }) => {
-      const was = (await db.from("deadlines").select("node_id").eq("id", id).maybeSingle()).data as { node_id: string | null } | null;
-      if (!was) return failure(`No deadline ${id}.`);
-      const result = await run([() => api.linkDeadline(id, node_id ?? null)], node_id ? "Linked deadline" : "Unlinked deadline");
-      const affected = [node_id, was.node_id].filter((nodeId): nodeId is string => Boolean(nodeId));
-      return "isError" in result || affected.length === 0 ? result : text([`${node_id ? "Linked" : "Unlinked"} deadline. Now:`, ...(await prioritiesNow(affected))].join("\n"));
+      if (!(await deadlineExists(id))) return failure(`No deadline ${id}.`);
+      return run([() => api.linkDeadline(id, node_id ?? null)], node_id ? "Linked deadline" : "Unlinked deadline");
     },
   );
 
   register(
     "delete_deadline",
-    { description: "Deletes a deadline, with its alarm and any priority it raised.", inputSchema: { id: z.string().describe("A deadline id, as shown by `overview`") } },
+    { description: "Deletes a deadline, with its alarm.", inputSchema: { id: z.string().describe("A deadline id, as shown by `overview`") } },
     async ({ id }) => {
-      const was = (await db.from("deadlines").select("node_id").eq("id", id).maybeSingle()).data as { node_id: string | null } | null;
-      if (!was) return failure(`No deadline ${id}.`);
-      const result = await run([() => api.deleteDeadline(id)], "Deleted deadline");
-      return "isError" in result || !was.node_id ? result : text(["Deleted deadline. Its chain now stands at:", ...(await prioritiesNow([was.node_id]))].join("\n"));
+      if (!(await deadlineExists(id))) return failure(`No deadline ${id}.`);
+      return run([() => api.deleteDeadline(id)], "Deleted deadline");
     },
   );
 
@@ -619,12 +616,12 @@ function describe(snapshot: Snapshot, questId?: string) {
 
   const shownIds = new Set(shown.map((quest) => quest.id));
   const ready = snapshot.nodes.filter((node) => (node.parentId || needsFirstStep(model, node)) && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id) && !inInbox(model, node, snapshot.inboxId));
-  const priorities = derivePriorities(model, snapshot, today());
+  const priorities = derivePriorities(model, snapshot);
   // As in the app: a quiet quest's steps are listed with it, not again under Also ready
   const quiet = goneQuiet(model, snapshot, priorities, today()).filter(({ quest }) => shownIds.has(quest.id));
   const quietIds = new Set(quiet.map(({ quest }) => quest.id));
   const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) =>
-    steps.map((node) => `- P${priority} ${node.title} [${node.id}] (${prioritySource(model, snapshot, priorities, node.id)})${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`),
+    steps.map((node) => `- P${priority} ${node.title} [${node.id}] (${prioritySource(model, priorities, node.id)})${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`),
   );
   const unprioritised = ready.filter((node) => !priorities.effective.has(node.id) && !quietIds.has(questOf(model.byId, node).id)).map((node) => `- ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet)" : ""}`);
   lines.push("Up next (the user's to-do: ready to do now, with a priority, and where the priority comes from):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
@@ -645,7 +642,7 @@ function describe(snapshot: Snapshot, questId?: string) {
   if (archived.length) lines.push("Archived quests (finished and hidden):", ...archived.map(listed), "");
 
   const describeDeadline = (deadline: Snapshot["deadlines"][number]) =>
-    `- ${deadline.title} [${deadline.id}]${deadline.nodeId ? `, linked to ${model.byId.get(deadline.nodeId)?.title} (raising its chain as it nears)` : ""}: due ${deadline.dueDate} (in ${daysBetween(today(), deadline.dueDate)} days)${deadline.alarmTime ? `, alarm at ${deadline.alarmTime}` : ""}`;
+    `- ${deadline.title} [${deadline.id}]${deadline.nodeId ? `, linked to ${model.byId.get(deadline.nodeId)?.title}` : ""}: due ${deadline.dueDate} (in ${daysBetween(today(), deadline.dueDate)} days)${deadline.alarmTime ? `, alarm at ${deadline.alarmTime}` : ""}`;
   if (questId) {
     const linked = snapshot.deadlines.filter((deadline) => deadline.nodeId && model.byId.has(deadline.nodeId) && questOf(model.byId, model.byId.get(deadline.nodeId)!).id === questId);
     lines.push("Deadlines linked to this quest:", ...(linked.length ? linked.map(describeDeadline) : ["- none"]));
@@ -654,7 +651,7 @@ function describe(snapshot: Snapshot, questId?: string) {
   if (!questId) {
     const weekday = weekdayOf(today());
     const routines = snapshot.routines.filter((routine) => routine.weekdays.includes(weekday)).sort(byTime);
-    const checked = new Set(snapshot.routineChecks.map((check) => check.routineId));
+    const checked = new Set(snapshot.routineChecks.filter((check) => check.date === today()).map((check) => check.routineId));
     lines.push(
       "Routines today:",
       ...(routines.length
@@ -683,17 +680,15 @@ function describe(snapshot: Snapshot, questId?: string) {
   return lines.join("\n");
 }
 
-// Where a covered node's priority comes from: set on it, a chain it is in, or a deadline linked to that chain
-function prioritySource(model: GraphModel, snapshot: Snapshot, priorities: Priorities, nodeId: string) {
-  const { nodeId: from, deadlineId } = priorities.origin.get(nodeId)!;
-  const deadline = deadlineId ? snapshot.deadlines.find((candidate) => candidate.id === deadlineId) : undefined;
-  if (deadline) return `raised by deadline "${deadline.title}" [${deadline.id}], due ${deadline.dueDate}`;
+// Where a covered node's priority comes from: set on it, or a chain it is in
+function prioritySource(model: GraphModel, priorities: Priorities, nodeId: string) {
+  const from = priorities.origin.get(nodeId)!;
   return from === nodeId ? "set on it" : `from ${model.byId.get(from)?.title} [${from}]`;
 }
 
-function priorityText(model: GraphModel, snapshot: Snapshot, priorities: Priorities, nodeId: string) {
+function priorityText(model: GraphModel, priorities: Priorities, nodeId: string) {
   const priority = priorities.effective.get(nodeId);
-  return priority ? `P${priority}, ${prioritySource(model, snapshot, priorities, nodeId)}` : "no priority";
+  return priority ? `P${priority}, ${prioritySource(model, priorities, nodeId)}` : "no priority";
 }
 
 function outline(model: GraphModel, snapshot: Snapshot, parentId: string, depth: number, lines: string[], folds: (id: string) => boolean) {

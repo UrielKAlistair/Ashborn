@@ -163,9 +163,9 @@ export type Snapshot = {
   nodes: GraphNode[];
   edges: GraphEdge[];
   routines: Routine[];
-  routineChecks: RoutineCheck[]; // today's
+  routineChecks: RoutineCheck[]; // from yesterday on
   deadlines: Deadline[];
-  alarms: Alarm[]; // recurring ones, and one-offs still to ring
+  alarms: Alarm[]; // recurring ones, and one-offs from a day back
   skippedAlarms: AlarmSkip[]; // rings skipped, from yesterday on
   progressToday: ProgressToday;
   kitchen: Kitchen;

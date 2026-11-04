@@ -17,44 +17,54 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
+import java.util.ArrayList;
+import java.util.List;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 // Rings an alarm until the app stops it: loops the alarm sound as the ringer allows, vibrates, and
 // shows the app over the lock screen. A plain alarm can also be dismissed or snoozed from its
-// notification; one with a challenge only stopped from the app, once the challenge is done.
+// notification; one with a challenge only stopped from the app, once the challenge is done. An
+// alarm that fires while another rings joins it: one ring, named for both, with the harder stop,
+// and stopping it stops both.
 public class AlarmService extends Service {
     static final String ACTION_STOP = "dev.ashborn.app.STOP_ALARM";
     static final String ACTION_SNOOZE = "dev.ashborn.app.SNOOZE_ALARM";
+    // The stop of the ring the user saw when stopping or snoozing it
+    static final String EXTRA_SHOWN_KIND = "shownKind";
     private static final String CHANNEL = "alarms";
     private static final int NOTIFICATION_ID = 1;
 
     private MediaPlayer player;
     private Vibrator vibrator;
+    // The rings going off now, in the order they fired
+    private final List<Alarm> parts = new ArrayList<>();
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null || ACTION_STOP.equals(intent.getAction())) {
+        if (intent == null) {
             stopRinging();
             return START_NOT_STICKY;
         }
-        if (ACTION_SNOOZE.equals(intent.getAction())) {
-            snooze();
+        if (ACTION_STOP.equals(intent.getAction()) || ACTION_SNOOZE.equals(intent.getAction())) {
+            // Ignored when a harder ring joined after the user saw this one: the screen then shows its challenge
+            if (!Alarm.stopAllowed(intent.getStringExtra(EXTRA_SHOWN_KIND), parts)) return START_STICKY;
+            if (ACTION_STOP.equals(intent.getAction())) stopRinging();
+            else snooze();
             return START_NOT_STICKY;
         }
 
-        Alarm alarm;
         try {
-            alarm = Alarm.fromJson(new JSONObject(intent.getStringExtra(AlarmScheduler.EXTRA_ALARM)));
-            AlarmScheduler.setRinging(this, alarm);
+            parts.add(Alarm.fromJson(new JSONObject(intent.getStringExtra(AlarmScheduler.EXTRA_ALARM))));
+            AlarmScheduler.setRinging(this, parts);
         } catch (JSONException | NullPointerException e) {
             Log.e("Ashborn", "Bad alarm", e);
             stopSelf();
             return START_NOT_STICKY;
         }
 
-        startForeground(NOTIFICATION_ID, notification(alarm), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-        // An alarm that fires while another rings takes its place
+        startForeground(NOTIFICATION_ID, notification(Alarm.joined(parts)), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        // The sound starts again for each ring that joins
         stopSound();
         startSound();
         vibrator = getSystemService(Vibrator.class);
@@ -79,9 +89,9 @@ public class AlarmService extends Service {
             .setContentIntent(open)
             .setFullScreenIntent(open, true);
         if ("plain".equals(alarm.kind)) {
-            Intent stop = new Intent(this, AlarmService.class).setAction(ACTION_STOP);
+            Intent stop = new Intent(this, AlarmService.class).setAction(ACTION_STOP).putExtra(EXTRA_SHOWN_KIND, alarm.kind);
             builder.addAction(0, "Dismiss", PendingIntent.getService(this, 1, stop, PendingIntent.FLAG_IMMUTABLE));
-            Intent snooze = new Intent(this, AlarmService.class).setAction(ACTION_SNOOZE);
+            Intent snooze = new Intent(this, AlarmService.class).setAction(ACTION_SNOOZE).putExtra(EXTRA_SHOWN_KIND, alarm.kind);
             builder.addAction(0, "Snooze", PendingIntent.getService(this, 2, snooze, PendingIntent.FLAG_IMMUTABLE));
         }
         return builder.build();
@@ -113,12 +123,11 @@ public class AlarmService extends Service {
         if (vibrator != null) vibrator.cancel();
     }
 
-    // Only a plain alarm snoozes: a challenge alarm is meant to get the user up
+    // Only a plain ring snoozes (one whose every part is plain): a challenge alarm is meant to get the user up
     private void snooze() {
-        Alarm alarm = AlarmScheduler.ringing(this);
-        if (alarm != null && "plain".equals(alarm.kind)) {
+        if (!parts.isEmpty() && "plain".equals(Alarm.joined(parts).kind)) {
             try {
-                AlarmScheduler.snooze(this, alarm);
+                AlarmScheduler.snooze(this, parts);
             } catch (JSONException e) {
                 Log.e("Ashborn", "Could not snooze the alarm", e);
             }
@@ -128,8 +137,9 @@ public class AlarmService extends Service {
 
     private void stopRinging() {
         stopSound();
+        parts.clear();
         try {
-            AlarmScheduler.setRinging(this, null);
+            AlarmScheduler.setRinging(this, parts);
         } catch (JSONException e) {
             Log.e("Ashborn", "Could not clear the ringing alarm", e);
         }
