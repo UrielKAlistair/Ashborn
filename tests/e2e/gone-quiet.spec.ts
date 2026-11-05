@@ -63,12 +63,10 @@ test("gone quiet", async () => {
     await page.screenshot({ path: `${shots}/gone-quiet.png` });
   });
 
-  await test.step("moving and recolouring on the server doesn't count, even after a reload", async () => {
+  await test.step("moving on the server doesn't count, even after a reload", async () => {
     const { error: placeError } = await db.rpc("place_nodes", { places: [{ id: ids.moved, x: 900, y: 900 }] });
     if (placeError) throw placeError;
-    const { error: colorError } = await db.from("graph_nodes").update({ color: "red", changed_at: { color: new Date().toISOString() } }).eq("id", ids.moved);
-    if (colorError) throw colorError;
-    const { data } = await db.from("graph_nodes").select("x, color, changed_at").eq("id", ids.moved).single();
+    const { data } = await db.from("graph_nodes").select("x, changed_at").eq("id", ids.moved).single();
     expect(data?.x).toBe(900);
     expect(Object.keys(data?.changed_at ?? {})).toContain("x"); // the stamps are there; the rule passes them over
     await page.reload();
@@ -90,7 +88,7 @@ test("gone quiet", async () => {
     await expect(header).toContainText("3");
     await expect(page.getByRole("region", { name: "Now" })).toContainText("Step of given");
     await page.getByRole("status").getByRole("button", { name: "Undo" }).click();
-    await expect(page.getByRole("region", { name: "Now" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Now" }).getByRole("listitem")).toHaveCount(0);
     // A priority isn't work, so with it undone the quest is as quiet as before
     await expect(section.getByText("Given a priority")).toBeVisible();
     await expect(header).toContainText("4");

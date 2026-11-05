@@ -168,13 +168,17 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
   const [amounts, setAmounts] = useState<Record<string, string>>(() =>
     Object.fromEntries(recipe.ingredients.map((ingredient) => [ingredient.id, `${round(fromBase(ingredient.amount, ingredient.unit))}`])),
   );
+  // The amounts as they opened: one left as it was keeps its exact value, not the rounded one shown
+  const [opened] = useState(amounts);
   const [problems, setProblems] = useState<string[]>([]);
   const items = [...kitchen.items].sort((a, b) => a.name.localeCompare(b.name));
 
   const withAmounts = (): Recipe => ({
     ...draft,
     title: draft.title.trim(),
-    ingredients: draft.ingredients.map((ingredient) => ({ ...ingredient, amount: toBase(Number(amounts[ingredient.id] ?? 0), ingredient.unit) })),
+    ingredients: draft.ingredients.map((ingredient) =>
+      amounts[ingredient.id] === opened[ingredient.id] ? ingredient : { ...ingredient, amount: toBase(Number(amounts[ingredient.id] ?? 0), ingredient.unit) },
+    ),
   });
 
   const setIngredient = (id: string, patch: Partial<RecipeIngredient>) =>
@@ -250,7 +254,13 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
               <select
                 value={ingredient.unit}
                 aria-label={`${ingredient.name} unit`}
-                onChange={(event) => setIngredient(ingredient.id, { unit: event.target.value as StockUnit })}
+                onChange={(event) => {
+                  // The amount follows the unit (500 g becomes 0.5 kg), so it means what it meant
+                  const unit = event.target.value as StockUnit;
+                  const typed = Number(amounts[ingredient.id]);
+                  if (amounts[ingredient.id]?.trim() && Number.isFinite(typed)) setAmounts({ ...amounts, [ingredient.id]: `${Number(fromBase(toBase(typed, ingredient.unit), unit).toFixed(6))}` });
+                  setIngredient(ingredient.id, { unit });
+                }}
                 className="rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1"
               >
                 {stockUnits.filter((unit) => !item || sameKind(unit, item.unit)).map((unit) => (
@@ -331,7 +341,7 @@ function ReminderRow({ reminder, others, onChange, onRemove }: { reminder: Recip
         value={round(minutes / 60)}
         step="any"
         aria-label={`${reminder.label || "Reminder"} hours`}
-        onChange={(event) => onChange({ offsetMinutes: Math.round(Number(event.target.value) * 60) * (before ? -1 : 1) })}
+        onChange={(event) => onChange({ offsetMinutes: Math.round(Math.abs(Number(event.target.value)) * 60) * (before ? -1 : 1) })}
         className="w-14 rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-1.5 py-1 text-right font-mono tabular-nums"
       />
       h

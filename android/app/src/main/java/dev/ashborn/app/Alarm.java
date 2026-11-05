@@ -38,10 +38,13 @@ final class Alarm {
         return new Alarm(first.key, first.at, title.toString(), kind);
     }
 
-    // Whether a stop or snooze given for a ring shown with `shownKind` may end `parts`: not when a
-    // harder stop has joined since the user saw it
-    static boolean stopAllowed(String shownKind, List<Alarm> parts) {
-        return parts.isEmpty() || STOPS.indexOf(shownKind) >= STOPS.indexOf(joined(parts).kind);
+    // Whether a stop or snooze given for the ring shown as `shownKey` with `shownKind` may end `parts`:
+    // not when a different ring is going (the shown one ended and another began before the screen
+    // caught up), nor when a harder stop has joined since the user saw it
+    static boolean stopAllowed(String shownKey, String shownKind, List<Alarm> parts) {
+        if (parts.isEmpty()) return true;
+        Alarm ringing = joined(parts);
+        return ringing.key.equals(shownKey) && STOPS.indexOf(shownKind) >= STOPS.indexOf(ringing.kind);
     }
 
     static Alarm fromJson(JSONObject json) throws JSONException {

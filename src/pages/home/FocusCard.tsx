@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FocusEvent } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { requestCapture } from "./Capture";
 import { paletteOf } from "../../lib/theme";
 import { questOf, type GraphModel } from "../../shared/graphModel";
@@ -6,30 +6,34 @@ import { needsFirstStep, type Priorities } from "../../shared/priority";
 import type { GraphNode, ISODate, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { chooseNow } from "../../shared/nowStep";
-import { MORE_MINUTES, passedOver, setHolding, setSplitFrom, START_MINUTES, storePassed, storePassedOver, storeTimer, timerBox, useNowMemory } from "./nowStore";
+import { MORE_MINUTES, setHolding, setSplitFrom, START_MINUTES, storePassed, storeTimer, timerBox, useNowMemory } from "./nowStore";
 import { SplitSteps } from "./SplitSteps";
 import { showOnGraph } from "./showOnGraph";
 import { Tick } from "./Tick";
 
-// How many steps Now lists
+// How many steps Now lists while folded
 const NOW_ROWS = 3;
-// On how many days a step can be passed over before Now asks why
-const PASSED_OVER_ASKS = 3;
 
-// What to do now, as a short list: the step chooseNow picks, then the next ones in the to-do's order
-// not put off today. Each row has its tick, its title, its quest's dot and a ⋯ menu with Start (a
-// 15-minute box), Not now (passes it for the day) and Split it. While a started step's time runs,
-// or Split is open on one, Now holds that step alone.
-export function FocusCard({ steps, priorities, snapshot, model, act, date, onBoxed }: {
+// The to-do as one list: the step chooseNow picks, then the rest in the to-do's order, the ones put off
+// today last. It shows the first few until unfolded. Each row has its tick, its title, its quest's dot
+// and a ⋯ menu with Start (a 15-minute box), Not now (to the end of the list for the day) and Split it.
+// While a started step's time runs, or Split is open on one, Now holds that step alone.
+export function FocusCard({ steps, priorities, snapshot, model, act, date, empty, onBoxed }: {
   steps: GraphNode[]; // the to-do, most urgent first
   priorities: Priorities;
   snapshot: Snapshot;
   model: GraphModel;
   act: Act;
   date: ISODate;
+  empty: ReactNode; // what shows when nothing is ready
   onBoxed?: (boxed: boolean) => void; // hears whether a started step's timer is running, so the panel can fold the rest
 }) {
   const memory = useNowMemory(date);
+  const [showAll, setShowAllState] = useState(loadShowAll);
+  const setShowAll = (show: boolean) => {
+    setShowAllState(show);
+    saveShowAll(show);
+  };
   const [clock, setClock] = useState(Date.now);
   const choice = chooseNow(steps, memory, clock, date);
   const timer = memory.timer;
@@ -76,13 +80,21 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
 
   if (!choice) {
     keys.current = { "/": requestCapture };
-    return null;
+    return (
+      <section aria-label="Now" className="rounded-xl border border-ink/10 bg-card px-2 py-2.5">
+        <p className="caps px-2 pb-1 font-display text-[11px] font-bold text-ember">Now</p>
+        {empty}
+      </section>
+    );
   }
 
   const { step, timed } = choice;
   const splitting = memory.holding === step.id;
   const waiting = steps.filter(({ id }) => !choice.passed.includes(id));
-  const rows = timed || splitting ? [step] : [step, ...(waiting.length > 0 ? waiting : steps).filter(({ id }) => id !== step.id)].slice(0, NOW_ROWS);
+  const putOff = choice.passed.flatMap((id) => steps.filter((row) => row.id === id));
+  const ordered = [step, ...waiting, ...putOff].filter((row, index, all) => all.findIndex(({ id }) => id === row.id) === index);
+  const rows = timed || splitting ? [step] : showAll ? ordered : ordered.slice(0, NOW_ROWS);
+  const folds = !timed && !splitting && ordered.length > NOW_ROWS;
   const timeLeft = timed ? Math.max(0, timed.endsAt - clock) : null;
 
   const done = (row: GraphNode) => {
@@ -92,20 +104,10 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
   const start = (row: GraphNode) => storeTimer(timerBox(row.id, START_MINUTES));
   const more = () => storeTimer(timerBox(step.id, MORE_MINUTES));
   const stop = () => storeTimer(null);
-  // Counted once a day at most, so looking through the steps in one sitting isn't counted as
-  // avoiding one; putting off the last of the round starts it again
-  const notNow = (row: GraphNode) => {
-    const counts = passedOver();
-    if (counts[row.id]?.last !== date) storePassedOver({ ...counts, [row.id]: { days: (counts[row.id]?.days ?? 0) + 1, last: date } });
-    storePassed(date, waiting.length > 1 ? [...choice.passed, row.id] : []);
-  };
+  // Putting off the last of the round starts it again
+  const notNow = (row: GraphNode) => storePassed(date, waiting.length > 1 ? [...choice.passed, row.id] : []);
   const split = (row: GraphNode) => setHolding(row.id);
-  const clearPassedOver = () => {
-    const { [step.id]: _, ...rest } = passedOver();
-    storePassedOver(rest);
-  };
   const canPass = steps.length > 1 && !timed;
-  const asksWhy = !timed && !splitting && !needsFirstStep(model, step) && (passedOver()[step.id]?.days ?? 0) >= PASSED_OVER_ASKS;
   keys.current = splitting
     ? { "/": requestCapture }
     : needsFirstStep(model, step)
@@ -114,8 +116,15 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
 
   return (
     <section aria-label="Now" className="rounded-xl border border-ink/10 bg-card px-2 py-2.5">
-      <p className="caps px-2 pb-1 font-display text-[11px] font-bold text-ember">Now</p>
-      <ul className="space-y-0.5">
+      <div className="flex items-baseline justify-between px-2 pb-1">
+        <p className="caps font-display text-[11px] font-bold text-ember">Now</p>
+        {folds ? (
+          <button type="button" onClick={() => setShowAll(!showAll)} className="text-[11.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
+            {showAll ? "Show fewer" : `Show all ${ordered.length} ready`}
+          </button>
+        ) : null}
+      </div>
+      <ul aria-label="Now" className="space-y-0.5">
         {rows.map((row) => {
           const firstStep = needsFirstStep(model, row);
           const quest = questOf(model.byId, row);
@@ -147,7 +156,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
                 title={row.title}
                 items={[
                   ...(firstStep || timed ? [] : [{ label: `Start (${START_MINUTES} min)`, onClick: () => start(row) }]),
-                  ...(canPass ? [{ label: "Not now", onClick: () => notNow(row) }] : []),
+                  ...(canPass && !choice.passed.includes(row.id) ? [{ label: "Not now", onClick: () => notNow(row) }] : []),
                   ...(splitting ? [] : [{ label: firstStep ? "Add first steps" : "Split it", onClick: () => split(row) }]),
                 ]}
               />
@@ -155,7 +164,6 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
           );
         })}
       </ul>
-      {asksWhy ? <p className="px-2 pt-1 text-[12px] text-amber-200">↷ Passed over on {passedOver()[step.id].days} days. Too big, or waiting on something?</p> : null}
 
       {timed && timeLeft !== null && !splitting ? (
         <div className="mt-1 px-2">
@@ -188,10 +196,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, onBox
         <SplitSteps
           act={act}
           parentId={step.id}
-          onAdded={() => {
-            clearPassedOver();
-            setSplitFrom(step.id);
-          }}
+          onAdded={() => setSplitFrom(step.id)}
           onDone={() => setHolding(null)}
           graph={{ model, snapshot }}
           heading={needsFirstStep(model, step) ? "First steps" : undefined}
@@ -250,4 +255,23 @@ function RowMenu({ title, items }: { title: string; items: { label: string; onCl
       ) : null}
     </div>
   );
+}
+
+// Whether Now lists the whole to-do, kept on this device
+const showAllStorageKey = "ashborn-show-all-todo";
+
+function loadShowAll() {
+  try {
+    return window.localStorage.getItem(showAllStorageKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveShowAll(show: boolean) {
+  try {
+    window.localStorage.setItem(showAllStorageKey, show ? "1" : "0");
+  } catch {
+    // Storage blocked: the list folds again next time
+  }
 }

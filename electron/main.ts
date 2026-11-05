@@ -243,8 +243,9 @@ ipcMain.handle("backup:write", (_event, json: string) => {
   const now = new Date();
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const file = path.join(BACKUP_DIR, `${date}.json`);
-  fs.writeFileSync(file, json);
-  fs.chmodSync(file, 0o600);
+  // Written whole beside it, then put in its place, so a crash mid-write leaves the last good one
+  fs.writeFileSync(`${file}.partial`, json, { mode: 0o600 });
+  fs.renameSync(`${file}.partial`, file);
   for (const name of backupFiles().sort().slice(0, -BACKUPS_KEPT)) fs.unlinkSync(path.join(BACKUP_DIR, name));
 });
 

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 // The desktop's keys, shown on "?" (never while typing in a field), closed by Escape or a click
 const keys: Array<[string, string]> = [
   ["D", "Done: tick the step in Now"],
-  ["N", "Not now: pass to the next"],
+  ["N", "Not now: the step in Now goes to the end of the list for today"],
   ["S", "Split the step in Now"],
   ["T", "Start 15 minutes on the step in Now, or stop"],
   ["/", "Capture a thought"],

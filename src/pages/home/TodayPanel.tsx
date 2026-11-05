@@ -13,7 +13,6 @@ import { goneQuiet } from "../../shared/goneQuiet";
 import { inInbox } from "../../shared/inbox";
 import { GoneQuiet } from "./GoneQuiet";
 import { useOneTap } from "./oneTap";
-import { SplitSteps } from "./SplitSteps";
 import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
@@ -31,16 +30,10 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const { dayStartHour } = snapshot.settings;
   const date = useToday(dayStartHour);
   const [dayStartOpen, setDayStartOpen] = useState(false);
-  // While the Inbox is being sorted, Focus steps aside: one card at a time
+  // While the Inbox is being sorted, Now steps aside: one card at a time
   const [sorting, setSorting] = useState(false);
   // While a started step's timer runs, the lists wait, so the box holds one thing
   const [boxed, setBoxed] = useState(false);
-  // With one step in Focus, the rest of the to-do waits behind a line, so the screen holds one thing
-  const [showAll, setShowAllState] = useState(() => loadShowAll());
-  const setShowAll = (show: boolean) => {
-    setShowAllState(show);
-    saveShowAll(show);
-  };
   const weekday = weekdayOf(date);
 
   // Worked out again when the data or the day changes, not when a section opens or closes
@@ -156,11 +149,14 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
                       {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
                     </span>
                   </div>
-                  <p className="mt-0.5 font-mono text-[11px] text-muted tabular-nums">
-                    {deadline.dueDate}
-                    {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""}
-                  </p>
-                  <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-ml-1 mt-1 w-full truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6" />
+                  {/* The quest it belongs with sits on the date's line: a link only groups (194) */}
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
+                    <span className="shrink-0 font-mono tabular-nums">
+                      {deadline.dueDate}
+                      {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""} ·
+                    </span>
+                    <NodePicker model={model} label="Deadline for" none="No quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-mx-1 min-w-0 flex-1 cursor-pointer appearance-none truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6 hover:text-ink/80 pointer-coarse:min-h-8" />
+                  </div>
                 </div>
                 <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
               </div>
@@ -170,64 +166,31 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       </Section>
 
       <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
-      {sorting ? null : <FocusCard steps={todo.flatMap(({ steps }) => steps)} priorities={priorities} snapshot={snapshot} model={model} act={act} date={date} onBoxed={setBoxed} />}
+      {sorting ? null : (
+        <FocusCard
+          steps={todo.flatMap(({ steps }) => steps)}
+          priorities={priorities}
+          snapshot={snapshot}
+          model={model}
+          act={act}
+          date={date}
+          onBoxed={setBoxed}
+          empty={
+            <p className="px-2 pb-1 text-[12px] leading-relaxed text-muted">
+              {!model.children.get(null)?.some((quest) => quest.id !== snapshot.inboxId)
+                ? "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."
+                : unprioritised.length > 0
+                  ? "Nothing with a priority is ready. Give a quest a priority below, and its next step shows here."
+                  : "Nothing with a priority is ready. Give a quest or step a priority, and what you can start shows here."}
+            </p>
+          }
+        />
+      )}
 
       {boxed ? (
         <p className="-mt-2 px-1 text-[12px] text-muted">The rest of the list waits until the timer ends.</p>
       ) : (
         <>
-          <Section
-            title="Up next"
-            action={
-              todoCount > 0 ? (
-                // In the heading, so it stays put whichever way it is
-                <button type="button" onClick={() => setShowAll(!showAll)} className="text-[11.5px] text-muted hover:text-ink/85 pointer-coarse:min-h-8">
-                  {showAll ? "Show only Now" : todoCount === 1 ? "Show the list" : `Show all ${todoCount} ready`}
-                </button>
-              ) : undefined
-            }
-          >
-            {todo.length === 0 ? (
-              <Empty>
-                {!model.children.get(null)?.length
-                  ? "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."
-                  : unprioritised.length > 0
-                    ? "Nothing with a priority is ready. Give a quest a priority below, and its next step shows here."
-                    : "Nothing with a priority is ready. Give a quest or step a priority, or link it to a deadline, and what you can start shows here."}
-              </Empty>
-            ) : null}
-            {showAll ? (
-              <>
-                {todo.map(({ priority, steps }) => (
-                  <div key={priority} data-priority={priority} className="space-y-0.5">
-                    <p className="flex items-center gap-2 px-1 pb-1 font-mono text-[11px] font-semibold text-[var(--mark)]">
-                      P{priority}
-                      <span className="h-px flex-1 bg-[color-mix(in_oklab,var(--mark)_25%,transparent)]" />
-                    </p>
-                    {steps.map((step) => {
-                      if (needsFirstStep(model, step)) return <FirstStepRow key={step.id} quest={step} snapshot={snapshot} model={model} act={act} priorities={priorities} />;
-                      const quest = questOf(model.byId, step);
-                      const parent = model.byId.get(step.parentId!);
-                      return (
-                        <div key={step.id} className={rowClass}>
-                          <Tick done={false} onClick={() => void act("updateNode", step.id, { done: true })} className="mt-0.5" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[13px] leading-snug text-ink/90">{step.title}</p>
-                            <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
-                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priorities.best.get(quest.id)).dot}`} />
-                              {quest.title}
-                              {quest.id !== step.parentId ? ` · ${parent?.title}` : ""}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </>
-            ) : null}
-          </Section>
-
           {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} priorities={priorities} openAtFirst={todoCount === 0} /> : null}
           <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} openAtFirst={todoCount === 0 && unprioritised.length === 0} />
         </>
@@ -262,7 +225,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 }
 
 // Ready steps without a priority, folded away by default; a P chip gives one its priority, which
-// moves it into Up next
+// moves it into Now
 // Open from the start when nothing has a priority, since giving one is then the only way to a Now
 function Unprioritised({ steps, model, act, priorities, openAtFirst }: { steps: GraphNode[]; model: GraphModel; act: Act; priorities: Priorities; openAtFirst: boolean }) {
   const [open, setOpen] = useState(openAtFirst);
@@ -364,25 +327,6 @@ function PriorityChips({ label, onPick, quiet = false }: { label: string; onPick
   );
 }
 
-// Whether the whole to-do shows under Focus, kept on this device
-const showAllStorageKey = "ashborn-show-all-todo";
-
-function loadShowAll() {
-  try {
-    return window.localStorage.getItem(showAllStorageKey) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function saveShowAll(show: boolean) {
-  try {
-    window.localStorage.setItem(showAllStorageKey, show ? "1" : "0");
-  } catch {
-    // Storage blocked: the list folds again next time
-  }
-}
-
 function RoutineForm({ act }: { act: Act }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -396,6 +340,7 @@ function RoutineForm({ act }: { act: Act }) {
     void act("createRoutine", { id: crypto.randomUUID(), title: title.trim(), cue: cue.trim(), weekdays: days, time: time || null, alarm: time ? alarm : "none" });
     setTitle("");
     setCue("");
+    setDays([...week]);
     setTime("");
     setAlarm("none");
     setOpen(false);
@@ -406,7 +351,7 @@ function RoutineForm({ act }: { act: Act }) {
   return (
     <div onKeyDown={closeOnEscape(() => setOpen(false))} className={popoverClass}>
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Routine, e.g. meal prep" className={fieldClass} />
-      <input value={cue} onChange={(e) => setCue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="If… (cue), e.g. it's 7pm Sunday" className={fieldClass} />
+      <input value={cue} onChange={(e) => setCue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && submit()} placeholder="If… (cue), e.g. it's 7pm Sunday" className={fieldClass} />
       <div className="flex gap-1">
         {week.map((day) => (
           <button
@@ -459,7 +404,7 @@ function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
 
   return (
     <div onKeyDown={closeOnEscape(() => setOpen(false))} className={popoverClass}>
-      <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="Deadline" className={fieldClass} />
+      <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && submit()} placeholder="Deadline" className={fieldClass} />
       <div className="flex gap-2">
         <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${fieldClass} `} />
         <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} title="Alarm on the day (optional)" className={`${fieldClass} w-24 `} />
@@ -475,33 +420,6 @@ const fieldClass =
 const popoverClass = "absolute right-0 top-8 z-10 w-72 space-y-2 rounded-xl border border-ink/10 bg-card p-3 shadow-[var(--card-shadow)]";
 // A list row: quiet until hovered
 const rowClass = "flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-ink/[0.04]";
-
-// A quest in the to-do with nothing in it yet: instead of a tick, its first steps
-function FirstStepRow({ quest, snapshot, model, act, priorities }: { quest: GraphNode; snapshot: Snapshot; model: GraphModel; act: Act; priorities: Priorities }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <div className={rowClass}>
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          aria-expanded={open}
-          title="Add a first step"
-          className="relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center pointer-coarse:before:absolute pointer-coarse:before:-inset-2 pointer-coarse:before:content-[''] justify-center rounded-full border border-dashed border-ink/30 text-[12px] leading-none text-muted hover:border-ember hover:text-ember"
-        >
-          +
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] leading-snug text-ink/90">{quest.title}</p>
-          <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-muted">
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priorities.best.get(quest.id)).dot}`} />A quest with no steps yet
-          </p>
-        </div>
-      </div>
-      {open ? <SplitSteps act={act} parentId={quest.id} onDone={() => setOpen(false)} graph={{ model, snapshot }} heading="First steps" className="mt-1 w-full" /> : null}
-    </div>
-  );
-}
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (

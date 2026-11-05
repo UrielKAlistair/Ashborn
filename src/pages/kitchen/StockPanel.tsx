@@ -43,7 +43,7 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
       {/* The track leaves room at its end for the overflow tip */}
       <div className="relative h-2" style={{ width: `${100 / (1 + OVERFLOW_TIP_MAX)}%` }} role="meter" aria-label={`${item.name} stock`} aria-valuenow={item.onHand} aria-valuemin={0} aria-valuemax={item.target}>
         <div className="absolute inset-0 overflow-hidden rounded-full bg-ink/[0.07]">
-          <div className={`h-full rounded-full ${fill}`} style={{ width: `${Math.min(share, 1) * 100}%` }} />
+          <div className={`h-full rounded-full ${fill}`} style={{ width: `${Math.min(Math.max(share, 0), 1) * 100}%` }} />
         </div>
         {tip > 0 ? <div className="absolute top-0 left-full h-full rounded-r-full bg-red-400/85" style={{ width: `${tip * 100}%` }} title="More than you usually keep" /> : null}
       </div>
@@ -58,9 +58,11 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
 }
 
 // A slider and a number field, linked, for restocking or correcting by hand; the amount is saved
-// as a reading when the user lets go
+// as a reading when the user lets go. Until the user moves or types, they follow the stock as it
+// changes (a meal cooked meanwhile), and leaving them unchanged saves nothing.
 function StockEditor({ item, act }: { item: StockItem; act: Act }) {
-  const [draft, setDraft] = useState(fromBase(item.onHand, item.unit));
+  const [edited, setEdited] = useState<number | null>(null);
+  const draft = edited ?? fromBase(item.onHand, item.unit);
   // The number field as typed while it is edited, so a cleared field is not read as 0
   const [typed, setTyped] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -68,8 +70,11 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
   const step = item.unit === "kg" || item.unit === "l" ? 0.05 : 1;
 
   const save = () => {
-    const amount = toBase(draft, item.unit);
+    if (edited === null) return;
+    // No stock is below none
+    const amount = toBase(Math.max(0, edited), item.unit);
     if (Number.isFinite(amount) && Math.abs(amount - item.onHand) > 1e-9) void act("setStock", crypto.randomUUID(), item.id, amount);
+    setEdited(null);
   };
 
   return (
@@ -84,7 +89,7 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
           aria-label={`${item.name} amount`}
           onChange={(event) => {
             setTyped(null);
-            setDraft(Number(event.target.value));
+            setEdited(Number(event.target.value));
           }}
           onPointerUp={save}
           onKeyUp={save}
@@ -98,10 +103,12 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
           aria-label={`${item.name} amount in ${item.unit}`}
           onChange={(event) => {
             setTyped(event.target.value);
-            if (event.target.value.trim() !== "") setDraft(Number(event.target.value));
+            if (event.target.value.trim() !== "") setEdited(Number(event.target.value));
           }}
           onBlur={() => {
+            // A field left empty is no reading: the amount goes back to the stock's
             if (typed === null || typed.trim() !== "") save();
+            else setEdited(null);
             setTyped(null);
           }}
           onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
@@ -117,9 +124,13 @@ function StockEditor({ item, act }: { item: StockItem; act: Act }) {
             type="number"
             min={0}
             step="any"
+            // Shown afresh when the target changes elsewhere
+            key={item.target}
             defaultValue={round(fromBase(item.target, item.unit))}
             aria-label={`${item.name} target in ${item.unit}`}
             onBlur={(event) => {
+              // Passing through the field without typing changes nothing (it shows the target rounded)
+              if (event.target.value === event.target.defaultValue) return;
               const target = toBase(Number(event.target.value), item.unit);
               if (target > 0 && target !== item.target) void act("updateStockItem", item.id, { target });
             }}

@@ -32,12 +32,20 @@ public class JoinedRingTest {
     // A stop given for the ring the user saw can't end a harder one that joined since
     @Test
     public void aStopForAnEasierRingThanTheOneGoingOffIsRefused() {
-        assertEquals(false, Alarm.stopAllowed("plain", Arrays.asList(PILLS, WAKE)));
-        assertEquals(false, Alarm.stopAllowed("walk", Arrays.asList(WALK, WAKE)));
-        assertEquals(true, Alarm.stopAllowed("situps", Arrays.asList(PILLS, WAKE)));
-        assertEquals(true, Alarm.stopAllowed("plain", Arrays.asList(PILLS, WATER)));
+        assertEquals(false, Alarm.stopAllowed(PILLS.key, "plain", Arrays.asList(PILLS, WAKE)));
+        assertEquals(false, Alarm.stopAllowed(WALK.key, "walk", Arrays.asList(WALK, WAKE)));
+        assertEquals(true, Alarm.stopAllowed(PILLS.key, "situps", Arrays.asList(PILLS, WAKE)));
+        assertEquals(true, Alarm.stopAllowed(PILLS.key, "plain", Arrays.asList(PILLS, WATER)));
         // Nothing ringing: the stop only clears up
-        assertEquals(true, Alarm.stopAllowed("plain", Arrays.asList()));
+        assertEquals(true, Alarm.stopAllowed(PILLS.key, "plain", Arrays.asList()));
+    }
+
+    // A stop given for a ring that has ended can't end the different one going off now
+    @Test
+    public void aStopForARingNoLongerGoingIsRefused() {
+        assertEquals(false, Alarm.stopAllowed(PILLS.key, "plain", Arrays.asList(WATER)));
+        assertEquals(false, Alarm.stopAllowed(null, "plain", Arrays.asList(WATER)));
+        assertEquals(true, Alarm.stopAllowed(WATER.key, "plain", Arrays.asList(WATER, PILLS)));
     }
 
     @Test

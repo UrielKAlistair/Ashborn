@@ -55,3 +55,29 @@ test("a placement made earlier but sent later loses to the one made later", asyn
   await deviceAt(hoursAgo(2)).placeNodes([{ id, position: { x: 900, y: 900 } }]);
   expect(await node(id)).toMatchObject({ x: 100, y: 200 });
 });
+
+test("a box's tick that lost to a later untick ticks nothing inside it", async () => {
+  const [box, step] = [crypto.randomUUID(), crypto.randomUUID()];
+  const setup = deviceAt(hoursAgo(3));
+  await setup.createNode("Box", null, box);
+  await setup.createNode("Step inside", box, step);
+  // B, an hour ago, ticks the box and unticks it; A's tick from two hours ago arrives now
+  await deviceAt(hoursAgo(1)).updateNode(box, { done: false });
+  const { nodes } = await deviceAt(hoursAgo(2)).updateNode(box, { done: true });
+  const done = async (id: string) => (await db.from("graph_nodes").select("completed_at").eq("id", id).single()).data!.completed_at;
+  expect(await done(box)).toBeNull();
+  expect(await done(step)).toBeNull();
+  expect(nodes.map(({ id }) => id)).toEqual([box]);
+});
+
+test("a tick replayed on a step already done keeps the day it was done on", async () => {
+  const step = crypto.randomUUID();
+  await deviceAt(hoursAgo(30)).createNode("Ticked yesterday", null, step);
+  // A ticks it 26 hours ago; B's own tick of it, made an hour ago and queued offline, arrives now
+  const ticked = hoursAgo(26);
+  await deviceAt(ticked).updateNode(step, { done: true });
+  const { nodes } = await deviceAt(hoursAgo(1)).updateNode(step, { done: true });
+  const { data } = await db.from("graph_nodes").select("completed_at").eq("id", step).single();
+  expect(Date.parse(data!.completed_at)).toBe(ticked.getTime());
+  expect(Date.parse(nodes![0].completedAt!)).toBe(ticked.getTime());
+});

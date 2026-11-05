@@ -74,11 +74,12 @@ test("the phone graph's own layout", async () => {
   });
 
   await test.step("quests stack in one column, the more urgent first, wherever the desktop put them", async () => {
-    await expect.poll(async () => (await box(ids.placed)).x).toBe(0);
-    const urgent = await box(ids.urgent);
-    const placed = await box(ids.placed);
-    expect(urgent.x).toBe(0);
-    expect(placed.y).toBeGreaterThan(urgent.y + urgent.height);
+    // Polled whole: before the layout lands every node sits at the origin, where x is already 0
+    const column = async () => {
+      const [urgent, placed] = [await box(ids.urgent), await box(ids.placed)];
+      return { urgentX: urgent.x, placedX: placed.x, placedBelow: placed.y > urgent.y + urgent.height };
+    };
+    await expect.poll(column).toEqual({ urgentX: 0, placedX: 0, placedBelow: true });
   });
 
   await test.step("a prerequisite sits above the step it leads to, and links run downward", async () => {

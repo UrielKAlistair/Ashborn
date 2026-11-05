@@ -139,9 +139,18 @@ test("kitchen", async () => {
     await page.getByRole("button", { name: "Save" }).click();
     await expect(meal("lunch")).toContainText("Rice with butter beans");
 
+    // Rice's editor left open meanwhile follows the deduction, and passing through it saves nothing
+    await stock("Rice").getByRole("button", { name: "Edit" }).click();
     await meal("lunch").getByTitle("Mark done").click();
     await expect(amountLabel("Rice")).toHaveText("4.8 kg / 2 kg");
     await expect(amountLabel("Butter beans")).toHaveText("0.9 kg / 1 kg");
+    const riceField = stock("Rice").getByRole("spinbutton", { name: "Rice amount in" });
+    await expect(riceField).toHaveValue("4.8");
+    await riceField.focus();
+    await riceField.blur();
+    await page.waitForTimeout(1000);
+    expect(await onHand("Rice")).toBe(4800);
+    await stock("Rice").getByRole("button", { name: "Done" }).click();
   });
 
   await test.step("unticking restores exactly what was taken, even after the recipe changed", async () => {

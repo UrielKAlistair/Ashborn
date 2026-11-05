@@ -82,10 +82,9 @@ test("a quest with a priority and no steps", async () => {
     await expect.poll(() => stepsOf(idea)).toEqual(expect.arrayContaining(["Read the papers", "Draft an outline"]));
   });
 
-  await test.step("in Up next it has a + where a tick would be", async () => {
-    await page.getByRole("button", { name: /Show all \d+ ready/ }).click();
-    const list = page.getByRole("group", { name: "Up next" });
-    const row = list.locator("div").filter({ hasText: "Learn to sail" }).filter({ has: page.getByTitle("Add a first step") }).last();
+  await test.step("further down Now it has a + where a tick would be", async () => {
+    const list = page.getByRole("region", { name: "Now" });
+    const row = list.getByRole("listitem").filter({ hasText: "Learn to sail" });
     await expect(row.getByTitle("Mark done")).toHaveCount(0);
     await row.getByTitle("Add a first step").click();
     await list.getByLabel("Steps, one per line").fill("Find a course");
@@ -112,7 +111,7 @@ test("a quest with a priority and no steps", async () => {
 
     await chips.getByRole("button", { name: "P4" }).click();
     await expect(chips).toHaveCount(0);
-    const list = page.getByRole("group", { name: "Up next" });
+    const list = page.getByRole("region", { name: "Now" });
     await expect(list).toContainText("Someday idea");
     await expect(list.getByTitle("Add a first step")).toBeVisible();
   });

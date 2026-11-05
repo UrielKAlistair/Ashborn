@@ -3,7 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { today } from "../../src/shared/dates";
 
 // Start on Now: a 15-minute box that holds the step in Now, ends with "Done, or keep going?", and
 // survives a reload; and a step passed over on three days asks why.
@@ -54,7 +53,6 @@ test("start timer and passing over", async () => {
     await expect(now.getByRole("menuitem", { name: "Not now" })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(page.getByText("The rest of the list waits until the timer ends.")).toBeVisible();
-    await expect(page.getByRole("group", { name: "Up next" })).toHaveCount(0);
     await page.keyboard.press("n");
     await expect(now).toContainText("Draft the intro");
     await page.reload();
@@ -63,7 +61,7 @@ test("start timer and passing over", async () => {
     await now.getByRole("button", { name: "Stop" }).click();
     await expect(now.getByRole("timer")).toHaveCount(0);
     expect(await storage("ashborn-now-timer")).toBeNull();
-    await expect(page.getByText("Up next", { exact: true })).toBeVisible();
+    await expect(now.getByRole("listitem")).toHaveCount(3);
   });
 
   await test.step("when the time is up: Done, or keep going", async () => {
@@ -71,7 +69,7 @@ test("start timer and passing over", async () => {
     await page.reload();
     await expect(now).toContainText("Email the professor", { timeout: 15_000 });
     await expect(now).toContainText("Time's up. Done, or keep going?");
-    await expect(page.getByText("Up next", { exact: true })).toBeVisible(); // the box is over
+    await expect(page.getByText("The rest of the list waits until the timer ends.")).toHaveCount(0); // the box is over
     await now.getByRole("button", { name: "5 more minutes" }).click();
     await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/[45]:\d\d/);
     await now.getByTitle("Mark done").click();
@@ -80,30 +78,19 @@ test("start timer and passing over", async () => {
     expect(await storage("ashborn-now-timer")).toBeNull();
   });
 
-  await test.step("passing a step over counts once a day, and on the third day Now asks why", async () => {
-    await page.evaluate(() => localStorage.removeItem("ashborn-passed-over"));
+  await test.step("Not now moves a step to the end for the day; Split it puts its new steps first", async () => {
     await expect(now.getByRole("listitem")).toHaveCount(2);
     await choose("Not now");
     await expect(first()).toContainText("Tidy the notes");
+    await expect(now.getByRole("listitem").last()).toContainText("Draft the intro"); // still listed, last
     await page.reload(); // a step put off stays put off for the day
     await expect(first()).toContainText("Tidy the notes", { timeout: 15_000 });
-    await choose("Not now");
+    await choose("Not now"); // the last of the round: the order starts again
     await expect(first()).toContainText("Draft the intro");
-    await choose("Not now");
-    expect((await storage("ashborn-passed-over"))[id.draft]).toEqual({ days: 1, last: today() });
-    // As if it had been put off on three earlier days, and not yet today
-    await page.evaluate((stepId) => {
-      localStorage.setItem("ashborn-passed-over", JSON.stringify({ [stepId]: { days: 3, last: "2026-01-01" } }));
-      localStorage.removeItem("ashborn-now-passed");
-    }, id.draft);
-    await page.reload();
-    await expect(first()).toContainText("Draft the intro", { timeout: 15_000 });
-    await expect(now).toContainText("Passed over on 3 days. Too big, or waiting on something?");
     await choose("Split it");
     await now.getByLabel("Steps, one per line").fill("Write the first sentence");
     await now.getByRole("button", { name: /^Add step/ }).click();
-    await expect(now).toContainText("Write the first sentence");
-    expect(await storage("ashborn-passed-over")).toEqual({});
+    await expect(first()).toContainText("Write the first sentence");
   });
 
   await test.step("the notice at time up comes on any screen", async () => {

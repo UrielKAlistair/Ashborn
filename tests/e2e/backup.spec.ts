@@ -126,6 +126,9 @@ test("backup", async () => {
       encoding: "utf8",
     });
     expect(restore.status, restore.stderr).toBe(0);
+    expect(restore.stdout).toContain("Restored: every table holds what the backup does.");
     expect(await counts()).toEqual(backedUp);
+    // The account as it was before, saved beside the backup and left out of the rotation
+    expect(readdirSync(path.dirname(todaysFile())).some((name) => name.startsWith(`${today()}.before-restore-`))).toBe(true);
   });
 });

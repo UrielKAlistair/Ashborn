@@ -72,6 +72,22 @@ test("agent tools", async () => {
     expect(await call("move", { id: id("dl"), parent_id: id("pca") })).toEqual({ ok: false, body: "A node cannot move inside itself." });
   });
 
+  await test.step("mistakes are refused before anything changes, and say what they are", async () => {
+    const count = async () => (await db.from("graph_nodes").select("*", { count: "exact", head: true })).count;
+    const before = await count();
+    expect(await call("add_plan", { parent_id: null, steps: [{ ref: "a", title: "A" }, { ref: "a", title: "B" }] })).toEqual({ ok: false, body: "Each ref must be unique in the call; repeated: a. Nothing was added." });
+    expect((await call("add_plan", { parent_id: null, steps: [{ ref: "a", title: "A" }, { ref: "b", title: "B", parent: "typo" }] })).body).toBe("Not a ref in this call nor a quest or step: typo. Nothing was added.");
+    expect(await count()).toBe(before);
+    const { data: deadline } = await db.from("deadlines").insert({ title: "Not a step", due_date: "2099-01-01" }).select("id").single();
+    expect((await call("complete", { ids: [id("pca"), deadline!.id] })).body).toBe(`Not a quest or step: ${deadline!.id}. Nothing was changed.`);
+    expect((await db.from("graph_nodes").select("completed_at").eq("id", id("pca")).single()).data?.completed_at).toBeNull();
+    await db.from("deadlines").delete().eq("id", deadline!.id);
+    expect((await call("unlink", { from: id("kernel"), to: id("pca") })).body).toBe(`No link from ${id("kernel")} to ${id("pca")}.`);
+    expect((await call("overview", { quest_id: id("pca") })).body).toBe(`${id("pca")} is not a quest; give a quest's id, or none for everything.`);
+    expect((await call("update_quest", { id: id("pca"), shown: false })).body).toBe(`${id("pca")} is not a quest.`);
+    expect((await call("add_alarm", { time: "07:00", date: "2026-02-30" })).ok).toBe(false);
+  });
+
   await test.step("complete, level up, stat weights, deadline, move", async () => {
     expect((await call("complete", { ids: [id("pca")] })).ok).toBe(true);
     expect((await call("update_quest", { id: id("dl"), stat_weights: { INT: 0.2, CHR: 0.1, MND: 0 } })).ok).toBe(true);
@@ -201,6 +217,12 @@ test("agent tools", async () => {
     ({ body } = await call("overview", { quest_id: ref("pointers") }));
     expect(body).toContain("- [ ] Problem set");
     expect(body).toContain("- [x] Problem 1");
+    // Reopening what is open leaves it, and says so
+    expect((await call("reopen", { ids: [ref("later")] })).body).toBe(`Reopened. Not done, so left as they were: ${ref("later")}.`);
+    // A quest is never ticked: completing it completes its steps, and it is finished
+    expect((await call("complete", { ids: [ref("pointers")] })).ok).toBe(true);
+    expect((await db.from("graph_nodes").select("completed_at").eq("id", ref("pointers")).single()).data?.completed_at).toBeNull();
+    expect((await db.from("graph_nodes").select("id").eq("parent_id", ref("pointers")).is("completed_at", null)).data).toEqual([]);
     expect((await call("delete", { id: ref("pointers") })).ok).toBe(true);
   });
 
@@ -220,6 +242,9 @@ test("agent tools", async () => {
     expect(body).toContain('reminder "Start prep": -45 min from the meal');
 
     expect((await call("cook_meal", { date: today, slot: "lunch" })).body).toBe("Cooked.");
+    expect((await call("kitchen")).body).toContain(`Rice [${riceId}]: 1.3 kg of 2 kg`);
+    // Cooked once only: a second cook is refused, and takes nothing more
+    expect((await call("cook_meal", { date: today, slot: "lunch" })).body).toBe(`The lunch of ${today} is already cooked.`);
     expect((await call("kitchen")).body).toContain(`Rice [${riceId}]: 1.3 kg of 2 kg`);
     expect((await call("uncook_meal", { date: today, slot: "lunch" })).ok).toBe(true);
     expect((await call("kitchen")).body).toContain(`Rice [${riceId}]: 1.5 kg of 2 kg`);

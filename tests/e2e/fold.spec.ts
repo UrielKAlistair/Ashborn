@@ -146,11 +146,33 @@ test("finished chains fold", async () => {
   });
 
   await test.step("the day-start hour is set from Today's header and saved", async () => {
-    await page.locator("section", { hasText: "Up next" }).last().getByTitle("When the day starts").click();
+    await page.locator("section", { hasText: "Routines" }).last().getByTitle("When the day starts").click();
     await page.getByLabel("The day starts at").selectOption("5");
     await expect.poll(async () => (await db.from("user_settings").select("day_start_hour").single()).data?.day_start_hour).toBe(5);
-    // Set back, as later suites count days from the default hour
-    await must(db.from("user_settings").upsert({ day_start_hour: DAY_START_HOUR }, { onConflict: "user_id" }));
+  });
+
+  await test.step("a new day reads the data again, for the reads bounded by date (not between 23:00 and midnight)", async () => {
+    // The day made to start at the next hour, and the page's clock set half a minute before it
+    const hour = new Date().getHours();
+    try {
+      if (hour === 23) return;
+      await must(db.from("user_settings").upsert({ day_start_hour: hour + 1 }, { onConflict: "user_id" }));
+      const start = new Date();
+      start.setHours(hour + 1, 0, 0, 0);
+      await page.clock.install({ time: new Date(start.getTime() - 30_000) });
+      await page.reload();
+      await expect(card("Inner two")).toBeVisible({ timeout: 15_000 });
+      await page.waitForTimeout(3000); // the first reads settle
+      let reads = 0;
+      page.on("request", (request) => {
+        if (request.method() === "GET" && request.url().includes("/nodes_with_xp?") && !request.url().includes("id=eq")) reads++;
+      });
+      await page.clock.runFor(60_000);
+      await expect.poll(() => reads).toBeGreaterThan(0);
+    } finally {
+      // Set back, as later suites count days from the default hour
+      await must(db.from("user_settings").upsert({ day_start_hour: DAY_START_HOUR }, { onConflict: "user_id" }));
+    }
   });
 
   expect(pageErrors).toEqual([]);

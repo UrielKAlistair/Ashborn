@@ -64,13 +64,10 @@ test("the tray's Now", async () => {
   });
 
   await test.step("Done in the tray ticks it, and the tray moves on", async () => {
-    await page.evaluate((stepId) => localStorage.setItem("ashborn-passed-over", JSON.stringify({ [stepId]: { days: 3, last: "2026-01-01" } })), id.draft);
     await app.evaluate(({ BrowserWindow }, stepId) => BrowserWindow.getAllWindows()[0].webContents.send("now:done", stepId), id.draft);
     await expect(now.getByRole("listitem").first()).toContainText("Email the professor");
     await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("id", id.draft).single()).data?.completed_at).toBeTruthy();
     await expect.poll(async () => ((await trayNow()) as { title: string }).title).toBe("Email the professor");
-    // Done anywhere starts its "passed over" count again
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("ashborn-passed-over") ?? "{}"))).toEqual({});
   });
 
   await test.step("on the phone, Now's title opens the graph on its step", async () => {

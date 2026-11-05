@@ -22,7 +22,15 @@ test("alarms", async () => {
   const time = `${String(soon.getHours()).padStart(2, "0")}:${String(soon.getMinutes()).padStart(2, "0")}`;
   const id = crypto.randomUUID();
   const everyDay = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const { error: seedError } = await db.from("alarms").insert({ id, label: "Stretch", kind: "plain", time, weekdays: everyDay });
+  // A one-off three days ahead, as the connector sets one
+  const later = crypto.randomUUID();
+  const laterAt = new Date(Date.now() + 3 * 86_400_000).toISOString();
+  // A one-off that rang an hour ago: the snapshot keeps it a day for its snooze, but it is no longer set
+  const { error: seedError } = await db.from("alarms").insert([
+    { id, label: "Stretch", kind: "plain", time, weekdays: everyDay, at: null },
+    { id: later, label: "Dentist", kind: "plain", time: null, weekdays: [], at: laterAt },
+    { id: crypto.randomUUID(), label: "Rang this morning", kind: "plain", time: null, weekdays: [], at: new Date(Date.now() - 60 * 60_000).toISOString() },
+  ]);
   if (seedError) throw seedError;
   const skipOf = async () => (await db.from("alarm_skips").select("skipped").eq("key", `alarm:${id}@${toISODate(soon)}`).maybeSingle()).data?.skipped;
   const alarmRow = async () => (await db.from("alarms").select("label, enabled").eq("id", id).maybeSingle()).data;
@@ -51,6 +59,14 @@ test("alarms", async () => {
 
   await test.step("all alarms: turned off, edited, deleted", async () => {
     await page.getByRole("button", { name: "All alarms ›" }).click();
+    await expect(ring("Stretch")).toBeVisible();
+    await expect(page.getByText("Rang this morning")).toHaveCount(0);
+    // Relabelled, a one-off keeps its moment
+    await ring("Dentist").getByRole("button", { name: "Edit Dentist" }).click();
+    await page.getByRole("dialog", { name: "Edit alarm" }).getByPlaceholder("Label (optional)").fill("Dentist, bring the form");
+    await page.getByRole("dialog", { name: "Edit alarm" }).getByRole("button", { name: "Save" }).click();
+    await expect.poll(async () => (await db.from("alarms").select("label").eq("id", later).single()).data?.label).toBe("Dentist, bring the form");
+    expect(Date.parse((await db.from("alarms").select("at").eq("id", later).single()).data!.at)).toBe(Date.parse(laterAt));
     await ring("Stretch").getByRole("switch").click();
     await expect.poll(async () => (await alarmRow())?.enabled).toBe(false);
     await ring("Stretch").getByRole("button", { name: "Edit Stretch" }).click();
@@ -66,9 +82,11 @@ test("alarms", async () => {
 
   await test.step("the + pop-up sets a quick alarm, which rings today", async () => {
     await page.getByRole("button", { name: "‹ Today" }).click();
+    const count = async () => (await db.from("alarms").select("id")).data?.length;
+    const before = await count();
     await page.getByRole("button", { name: "New alarm" }).click();
     await page.getByRole("dialog", { name: "New alarm" }).getByRole("button", { name: "In 10 min" }).click();
-    await expect.poll(async () => (await db.from("alarms").select("id")).data?.length).toBe(1);
+    await expect.poll(count).toBe(before! + 1);
     await expect(ring("Alarm")).toBeVisible();
   });
 

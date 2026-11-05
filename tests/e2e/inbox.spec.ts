@@ -28,8 +28,8 @@ test.beforeAll(async () => {
   userId = data.user.id;
   for (const table of ["graph_nodes", "routines", "deadlines", "alarms"]) await db.from(table).delete().not("id", "is", null);
   const { error: seedError } = await db.from("graph_nodes").insert([
-    { id: work, title: "Work", parent_id: null, color: "blue" },
-    { id: report, title: "Write report", parent_id: work, color: null },
+    { id: work, title: "Work", parent_id: null },
+    { id: report, title: "Write report", parent_id: work },
   ]);
   if (seedError) throw seedError;
 
@@ -39,6 +39,8 @@ test.beforeAll(async () => {
   env.ASHBORN_BACKUP_DIR = path.join(profile, "backups");
   app = await electron.launch({ args: [`--user-data-dir=${profile}`, "."], env });
   page = await app.firstWindow();
+  // The whole to-do in Now, not only its first rows
+  await page.evaluate(() => localStorage.setItem("ashborn-show-all-todo", "1"));
 });
 
 test.afterAll(async () => {
@@ -47,7 +49,7 @@ test.afterAll(async () => {
 });
 
 const field = () => page.getByLabel("Capture a thought");
-const upNext = () => page.getByRole("group", { name: "Up next" });
+const upNext = () => page.getByRole("region", { name: "Now" });
 const quest = (title: string) => page.locator(".react-flow__node-quest", { hasText: title });
 const step = (title: string) => page.locator(".react-flow__node-step", { hasText: title });
 const capture = async (thought: string) => {

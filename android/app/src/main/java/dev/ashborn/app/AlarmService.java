@@ -32,6 +32,7 @@ public class AlarmService extends Service {
     static final String ACTION_SNOOZE = "dev.ashborn.app.SNOOZE_ALARM";
     // The stop of the ring the user saw when stopping or snoozing it
     static final String EXTRA_SHOWN_KIND = "shownKind";
+    static final String EXTRA_SHOWN_KEY = "shownKey";
     private static final String CHANNEL = "alarms";
     private static final int NOTIFICATION_ID = 1;
 
@@ -43,14 +44,14 @@ public class AlarmService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) {
-            stopRinging();
+            stopRinging(startId);
             return START_NOT_STICKY;
         }
         if (ACTION_STOP.equals(intent.getAction()) || ACTION_SNOOZE.equals(intent.getAction())) {
             // Ignored when a harder ring joined after the user saw this one: the screen then shows its challenge
-            if (!Alarm.stopAllowed(intent.getStringExtra(EXTRA_SHOWN_KIND), parts)) return START_STICKY;
-            if (ACTION_STOP.equals(intent.getAction())) stopRinging();
-            else snooze();
+            if (!Alarm.stopAllowed(intent.getStringExtra(EXTRA_SHOWN_KEY), intent.getStringExtra(EXTRA_SHOWN_KIND), parts)) return START_STICKY;
+            if (ACTION_STOP.equals(intent.getAction())) stopRinging(startId);
+            else snooze(startId);
             return START_NOT_STICKY;
         }
 
@@ -59,7 +60,13 @@ public class AlarmService extends Service {
             AlarmScheduler.setRinging(this, parts);
         } catch (JSONException | NullPointerException e) {
             Log.e("Ashborn", "Bad alarm", e);
-            stopSelf();
+            // A ring already going keeps going. Otherwise the service was started to the foreground and
+            // must get there before it stops, or the system ends the app.
+            if (!parts.isEmpty()) return START_STICKY;
+            createChannel();
+            startForeground(NOTIFICATION_ID, new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.mipmap.ic_launcher).setContentTitle("Alarm").build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf(startId);
             return START_NOT_STICKY;
         }
 
@@ -72,11 +79,14 @@ public class AlarmService extends Service {
         return START_STICKY;
     }
 
-    private Notification notification(Alarm alarm) {
-        NotificationManager manager = getSystemService(NotificationManager.class);
+    private void createChannel() {
         NotificationChannel channel = new NotificationChannel(CHANNEL, "Alarms", NotificationManager.IMPORTANCE_HIGH);
         channel.setSound(null, null); // the service plays the sound itself, looping
-        manager.createNotificationChannel(channel);
+        getSystemService(NotificationManager.class).createNotificationChannel(channel);
+    }
+
+    private Notification notification(Alarm alarm) {
+        createChannel();
 
         PendingIntent open = AlarmScheduler.openAppIntent(this);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL)
@@ -89,10 +99,12 @@ public class AlarmService extends Service {
             .setContentIntent(open)
             .setFullScreenIntent(open, true);
         if ("plain".equals(alarm.kind)) {
-            Intent stop = new Intent(this, AlarmService.class).setAction(ACTION_STOP).putExtra(EXTRA_SHOWN_KIND, alarm.kind);
-            builder.addAction(0, "Dismiss", PendingIntent.getService(this, 1, stop, PendingIntent.FLAG_IMMUTABLE));
-            Intent snooze = new Intent(this, AlarmService.class).setAction(ACTION_SNOOZE).putExtra(EXTRA_SHOWN_KIND, alarm.kind);
-            builder.addAction(0, "Snooze", PendingIntent.getService(this, 2, snooze, PendingIntent.FLAG_IMMUTABLE));
+            // Updated each time, so the buttons carry this ring's key rather than the first ring's
+            int flags = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
+            Intent stop = new Intent(this, AlarmService.class).setAction(ACTION_STOP).putExtra(EXTRA_SHOWN_KEY, alarm.key).putExtra(EXTRA_SHOWN_KIND, alarm.kind);
+            builder.addAction(0, "Dismiss", PendingIntent.getService(this, 1, stop, flags));
+            Intent snooze = new Intent(this, AlarmService.class).setAction(ACTION_SNOOZE).putExtra(EXTRA_SHOWN_KEY, alarm.key).putExtra(EXTRA_SHOWN_KIND, alarm.kind);
+            builder.addAction(0, "Snooze", PendingIntent.getService(this, 2, snooze, flags));
         }
         return builder.build();
     }
@@ -124,7 +136,7 @@ public class AlarmService extends Service {
     }
 
     // Only a plain ring snoozes (one whose every part is plain): a challenge alarm is meant to get the user up
-    private void snooze() {
+    private void snooze(int startId) {
         if (!parts.isEmpty() && "plain".equals(Alarm.joined(parts).kind)) {
             try {
                 AlarmScheduler.snooze(this, parts);
@@ -132,10 +144,11 @@ public class AlarmService extends Service {
                 Log.e("Ashborn", "Could not snooze the alarm", e);
             }
         }
-        stopRinging();
+        stopRinging(startId);
     }
 
-    private void stopRinging() {
+    // Stops only if no newer start arrived meanwhile: a ring firing as this one is stopped still rings
+    private void stopRinging(int startId) {
         stopSound();
         parts.clear();
         try {
@@ -144,7 +157,7 @@ public class AlarmService extends Service {
             Log.e("Ashborn", "Could not clear the ringing alarm", e);
         }
         stopForeground(STOP_FOREGROUND_REMOVE);
-        stopSelf();
+        stopSelf(startId);
     }
 
     @Override

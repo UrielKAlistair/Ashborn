@@ -27,6 +27,11 @@ import {
   type Weekday,
 } from "../shared/types";
 
+// Rows the server returns at most a request (Supabase's default cap)
+const PAGE = 1000;
+// Ids sent in one request's address (each about 37 characters), well under the server's limit on its length
+const IDS_PER_REQUEST = 100;
+
 // The api methods that change data (and so return a Delta). A Snapshot also fits the shape of a
 // Delta, so getSnapshot is left out by name.
 export type Mutation = Exclude<
@@ -84,15 +89,30 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
 
   const readNode = async (id: string) => toNode(must(await nodes().select().eq("id", id).single()));
 
+  // Reopens the done boxes from `id` out to its quest, for a step opened or put inside them
+  const reopenAround = async (id: string | null, at: string) => {
+    const around: string[] = [];
+    for (let current = id; current; ) {
+      const box = must(await nodes().select("id, parent_id, completed_at").eq("id", current).maybeSingle()) as Pick<NodeRow, "id" | "parent_id" | "completed_at"> | null;
+      if (!box || box.parent_id === null) break;
+      if (box.completed_at) around.push(box.id);
+      current = box.parent_id;
+    }
+    if (around.length === 0) return [];
+    const fields = { completed_at: null };
+    return (must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).in("id", around).not("completed_at", "is", null).select()) as NodeRow[]).map(toNode);
+  };
+
   return inRowOrder(db, {
     async getSnapshot(userId) {
       // Which day it is depends on the day-start hour, so the reads of today's data wait for it
       const settings = readSettings(db);
       const date = settings.then(({ dayStartHour }) => dayOf(new Date(), dayStartHour));
       const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, skipRows, progressToday, kitchen, settingsRow] = await Promise.all([
-        // A second key for rows made at the same moment: without one, an update can move a row among them
-        nodes().select().order("created_at").order("id"),
-        db.from("graph_edges").select("from_id, to_id"),
+        // A second key for rows made at the same moment: without one, an update can move a row among them,
+        // or a page boundary skip it
+        allPages((from, to) => nodes().select().order("created_at").order("id").range(from, to)),
+        allPages((from, to) => db.from("graph_edges").select("from_id, to_id").order("from_id").order("to_id").range(from, to)),
         db.from("routines").select().order("created_at"),
         // From yesterday, and one-offs from a day back: the phone's schedule reaches back that far
         date.then((day) => db.from("routine_checks").select("routine_id, date").gte("date", addDays(day, -1)).eq("checked", true)),
@@ -106,8 +126,8 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       ]);
 
       return {
-        nodes: must(nodeRows).map(toNode),
-        edges: must(edgeRows).map(toEdge),
+        nodes: nodeRows.map(toNode),
+        edges: edgeRows.map(toEdge),
         routines: must(routineRows).map(toRoutine),
         routineChecks: must(checkRows).map((row) => ({ routineId: row.routine_id, date: row.date })),
         deadlines: must(deadlineRows).map(toDeadline),
@@ -121,9 +141,11 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     },
 
     async createNode(title, parentId, id = crypto.randomUUID()) {
+      const at = clock().toISOString();
       // Stamped when made, as on screen until now, so the order doesn't shift when the row comes back
-      must(await db.from("graph_nodes").upsert({ id, title, parent_id: parentId, created_at: clock().toISOString() }, { onConflict: "id", ignoreDuplicates: true }));
-      return { nodes: [await readNode(id)] };
+      must(await db.from("graph_nodes").upsert({ id, title, parent_id: parentId, created_at: at }, { onConflict: "id", ignoreDuplicates: true }));
+      const reopened = await reopenAround(parentId, at);
+      return { nodes: [await readNode(id), ...reopened], progressToday: reopened.length ? await readProgressToday(db) : undefined };
     },
 
     async updateNode(id, { title, statWeights, active, done, shelved, priority }) {
@@ -131,16 +153,32 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const completed_at = done === undefined ? undefined : done ? at : null;
       const stat_weights = statWeights && positiveWeights(statWeights);
       const fields = { title, stat_weights, active, completed_at, shelved, priority };
-      const row = must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).eq("id", id).select().maybeSingle());
-      if (!row) throw new Error("This step was deleted on another device.");
+      // A bare tick on a step already done changes nothing, so it keeps the day it was done on (a tick
+      // replayed from another device's queue would otherwise move it, and its progress, to today)
+      const bareTick = done === true && Object.values({ ...fields, completed_at: undefined }).every((value) => value === undefined);
+      const update = nodes().update({ ...fields, changed_at: stamps(fields, at) }).eq("id", id);
+      const row = must(await (bareTick ? update.is("completed_at", null) : update).select().maybeSingle());
+      if (!row) {
+        const unchanged = bareTick ? (must(await nodes().select().eq("id", id).maybeSingle()) as NodeRow | null) : null;
+        if (unchanged) return { nodes: [toNode(unchanged)] };
+        throw new Error("This step was deleted on another device.");
+      }
       // A box ticked done means everything in it is done: everything in it when the tick was made, so a
-      // tick sent from the offline queue leaves alone the steps added since on another device
-      const inside = done ? openInside((must(await nodes().select("id, parent_id, completed_at").lte("created_at", at)) as NodeRow[]).map((tree) => ({ id: tree.id, parentId: tree.parent_id, completedAt: tree.completed_at })), id) : [];
-      const ticked = inside.length
-        ? (must(await nodes().update({ completed_at: at, changed_at: stamps({ completed_at: at }, at) }).in("id", inside).is("completed_at", null).select()) as NodeRow[])
-        : [];
+      // tick sent from the offline queue leaves alone the steps added since on another device. A tick that
+      // lost to a later change of the box (an untick on another device) ticks nothing inside.
+      const won = done && row.completed_at !== null && Date.parse(row.completed_at) === Date.parse(at);
+      const inside = won ? openInside((await allPages((from, to) => nodes().select("id, parent_id, completed_at").lte("created_at", at).order("id").range(from, to)) as NodeRow[]).map((tree) => ({ id: tree.id, parentId: tree.parent_id, completedAt: tree.completed_at })), id) : [];
+      // In batches, as the ids travel in the request's address
+      const ticked: NodeRow[] = [];
+      for (let from = 0; from < inside.length; from += IDS_PER_REQUEST) {
+        const batch = inside.slice(from, from + IDS_PER_REQUEST);
+        ticked.push(...(must(await nodes().update({ completed_at: at, changed_at: stamps({ completed_at: at }, at) }).in("id", batch).is("completed_at", null).select()) as NodeRow[]));
+      }
 
-      return { nodes: [row as NodeRow, ...ticked].map(toNode), progressToday: done === undefined ? undefined : await readProgressToday(db) };
+      // A step reopened inside done boxes reopens them: a box is done only while everything in it is
+      const reopened = done === false && row.completed_at === null ? await reopenAround(row.parent_id, at) : [];
+
+      return { nodes: [...[row as NodeRow, ...ticked].map(toNode), ...reopened], progressToday: done === undefined ? undefined : await readProgressToday(db) };
     },
 
     async deleteNode(id) {
@@ -150,9 +188,15 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     },
 
     async moveNode(id, parentId) {
-      const removed = must(await db.rpc("move_node", { target: id, new_parent: parentId, at: clock().toISOString() })) as Array<{ from_id: string; to_id: string }>;
+      const at = clock().toISOString();
+      const removed = must(await db.rpc("move_node", { target: id, new_parent: parentId, at })) as Array<{ from_id: string; to_id: string }>;
+      // A move that stood: its place in the old box means nothing in the new one, and an open step
+      // put into done boxes reopens them
+      const moved = (await readNode(id)).parentId === parentId;
+      if (moved) must(await nodes().update({ x: null, y: null, changed_at: stamps({ x: null, y: null }, at) }).eq("id", id));
+      const reopened = moved ? await reopenAround(parentId, at) : [];
 
-      return { nodes: [await readNode(id)], removedEdges: removed.map(toEdge) };
+      return { nodes: [await readNode(id), ...reopened], removedEdges: removed.map(toEdge), progressToday: reopened.length ? await readProgressToday(db) : undefined };
     },
 
     async placeNodes(places) {
@@ -164,7 +208,11 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
 
     async resetLayout(ids) {
       const fields = { x: null, y: null };
-      const rows = must(await nodes().update({ ...fields, changed_at: stamps(fields, clock().toISOString()) }).in("id", ids).select()) as NodeRow[];
+      const at = clock().toISOString();
+      const rows: NodeRow[] = [];
+      for (let from = 0; from < ids.length; from += IDS_PER_REQUEST) {
+        rows.push(...(must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).in("id", ids.slice(from, from + IDS_PER_REQUEST)).select()) as NodeRow[]));
+      }
 
       return { nodes: rows.map(toNode) };
     },
@@ -563,6 +611,17 @@ function fail(result: Result): never {
 function deletedIfMissing(result: Result, what: string) {
   if (result.error?.code === "23503") throw new Error(`${what} was deleted on another device.`);
   if (result.error) fail(result);
+}
+
+// Every row a read gives, a page at a time: the graph keeps its done steps, so it outgrows one request.
+// `page` reads rows `from` to `to` inclusive, in an order with no ties.
+async function allPages<T>(page: (from: number, to: number) => PromiseLike<Result & { data: T[] | null }>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const data = must(await page(from, from + PAGE - 1));
+    rows.push(...data);
+    if (data.length < PAGE) return rows;
+  }
 }
 
 // Unwraps a Supabase result, turning its error into a thrown one

@@ -19,7 +19,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
 import { onShowOnGraph } from "./pages/home/showOnGraph";
-import { passedOver, START_MINUTES, storePassedOver, storeTimer, timerBox, useNowMemory, useTimeUpNotice } from "./pages/home/nowStore";
+import { START_MINUTES, storeTimer, timerBox, useNowMemory, useTimeUpNotice } from "./pages/home/nowStore";
 import { useNowMirror } from "./pages/home/nowMirror";
 import { buildGraphModel } from "./shared/graphModel";
 import { chooseNow } from "./shared/nowStep";
@@ -78,6 +78,8 @@ function App() {
   const loadsRunning = useRef(new Set<Delta[]>());
   const offlineRef = useRef(offline);
   offlineRef.current = offline;
+  // Reads the data again, as the load below does when the server says something changed
+  const readAgainRef = useRef(() => {});
 
   useEffect(() => {
     const handlePopState = () => setCurrentPath(window.location.pathname || "/");
@@ -162,6 +164,7 @@ function App() {
       else if (!offlineRef.current && hiddenAt && Date.now() - hiddenAt > WAKE_READ_AFTER_MS) readAgain();
     };
 
+    readAgainRef.current = readAgain;
     void load();
     window.addEventListener("online", loadNow);
     document.addEventListener("visibilitychange", retry);
@@ -179,6 +182,7 @@ function App() {
       window.clearInterval(retryTimer);
       window.clearTimeout(readRetry);
       stopWatching();
+      readAgainRef.current = () => {};
     };
   }, [userId]);
 
@@ -325,6 +329,14 @@ function App() {
 
   // The step in Now on any screen, for the tray's menu and the graph's tag; the card on Home draws the same choice
   const nowDate = useToday(snapshot?.settings.dayStartHour ?? 0);
+  // A new day moves the reads bounded by date (the Kitchen's days, the last day's ticks and skips), so
+  // a window left open across the day start reads again. Not on the first data, whose own hour can move
+  // the date the screen started on.
+  const dateRead = useRef<string | null>(null);
+  useEffect(() => {
+    if (dateRead.current && dateRead.current !== nowDate) readAgainRef.current();
+    dateRead.current = snapshot ? nowDate : null;
+  }, [nowDate, Boolean(snapshot)]);
   const nowMemory = useNowMemory(nowDate);
   // The to-do reads only the graph and the deadlines, so alarms, the Kitchen or settings changing leave it be
   const toDo = useMemo(() => {
@@ -334,13 +346,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot?.nodes, snapshot?.edges, snapshot?.inboxId]);
   const nowChoice = toDo && chooseNow(toDo.steps, nowMemory, Date.now(), nowDate);
-  // A step done anywhere (the card, the tray, the graph) starts its "passed over" count again
-  useEffect(() => {
-    if (!snapshot) return;
-    const counts = passedOver();
-    const done = Object.keys(counts).filter((id) => snapshot.nodes.find((node) => node.id === id)?.completedAt);
-    if (done.length) storePassedOver(Object.fromEntries(Object.entries(counts).filter(([id]) => !done.includes(id))));
-  }, [snapshot]);
   useNowMirror(
     toDo && nowChoice
       ? { id: nowChoice.step.id, title: nowChoice.step.title, endsAt: nowChoice.timed?.endsAt ?? null, canTick: !needsFirstStep(toDo.model, nowChoice.step) }
@@ -364,7 +369,7 @@ function App() {
     }
 
     if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={acting} />;
-    if (currentPath === "/settings") return <SettingsPage permissions={permissions} />;
+    if (currentPath === "/settings") return <SettingsPage permissions={permissions} dayStartHour={snapshot.settings.dayStartHour} act={acting} />;
 
     if (currentPath === "/kitchen" || currentPath.startsWith("/kitchen/")) {
       const [, , screen, recipeId] = currentPath.split("/");

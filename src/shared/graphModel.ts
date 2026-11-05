@@ -16,6 +16,16 @@ export type GraphModel = {
 
 export const isDone = (node: GraphNode) => node.completedAt !== null;
 
+// The done boxes from `id` out to its quest (never the quest, which is never ticked): a step opened or
+// put inside them means they are no longer done
+export function doneAround(nodes: Pick<GraphNode, "id" | "parentId" | "completedAt">[], id: string | null): string[] {
+  const around: string[] = [];
+  for (let node = nodes.find((candidate) => candidate.id === id); node && node.parentId !== null; node = nodes.find((candidate) => candidate.id === node!.parentId)) {
+    if (node.completedAt) around.push(node.id);
+  }
+  return around;
+}
+
 // The open nodes under `id`, at any depth: ticking a box done ticks these too
 export function openInside(nodes: Pick<GraphNode, "id" | "parentId" | "completedAt">[], id: string): string[] {
   return nodes.filter((node) => node.parentId === id).flatMap((node) => [...(node.completedAt ? [] : [node.id]), ...openInside(nodes, node.id)]);

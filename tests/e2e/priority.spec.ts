@@ -26,8 +26,8 @@ test.beforeAll(async () => {
     if (insertError) throw insertError;
   };
   await insert("graph_nodes", [
-    { id: ids.ddp, title: "DDP Work", parent_id: null, color: "red" },
-    { id: ids.placement, title: "Placement", parent_id: null, color: "violet" },
+    { id: ids.ddp, title: "DDP Work", parent_id: null },
+    { id: ids.placement, title: "Placement", parent_id: null },
     { id: ids.bsc, title: "Online BSc", parent_id: null },
   ]);
   const step = (id: string, title: string, parent_id: string) => ({ id, title, parent_id });
@@ -51,6 +51,8 @@ test.beforeAll(async () => {
   env.ASHBORN_BACKUP_DIR = path.join(profile, "backups");
   app = await electron.launch({ args: [`--user-data-dir=${profile}`, "."], env });
   page = await app.firstWindow();
+  // The whole to-do in Now, not only its first rows
+  await page.evaluate(() => localStorage.setItem("ashborn-show-all-todo", "1"));
 });
 
 test.afterAll(async () => {
@@ -58,8 +60,7 @@ test.afterAll(async () => {
   rmSync(profile, { recursive: true, force: true });
 });
 
-// The to-do list itself, not Focus above it, which names what a step leads to
-const upNext = () => page.getByRole("group", { name: "Up next" });
+const upNext = () => page.getByRole("region", { name: "Now" });
 const quest = (title: string) => page.locator(".react-flow__node-quest", { hasText: title });
 const canvasXY = async (title: string) => {
   const [, x, y] = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec((await quest(title).evaluate((el) => (el as HTMLElement).style.transform)))!;
@@ -81,7 +82,6 @@ test("priorities", async () => {
     await row.hover();
     await row.getByTitle("Priority").click();
     await page.getByRole("radio", { name: "Priority 2" }).click();
-    await page.getByRole("button", { name: /Show (all \d+ ready|the list)/ }).click(); // the whole to-do, not only Now
     await expect(upNext()).toContainText("Review the survey");
     await expect(upNext()).not.toContainText("Presentation part 2");
     await expect(upNext()).not.toContainText("Presentation part 1");
@@ -96,7 +96,7 @@ test("priorities", async () => {
 
   await test.step("a more urgent quest floats to the top left and leads the to-do", async () => {
     await db.from("graph_nodes").update({ priority: 1 }).eq("id", ids.bsc);
-    await expect(upNext().locator("p", { hasText: /^P\d$/ }).first()).toHaveText("P1", { timeout: 10_000 });
+    await expect(upNext().getByRole("listitem").first()).toContainText("Course 1", { timeout: 10_000 });
     await expect.poll(async () => (await canvasXY("Online BSc")).x).toBe(0);
     expect((await canvasXY("Online BSc")).y).toBe(0);
     await expect(upNext()).toContainText("Course 1");
@@ -106,9 +106,9 @@ test("priorities", async () => {
     await expect(page.locator(".react-flow__node-step", { hasText: "Course 1" }).locator("[data-priority]")).toHaveCount(0);
   });
 
-  await test.step("a deadline linked in the app only groups: its chain stays off Up next", async () => {
+  await test.step("a deadline linked in the app only groups: its chain stays off Now", async () => {
     await db.from("deadlines").insert({ title: "Apply by", due_date: addDays(today(), 3) });
-    const picker = page.locator("section", { hasText: "Up next" }).last().getByLabel("Deadline for");
+    const picker = page.locator("section", { hasText: "Routines" }).last().getByLabel("Deadline for");
     await expect(picker).toBeVisible({ timeout: 10_000 });
     await picker.selectOption(ids.apply);
     await expect.poll(async () => (await db.from("deadlines").select("node_id").eq("title", "Apply by").single()).data?.node_id).toBe(ids.apply);

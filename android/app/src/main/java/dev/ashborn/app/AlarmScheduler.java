@@ -5,6 +5,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -53,10 +54,17 @@ final class AlarmScheduler {
             stillSnoozed.put(alarm.toJson());
         }
 
-        for (Alarm alarm : byKey.values()) {
-            if (alarm.at > now) manager.setAlarmClock(new AlarmManager.AlarmClockInfo(alarm.at, openAppIntent(context)), fireIntent(context, alarm));
-        }
+        // Stored first, and each alarm set on its own, so one the system refuses (exact alarms not
+        // allowed) neither loses the schedule nor stops the alarms after it from being set
         prefs(context).edit().putString(SCHEDULED, scheduled.toString()).putString(SNOOZED, stillSnoozed.toString()).apply();
+        for (Alarm alarm : byKey.values()) {
+            if (alarm.at <= now) continue;
+            try {
+                manager.setAlarmClock(new AlarmManager.AlarmClockInfo(alarm.at, openAppIntent(context)), fireIntent(context, alarm));
+            } catch (RuntimeException e) {
+                Log.e("Ashborn", "Could not set the alarm " + alarm.key, e);
+            }
+        }
     }
 
     // The snoozes still to ring: those due later whose ring is still in the schedule, so one whose
@@ -70,7 +78,7 @@ final class AlarmScheduler {
     }
 
     // After a reboot Android has forgotten the alarms; set the stored ones again
-    static void rearm(Context context) throws JSONException {
+    static synchronized void rearm(Context context) throws JSONException {
         schedule(context, load(context, SCHEDULED));
     }
 

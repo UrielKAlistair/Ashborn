@@ -38,18 +38,23 @@ test("a linked deadline raises nothing; a priority given in Ready reaches Now", 
   await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(deadlines).toContainText("Reading quiz", { timeout: 15_000 });
-  // Due tomorrow and linked to Reading, yet nothing is prioritised, so there is no Now
-  await expect(now).toHaveCount(0);
+  // Due tomorrow and linked to Reading, yet nothing is prioritised, so Now lists nothing
+  await expect(now.getByRole("listitem")).toHaveCount(0);
 
   // With nothing prioritised, Ready is open from the start: giving a priority is the way to a Now
   await expect(page.getByRole("group", { name: "Priority for Read chapter 1" })).toBeVisible();
-  await expect(page.getByRole("group", { name: "Up next" })).toContainText("Give a quest a priority below");
+  await expect(now).toContainText("Give a quest a priority below");
   // Two ready in one quest: one priority on the quest covers both
   await expect(page.getByText("2 ready")).toBeVisible();
   await page.getByRole("group", { name: "Priority for all of Reading" }).getByRole("button", { name: "P3" }).click();
   await expect(now).toContainText("Read chapter 1");
   await expect(page.getByRole("group", { name: "Priority for Read chapter 2" })).toHaveCount(0);
   await expect.poll(async () => (await db.from("graph_nodes").select("priority").eq("id", quest).single()).data?.priority).toBe(3);
+
+  // Hidden from the dashboard, its quest still shows as the deadline's
+  await db.from("graph_nodes").update({ active: false, changed_at: { active: new Date().toISOString() } }).eq("id", quest);
+  await expect(deadlines.getByLabel("Deadline for")).toHaveValue(quest, { timeout: 10_000 });
+  await expect(deadlines.getByLabel("Deadline for").locator("option:checked")).toHaveText("Reading");
 
   await app.close();
   rmSync(profile, { recursive: true, force: true });

@@ -73,13 +73,14 @@ public class AlarmPlugin extends Plugin {
         end(call, AlarmService.ACTION_SNOOZE);
     }
 
-    // Stops or snoozes the ring the screen showed (`kind`); refused, with `stopped` false, when a
-    // harder ring has joined it since
+    // Stops or snoozes the ring the screen showed (`key`, `kind`); refused, with `stopped` false, when
+    // another ring is going or a harder one has joined it since
     private void end(PluginCall call, String action) {
+        String key = call.getString("key");
         String kind = call.getString("kind");
-        boolean stopped = Alarm.stopAllowed(kind, AlarmScheduler.ringingParts(getContext()));
+        boolean stopped = Alarm.stopAllowed(key, kind, AlarmScheduler.ringingParts(getContext()));
         if (stopped) {
-            getContext().startService(new Intent(getContext(), AlarmService.class).setAction(action).putExtra(AlarmService.EXTRA_SHOWN_KIND, kind));
+            getContext().startService(new Intent(getContext(), AlarmService.class).setAction(action).putExtra(AlarmService.EXTRA_SHOWN_KEY, key).putExtra(AlarmService.EXTRA_SHOWN_KIND, kind));
             getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).showOverLockScreen(false));
         }
         JSObject result = new JSObject();
@@ -126,10 +127,20 @@ public class AlarmPlugin extends Plugin {
         call.resolve();
     }
 
+    // Asks the first time; once refused for good (Android then shows no dialog), opens the app's
+    // notification settings instead, so the button always leads somewhere. Android tells "never asked"
+    // from "refused for good" only by whether the app has asked before, so that is remembered.
     @PluginMethod
     public void requestNotifications(PluginCall call) {
         if (Build.VERSION.SDK_INT >= 33) {
-            ActivityCompat.requestPermissions(getActivity(), new String[] {Manifest.permission.POST_NOTIFICATIONS}, 1);
+            android.content.SharedPreferences prefs = getContext().getSharedPreferences("ashborn-permissions", android.content.Context.MODE_PRIVATE);
+            boolean asked = prefs.getBoolean("notificationsAsked", false);
+            if (asked && !ActivityCompat.shouldShowRequestPermissionRationale(getActivity(), Manifest.permission.POST_NOTIFICATIONS)) {
+                getActivity().startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName()));
+            } else {
+                prefs.edit().putBoolean("notificationsAsked", true).apply();
+                ActivityCompat.requestPermissions(getActivity(), new String[] {Manifest.permission.POST_NOTIFICATIONS}, 1);
+            }
         }
         call.resolve();
     }

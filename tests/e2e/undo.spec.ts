@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { phoneWindow } from "../phoneWindow";
 
-// Undo after a tick: from the graph, Up next and Focus; one toast, the newest; gone after a few
+// Undo after a tick: from the graph and from Now; one toast, the newest; gone after a few
 // seconds; and a tick that folds a quest away comes back.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
@@ -54,7 +54,7 @@ const toast = () => page.getByRole("status").filter({ hasText: /Done:|P\d:/ });
 const undo = () => toast().getByRole("button", { name: "Undo" });
 const stepCard = (title: string) => page.locator(".react-flow__node-step", { hasText: title });
 const graphTick = (title: string) => stepCard(title).getByRole("button", { name: /^Mark/ });
-const upNext = () => page.getByRole("group", { name: "Up next" });
+const upNext = () => page.getByRole("region", { name: "Now" });
 const isDone = async (id: string) => {
   const { data, error } = await db.from("graph_nodes").select("completed_at").eq("id", id).single();
   if (error) throw error;
@@ -93,10 +93,9 @@ test("undo a tick", async () => {
     await expect(focus).toContainText(shown);
   });
 
-  await test.step("a tick in Up next offers it, the newest replaces the last, and it leaves by itself", async () => {
+  await test.step("a tick further down Now offers it, the newest replaces the last, and it leaves by itself", async () => {
     await page.getByRole("button", { name: /Show all \d+ ready/ }).click();
-    const marks = page.getByRole("button", { name: "Mark done" });
-    await upNext().locator("div").filter({ hasText: "Third step" }).filter({ has: marks }).last().getByRole("button", { name: "Mark done" }).click();
+    await upNext().getByRole("listitem").filter({ hasText: "Third step" }).getByRole("button", { name: "Mark done" }).click();
     await expect(toast()).toContainText("Done: Third step");
 
     await graphTick("First step").click();

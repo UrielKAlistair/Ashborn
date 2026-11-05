@@ -1,5 +1,5 @@
-import { today } from "../shared/dates";
-import { openInside } from "../shared/graphModel";
+import { dayOf, today } from "../shared/dates";
+import { doneAround, openInside } from "../shared/graphModel";
 import { cooked, read, recipeProblems, shownMeal, uncooked } from "../shared/kitchen";
 import { PROGRESS_UNIT } from "../shared/progression";
 import type {
@@ -43,30 +43,32 @@ type Preview = (snapshot: Snapshot, args: any[], at: string) => Delta; // eslint
 // later change made elsewhere); the snapshot read after the queue is sent shows what it kept.
 // Throws when the change could never be accepted.
 const preview: Record<Mutation, Preview> = {
-  createNode: (_snapshot, [title, parentId, id], at) => ({
-    nodes: [
-      {
-        id,
-        parentId,
-        title,
-        statWeights: {},
-        active: true,
-        createdAt: at,
-        completedAt: null,
-        shelved: false,
-        priority: null,
-        ownXp: 0,
-        lastActive: at,
-        position: null,
-        stamps: {},
-      },
-    ],
-  }),
+  createNode: (snapshot, [title, parentId, id], at) => {
+    const { around, lost } = reopened(snapshot, parentId);
+    const node: GraphNode = {
+      id,
+      parentId,
+      title,
+      statWeights: {},
+      active: true,
+      createdAt: at,
+      completedAt: null,
+      shelved: false,
+      priority: null,
+      ownXp: 0,
+      lastActive: at,
+      position: null,
+      stamps: {},
+    };
+    return { nodes: [node, ...around], progressToday: lost ? countedToday(snapshot, -lost) : undefined };
+  },
   updateNode: (snapshot, [id, patch], at) => {
     const node = existing(snapshot.nodes, id, "This step");
     const { done, ...fields } = patch as NodePatch;
     const ticked = done !== undefined && Boolean(node.completedAt) !== done;
     const step = ticked ? (done ? 1 : -1) : 0;
+    // Today's count holds only today's ticks: an untick of an older one leaves it
+    const counted = ticked ? (done ? 1 : -tickedToday([node])) : 0;
     const updated: GraphNode = {
       ...node,
       ...definedOnly(fields),
@@ -75,17 +77,29 @@ const preview: Record<Mutation, Preview> = {
       // As the server counts it: a tick or a new title is work, a priority or shelving isn't
       lastActive: ticked || fields.title !== undefined ? at : node.lastActive,
     };
-    // As the server does it: a box ticked done ticks everything open inside it
+    // As the server does it: a box ticked done ticks everything open inside it, and a step reopened
+    // reopens the done boxes around it
     const inside = done ? openInside(snapshot.nodes, id).map((insideId) => existing(snapshot.nodes, insideId, "This step")) : [];
-    const ticks = step + inside.length;
+    const { around, lost } = done === false && ticked ? reopened(snapshot, node.parentId) : { around: [], lost: 0 };
+    const ticks = counted + inside.length - lost;
     const tickedInside = inside.map((node) => ({ ...node, completedAt: at, ownXp: node.ownXp + PROGRESS_UNIT, lastActive: at }));
-    return { nodes: [updated, ...tickedInside], progressToday: ticks ? countedToday(snapshot, ticks) : undefined };
+    return { nodes: [updated, ...tickedInside, ...around], progressToday: ticks ? countedToday(snapshot, ticks) : undefined };
   },
-  deleteNode: (snapshot, [id]) => ({ removedNodeIds: [id, ...descendants(snapshot.nodes, id)] }),
-  moveNode: (snapshot, [id, parentId], at) => ({
-    nodes: [{ ...existing(snapshot.nodes, id, "This step"), parentId, position: null, lastActive: at }],
-    removedEdges: snapshot.edges.filter((edge) => edge.from === id || edge.to === id),
-  }),
+  // As the server does it: the deadlines it held are kept, held by nothing
+  deleteNode: (snapshot, [id]) => {
+    const removed = [id, ...descendants(snapshot.nodes, id)];
+    const held = snapshot.deadlines.filter(({ nodeId }) => nodeId && removed.includes(nodeId));
+    const lost = tickedToday(snapshot.nodes.filter((node) => removed.includes(node.id)));
+    return { removedNodeIds: removed, deadlines: held.length ? held.map((deadline) => ({ ...deadline, nodeId: null })) : undefined, progressToday: lost ? countedToday(snapshot, -lost) : undefined };
+  },
+  moveNode: (snapshot, [id, parentId], at) => {
+    const { around, lost } = reopened(snapshot, parentId);
+    return {
+      nodes: [{ ...existing(snapshot.nodes, id, "This step"), parentId, position: null, lastActive: at }, ...around],
+      removedEdges: snapshot.edges.filter((edge) => edge.from === id || edge.to === id),
+      progressToday: lost ? countedToday(snapshot, -lost) : undefined,
+    };
+  },
   placeNodes: (snapshot, [places]) => ({
     nodes: (places as Placement[]).flatMap(({ id, position }) => {
       const node = snapshot.nodes.find((candidate) => candidate.id === id);
@@ -95,7 +109,13 @@ const preview: Record<Mutation, Preview> = {
   resetLayout: (snapshot, [ids]) => ({
     nodes: snapshot.nodes.filter((node) => (ids as string[]).includes(node.id)).map((node) => ({ ...node, position: null })),
   }),
-  addEdge: (_snapshot, [edge]) => ({ edges: [edge as GraphEdge] }),
+  // The server's checks, so a link it would refuse never shows
+  addEdge: (snapshot, [edge]) => {
+    const { from, to } = edge as GraphEdge;
+    if (existing(snapshot.nodes, from, "This step").parentId !== existing(snapshot.nodes, to, "This step").parentId) throw new Error("Only nodes in the same box can be linked.");
+    if (from === to || downstream(snapshot.edges, to).has(from)) throw new Error("That link would make a loop.");
+    return { edges: [edge as GraphEdge] };
+  },
   removeEdge: (_snapshot, [edge]) => ({ removedEdges: [edge as GraphEdge] }),
   levelUp: (snapshot, [nodeId], at) => {
     const node = existing(snapshot.nodes, nodeId, "This step");
@@ -188,8 +208,35 @@ function existing<T extends { id: string }>(rows: T[], id: string, what: string)
   return row;
 }
 
+// What `id` leads to, through any number of links
+function downstream(edges: GraphEdge[], id: string): Set<string> {
+  const seen = new Set<string>([id]);
+  for (const stack = [id]; stack.length > 0; ) {
+    const current = stack.pop()!;
+    for (const edge of edges) {
+      if (edge.from === current && !seen.has(edge.to)) {
+        seen.add(edge.to);
+        stack.push(edge.to);
+      }
+    }
+  }
+  return seen;
+}
+
 function descendants(nodes: GraphNode[], id: string): string[] {
   return nodes.filter((node) => node.parentId === id).flatMap((node) => [node.id, ...descendants(nodes, node.id)]);
+}
+
+// The done boxes around `id`, reopened, as the server reopens them for a step opened or put inside
+// them, and how many of their ticks today's count loses
+function reopened(snapshot: Snapshot, id: string | null): { around: GraphNode[]; lost: number } {
+  const boxes = doneAround(snapshot.nodes, id).map((boxId) => existing(snapshot.nodes, boxId, "This step"));
+  return { around: boxes.map((box) => ({ ...box, completedAt: null, ownXp: box.ownXp - PROGRESS_UNIT })), lost: tickedToday(boxes) };
+}
+
+// How many of `nodes` were ticked today, as the server counts today's progress
+function tickedToday(nodes: GraphNode[]) {
+  return nodes.filter(({ completedAt }) => completedAt && dayOf(new Date(completedAt)) === today()).length;
 }
 
 function countedToday(snapshot: Snapshot, step: number) {

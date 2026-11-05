@@ -18,9 +18,9 @@ export type RingingAlarm = { key: string; at: number; title: string; kind: Exclu
 type AlarmPlugin = {
   schedule(options: { alarms: RingingAlarm[] }): Promise<void>;
   ringing(): Promise<{ alarm: RingingAlarm | null }>;
-  // `kind`: the stop of the ring shown; refused (stopped false) when a harder ring has joined it since
-  stop(options: { kind: RingingAlarm["kind"] }): Promise<{ stopped: boolean }>;
-  snooze(options: { kind: RingingAlarm["kind"] }): Promise<{ stopped: boolean }>;
+  // `key` and `kind`: the ring shown; refused (stopped false) when another ring is going, or a harder one has joined it since
+  stop(options: { key: string; kind: RingingAlarm["kind"] }): Promise<{ stopped: boolean }>;
+  snooze(options: { key: string; kind: RingingAlarm["kind"] }): Promise<{ stopped: boolean }>;
   permissions(): Promise<AlarmPermissions>;
   requestNotifications(): Promise<void>;
   openFullScreenSettings(): Promise<void>;
@@ -33,23 +33,37 @@ type AlarmPlugin = {
 export const alarmsAvailable = Capacitor.isNativePlatform();
 const plugin = registerPlugin<AlarmPlugin>("AshbornAlarm");
 
-// Keeps the phone's alarm clock in step with the routines and deadlines on screen
+// Keeps the phone's alarm clock in step with the routines and deadlines on screen: on each change,
+// and again whenever the app comes back to the screen, since the background refresh may have
+// replaced the schedule meanwhile with what the server held (without changes still queued here)
 export function useAlarmSchedule(snapshot: Snapshot | null) {
   const alarms = snapshot
     ? upcomingAlarms(snapshot, new Date(Date.now() - RING_LOOKBACK_MS), SCHEDULE_DAYS + 1).map((alarm) => ({ key: alarm.key, at: alarm.at.getTime(), title: alarm.title, kind: alarm.kind }))
     : null;
   const signature = JSON.stringify(alarms);
+  const latest = useRef(alarms);
+  latest.current = alarms;
 
   useEffect(() => {
     if (alarmsAvailable && alarms) void plugin.schedule({ alarms });
   }, [signature]);
+
+  useEffect(() => {
+    if (!alarmsAvailable) return;
+    const resend = () => {
+      if (document.visibilityState === "visible" && latest.current) void plugin.schedule({ alarms: latest.current });
+    };
+    document.addEventListener("visibilitychange", resend);
+    return () => document.removeEventListener("visibilitychange", resend);
+  }, []);
 }
 
 // Reads the alarm ringing now
 const readRinging = (setAlarm: (alarm: RingingAlarm | null) => void) => void plugin.ringing().then((result) => setAlarm(result.alarm));
 
-// The alarm ringing now, if any, and ways to stop or snooze it. A stop the phone refuses (a harder
-// ring joined after this one was shown) leaves the screen up and reads the ring again.
+// The alarm ringing now, if any, and ways to stop or snooze it. A stop the phone refuses (another ring
+// took its place, or a harder one joined, after this one was shown) leaves the screen up and reads
+// the ring again.
 export function useRingingAlarm() {
   const [alarm, setAlarm] = useState<RingingAlarm | null>(null);
   const shown = useRef(alarm);
@@ -69,7 +83,7 @@ export function useRingingAlarm() {
 
   const end = useCallback((ask: typeof plugin.stop) => {
     if (!shown.current) return;
-    void ask({ kind: shown.current.kind }).then(({ stopped }) => (stopped ? setAlarm(null) : readRinging(setAlarm)));
+    void ask({ key: shown.current.key, kind: shown.current.kind }).then(({ stopped }) => (stopped ? setAlarm(null) : readRinging(setAlarm)));
   }, []);
   const stop = useCallback(() => end((options) => plugin.stop(options)), [end]);
   // The native side rings a plain alarm again ten minutes on

@@ -29,16 +29,45 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   const id = z.string().describe("A node id, as shown by `overview`");
   const ids = z.array(z.string()).min(1).describe("Node ids, as shown by `overview`");
   const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe("HH:MM, 24-hour local time");
-  const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD");
+  // A day that exists: 2026-02-30 would roll over into March
+  const date = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((day) => {
+      const midnight = new Date(`${day}T00:00:00Z`);
+      return !Number.isNaN(midnight.getTime()) && midnight.toISOString().startsWith(day);
+    }, "Not a day of the calendar")
+    .describe("YYYY-MM-DD");
   // Which of `nodeIds` are done: ticking a done step again would move its completion to now, and
   // count it in today's progress a second time
   const doneIds = async (nodeIds: string[]) =>
     new Set(((await db.from("graph_nodes").select("id").in("id", nodeIds).not("completed_at", "is", null)).data ?? []).map((row: { id: string }) => row.id));
-  // Each node's priority as it now stands and where it comes from, read after a change, so a reply
-  // shows what the change did
+  // Which of `candidates` name one of the user's quests or steps (a malformed id names none)
+  const existingNodes = async (candidates: string[]) => {
+    const wellFormed = candidates.filter((candidate) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate));
+    if (wellFormed.length === 0) return new Set<string>();
+    return new Set(((await db.from("graph_nodes").select("id").in("id", wellFormed)).data ?? []).map((row: { id: string }) => row.id));
+  };
+  // A change made to each of several quests or steps, in order. Ids that name none are refused before
+  // anything changes; a failure partway says which were already changed.
+  const runEach = async (nodeIds: string[], change: (nodeId: string) => Promise<unknown>, done: string) => {
+    const found = await existingNodes(nodeIds);
+    const unknown = nodeIds.filter((nodeId) => !found.has(nodeId));
+    if (unknown.length) return failure(`Not a quest or step: ${unknown.join(", ")}. Nothing was changed.`);
+    for (const [index, nodeId] of nodeIds.entries()) {
+      try {
+        await change(nodeId);
+      } catch (error) {
+        return failure(`${(error as Error).message} (at ${nodeId}). ${index ? `Already changed: ${nodeIds.slice(0, index).join(", ")}.` : "Nothing was changed."}`);
+      }
+    }
+    return text(`${done}.`);
+  };
   // Whether a deadline id names one of the user's deadlines, so a wrong id is refused rather than
   // answered "Deleted."
   const deadlineExists = async (deadlineId: string) => Boolean((await db.from("deadlines").select("id").eq("id", deadlineId).maybeSingle()).data);
+  // Each node's priority as it now stands and where it comes from, read after a change, so a reply
+  // shows what the change did
   const prioritiesNow = async (nodeIds: string[]) => {
     const snapshot = await api.getSnapshot(userId);
     setDayStartHour(snapshot.settings.dayStartHour);
@@ -57,7 +86,11 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
         "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list, the Inbox of unsorted thoughts last (done steps marked [x], prerequisites shown as 'after'), hidden quests, today's routines and open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
       inputSchema: { quest_id: z.string().optional().describe("Show only this quest") },
     },
-    async ({ quest_id }) => text(describe(await api.getSnapshot(userId), quest_id)),
+    async ({ quest_id }) => {
+      const snapshot = await api.getSnapshot(userId);
+      if (quest_id && !snapshot.nodes.some((node) => node.id === quest_id && node.parentId === null)) return failure(`${quest_id} is not a quest; give a quest's id, or none for everything.`);
+      return text(describe(snapshot, quest_id));
+    },
   );
 
   register(
@@ -80,16 +113,28 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       },
     },
     async ({ parent_id, steps }) => {
+      // The whole call is checked before anything is made, so a mistake leaves nothing half-added
+      const refs = steps.map(({ ref }) => ref);
+      const repeated = refs.filter((ref, index) => refs.indexOf(ref) !== index);
+      if (repeated.length) return failure(`Each ref must be unique in the call; repeated: ${[...new Set(repeated)].join(", ")}. Nothing was added.`);
+      const late = steps.find((step, index) => step.parent && refs.indexOf(step.parent) >= index);
+      if (late) return failure(`"${late.ref}" comes before its parent "${late.parent}"; list parents first. Nothing was added.`);
+      const named = [...new Set([parent_id, ...steps.flatMap((step) => [step.parent, ...(step.after ?? [])])].filter((name): name is string => Boolean(name) && !refs.includes(name!)))];
+      const nodeIdsFound = await existingNodes(named);
+      const unknown = named.filter((name) => !nodeIdsFound.has(name));
+      if (unknown.length) return failure(`Not a ref in this call nor a quest or step: ${unknown.join(", ")}. Nothing was added.`);
+
       const created = new Map<string, string>(); // ref → id
       const resolve = (refOrId: string) => created.get(refOrId) ?? refOrId;
       const problems: string[] = [];
-
       for (const step of steps) {
-        if (step.parent && !created.has(step.parent) && steps.some((other) => other.ref === step.parent)) {
-          return failure(`"${step.ref}" comes before its parent "${step.parent}"; list parents first. Nothing after it was added.`);
+        try {
+          const delta = await api.createNode(step.title, step.parent ? resolve(step.parent) : parent_id);
+          created.set(step.ref, delta.nodes![0].id);
+        } catch (error) {
+          const made = steps.filter(({ ref }) => created.has(ref)).map(({ ref, title }) => `${ref}: ${title} [${created.get(ref)}]`);
+          return failure([`Adding "${step.ref}" failed: ${(error as Error).message}. Made before it, with no links yet:`, ...(made.length ? made : ["- nothing"])].join("\n"));
         }
-        const delta = await api.createNode(step.title, step.parent ? resolve(step.parent) : parent_id);
-        created.set(step.ref, delta.nodes![0].id);
       }
       for (const step of steps) {
         for (const prerequisite of step.after ?? []) {
@@ -110,10 +155,20 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
 
   register(
     "complete",
-    { description: "Marks steps done. Marking a box (a quest or a step with steps) done also marks every open step inside it done, as the user means by ticking it. Steps already done keep the time they were done.", inputSchema: { ids } },
+    { description: "Marks steps done. Marking a box (a step with steps) done also marks every open step inside it done, as the user means by ticking it; marking a quest done marks its open steps done (a quest itself is never ticked: it is finished when all its steps are). Steps already done keep the time they were done.", inputSchema: { ids } },
     async ({ ids }) => {
-      const done = await doneIds(ids);
-      return run(ids.filter((nodeId) => !done.has(nodeId)).map((nodeId) => () => api.updateNode(nodeId, { done: true })), "Done");
+      // Read before each tick, so a step already swept by its box's tick earlier in the list keeps its time
+      const tick = async (nodeId: string): Promise<unknown> => {
+        const node = (await db.from("graph_nodes").select("parent_id, completed_at").eq("id", nodeId).single()).data as { parent_id: string | null; completed_at: string | null } | null;
+        if (node?.completed_at) return;
+        if (node && node.parent_id === null) {
+          const steps = ((await db.from("graph_nodes").select("id").eq("parent_id", nodeId).is("completed_at", null)).data ?? []) as { id: string }[];
+          for (const step of steps) await tick(step.id);
+          return;
+        }
+        return api.updateNode(nodeId, { done: true });
+      };
+      return runEach(ids, tick, "Done");
     },
   );
 
@@ -125,7 +180,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       inputSchema: { ids, priority: z.number().int().min(1).max(4).nullable() },
     },
     async ({ ids, priority }) => {
-      const result = await run(ids.map((nodeId) => () => api.updateNode(nodeId, { priority: priority as Priority | null })), "Prioritised");
+      const result = await runEach(ids, (nodeId) => api.updateNode(nodeId, { priority: priority as Priority | null }), "Prioritised");
       return "isError" in result ? result : text(["Prioritised. Each now stands at:", ...(await prioritiesNow(ids))].join("\n"));
     },
   );
@@ -136,21 +191,23 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       description: "Shelves quests or steps: they stay on the graph, greyed, and nothing inside them is offered as ready until they are unshelved.",
       inputSchema: { ids },
     },
-    async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { shelved: true })), "Shelved"),
+    async ({ ids }) => runEach(ids, (nodeId) => api.updateNode(nodeId, { shelved: true }), "Shelved"),
   );
 
   register(
     "unshelve",
     { description: "Takes quests or steps off the shelf.", inputSchema: { ids } },
-    async ({ ids }) => run(ids.map((nodeId) => () => api.updateNode(nodeId, { shelved: false })), "Unshelved"),
+    async ({ ids }) => runEach(ids, (nodeId) => api.updateNode(nodeId, { shelved: false }), "Unshelved"),
   );
 
   register(
     "reopen",
-    { description: "Marks done steps as not done. Reopening a box reopens only the box, not the steps inside it.", inputSchema: { ids } },
+    { description: "Marks done steps as not done. Reopening a box reopens only the box, not the steps inside it. A box is done only while everything in it is, so reopening a step also reopens the done boxes it sits in (adding or moving a step into a done box does too).", inputSchema: { ids } },
     async ({ ids }) => {
       const done = await doneIds(ids);
-      return run(ids.filter((nodeId) => done.has(nodeId)).map((nodeId) => () => api.updateNode(nodeId, { done: false })), "Reopened");
+      const open = ids.filter((nodeId) => !done.has(nodeId));
+      const result = await runEach(ids, (nodeId) => (done.has(nodeId) ? api.updateNode(nodeId, { done: false }) : Promise.resolve()), "Reopened");
+      return "isError" in result || open.length === 0 ? result : text(`Reopened. Not done, so left as they were: ${open.join(", ")}.`);
     },
   );
 
@@ -163,7 +220,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "move",
     {
-      description: "Moves a step (with its own steps) into another node, or makes it a quest with parent_id null. Its links are removed, since links only join steps in the same box.",
+      description: "Moves a step (with its own steps) into another node, or makes it a quest with parent_id null. Its links are removed, since links only join steps in the same box, and it is placed afresh in its new box.",
       inputSchema: { id, parent_id: z.string().nullable() },
     },
     async ({ id, parent_id }) => run([() => api.moveNode(id, parent_id)], "Moved"),
@@ -191,7 +248,11 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "unlink",
     { description: "Removes the prerequisite link from `from` to `to`.", inputSchema: { from: id, to: id } },
-    async ({ from, to }) => run([() => api.removeEdge({ from, to })], "Unlinked"),
+    async ({ from, to }) => {
+      const { data } = await db.from("graph_edges").select("from_id").eq("from_id", from).eq("to_id", to).maybeSingle();
+      if (!data) return failure(`No link from ${from} to ${to}.`);
+      return run([() => api.removeEdge({ from, to })], "Unlinked");
+    },
   );
 
   register(
@@ -217,7 +278,13 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
         shown: z.boolean().optional(),
       },
     },
-    async ({ id, stat_weights, shown }) => run([() => api.updateNode(id, { statWeights: stat_weights, active: shown })], "Updated"),
+    async ({ id, stat_weights, shown }) => {
+      // Stats and showing belong to quests: on a step they would be stored and do nothing
+      const { data } = await db.from("graph_nodes").select("parent_id").eq("id", id).maybeSingle();
+      if (!data || (data as { parent_id: string | null }).parent_id !== null) return failure(`${id} is not a quest.`);
+      if (stat_weights === undefined && shown === undefined) return failure("Give stat_weights, shown, or both.");
+      return run([() => api.updateNode(id, { statWeights: stat_weights, active: shown })], "Updated");
+    },
   );
 
   register(
@@ -475,7 +542,8 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       inputSchema: { date, slots: z.array(slot).optional() },
     },
     async ({ date, slots }) => {
-      const kitchen = await readKitchen(db);
+      // Read around the date itself, which may lie past the days the Kitchen usually holds
+      const kitchen = await readKitchen(db, date);
       return run(
         (slots ?? [...mealSlots]).map((each) => () => {
           const shown = shownMeal(kitchen, date, each);
@@ -504,10 +572,13 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "cook_meal",
     {
-      description: "Marks a meal cooked, which deducts its recipes' tracked ingredients from stock. Says which ingredients are no longer tracked.",
+      description: "Marks a meal cooked, which deducts its recipes' tracked ingredients from stock. Says which ingredients are no longer tracked. A meal already cooked is refused: unmark it first.",
       inputSchema: { date, slot },
     },
     async ({ date, slot }) => {
+      // As in the app, a cooked meal is unticked before it is cooked again: cooking it twice would take
+      // its amounts off a stock counted since the first time
+      if (shownMeal(await readKitchen(db, date), date, slot).status === "cooked") return failure(`The ${slot} of ${date} is already cooked.`);
       try {
         const { kitchen } = await api.cookMeal(date, slot, crypto.randomUUID());
         const { untracked } = mealDeductions(kitchen!, shownMeal(kitchen!, date, slot));
@@ -624,7 +695,7 @@ function describe(snapshot: Snapshot, questId?: string) {
     steps.map((node) => `- P${priority} ${node.title} [${node.id}] (${prioritySource(model, priorities, node.id)})${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`),
   );
   const unprioritised = ready.filter((node) => !priorities.effective.has(node.id) && !quietIds.has(questOf(model.byId, node).id)).map((node) => `- ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet)" : ""}`);
-  lines.push("Up next (the user's to-do: ready to do now, with a priority, and where the priority comes from):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
+  lines.push("To-do (what the app lists under Now: ready to do now, with a priority, and where the priority comes from):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
   lines.push("Also ready, no priority (not on the user's to-do):", ...(unprioritised.length ? unprioritised : ["- nothing"]), "");
   if (quiet.length) lines.push("Gone quiet (open steps, nothing done for a week or more; the user may want to prioritise, add a next step, or shelve):", ...quiet.map(({ quest, days, openSteps }) => `- ${quest.title} [${quest.id}]: quiet ${days} days, ${openSteps} open ${openSteps === 1 ? "step" : "steps"}`), "");
 

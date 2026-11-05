@@ -73,7 +73,8 @@ public class AlarmRefreshWorker extends Worker {
             try {
                 session = new JSONObject(request(url + "/auth/v1/token?grant_type=refresh_token", key, null, new JSONObject().put("refresh_token", token).toString()));
             } catch (HttpError e) {
-                if (e.status >= 500) throw e;
+                // A busy or slow server (overloaded, rate-limited, timed out) is tried again later
+                if (e.status >= 500 || e.status == 429 || e.status == 408) throw e;
                 // The session was revoked or its token already spent: the app's Alarms page asks
                 // for the password again
                 Log.e("Ashborn", "Background session rejected", e);

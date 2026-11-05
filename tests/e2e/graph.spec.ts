@@ -34,6 +34,8 @@ test.beforeAll(async () => {
   env.ASHBORN_BACKUP_DIR = path.join(profile, "backups"); // the test user's data stays out of the real backups
   app = await electron.launch({ args: [`--user-data-dir=${profile}`, "."], env });
   page = await app.firstWindow();
+  // The whole to-do in Now, not only its first rows
+  await page.evaluate(() => localStorage.setItem("ashborn-show-all-todo", "1"));
   page.on("pageerror", (error) => pageErrors.push(error.message));
   // Chromium logs the requests the offline step makes fail on purpose; those are not app errors
   page.on("console", (message) => {
@@ -49,7 +51,7 @@ test.afterAll(async () => {
 const nodes = () => page.locator(".react-flow__node");
 const card = (title: string) => nodes().filter({ hasText: title }).last();
 const edges = () => page.locator(".react-flow__edge");
-const upNext = () => page.getByRole("group", { name: "Up next" });
+const upNext = () => page.getByRole("region", { name: "Now" });
 const addInput = () => page.getByPlaceholder("Step name, Enter to add");
 const windowVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible());
 
@@ -140,12 +142,11 @@ test("home graph", async () => {
     await expect(edges()).toHaveCount(1);
   });
 
-  await test.step("Up next holds nothing until a priority covers the steps, then only ready ones", async () => {
+  await test.step("Now holds nothing until a priority covers the steps, then only ready ones", async () => {
     await expect(upNext()).not.toContainText("Backprop by hand");
     await card("Deep Learning").getByTitle("Options").click();
     await page.getByRole("radio", { name: "Priority 1" }).click();
     await card("Deep Learning").getByTitle("Options").click();
-    await page.getByRole("button", { name: /Show (all \d+ ready|the list)/ }).click(); // the whole to-do, not only Now
     await expect(upNext()).toContainText("Backprop by hand");
     await expect(upNext()).toContainText("CNN basics");
     await expect(upNext()).not.toContainText("Implement an MLP");

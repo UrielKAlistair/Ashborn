@@ -127,8 +127,10 @@ function TodayRings({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
   );
 }
 
-// The user's own alarms: the switch turns a whole alarm off, every day it repeats on
-function AllAlarms({ alarms, act, onEdit }: { alarms: Alarm[]; act: Act; onEdit: (alarm: Alarm) => void }) {
+// The user's own alarms: the switch turns a whole alarm off, every day it repeats on. A one-off that has
+// rung is gone from here, though the snapshot keeps it a day for its snooze.
+function AllAlarms({ alarms: all, act, onEdit }: { alarms: Alarm[]; act: Act; onEdit: (alarm: Alarm) => void }) {
+  const alarms = all.filter((alarm) => !alarm.at || Date.parse(alarm.at) > Date.now());
   if (alarms.length === 0) return <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">None set. Routines, deadlines and meals ring from their own settings.</p>;
   return (
     <div className="space-y-2">
@@ -215,7 +217,10 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
 
   const submit = () => {
     if (!time) return;
-    const at = days.length === 0 ? nextOccurrence(time).toISOString() : null;
+    // A one-off whose time is left as it was keeps its moment: it may be days ahead, and its ring's key
+    // (which a skip or snooze holds) is that moment
+    const kept = alarm?.at && alarm.weekdays.length === 0 && clock(new Date(alarm.at)) === time ? alarm.at : null;
+    const at = days.length === 0 ? (kept ?? nextOccurrence(time).toISOString()) : null;
     onSave({ label: label.trim(), kind, at, time: at ? null : time, weekdays: days });
   };
 

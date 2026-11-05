@@ -175,6 +175,17 @@ test("quest layout", async () => {
     expectNoOverlap(await rects());
   });
 
+  await test.step("a step placed under the header stays clear of it when the title grows to more lines", async () => {
+    await db.from("graph_nodes").update({ x: 16, y: 10, changed_at: { x: new Date().toISOString(), y: new Date().toISOString() } }).eq("id", ids.step);
+    await db.from("graph_nodes").update({ title: "DDP Work: the survey, both presentations and the five-fold results", changed_at: { title: new Date().toISOString() } }).eq("id", ids.a);
+    const quest = page.locator(".react-flow__node-quest", { hasText: "five-fold" });
+    await expect(quest).toBeVisible({ timeout: 10_000 });
+    await rects();
+    const header = (await quest.locator("div.group.relative").first().boundingBox())!;
+    const card = (await page.locator(".react-flow__node-step", { hasText: "DDP one" }).boundingBox())!;
+    expect(card.y).toBeGreaterThanOrEqual(header.y + header.height - 1);
+  });
+
   await test.step("the sub-option resets the steps too", async () => {
     await page.getByRole("button", { name: "Reset layout", exact: true }).click();
     await page.getByRole("button", { name: "Also steps in every box" }).click();

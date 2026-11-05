@@ -3,19 +3,15 @@ import type { NowMemory, StartTimer } from "../../shared/nowStep";
 import type { ISODate } from "../../shared/types";
 
 // What Now remembers on this device: the steps put off today and the timer on a started step, kept
-// between sittings; the step last split and the one Split is open on, for this sitting. On how many
-// days each step was put off is kept too, for the nudge. Where storage refuses (a private window),
-// it is forgotten. Every reader follows a change, wherever it was made: Now, the tray, another screen.
+// between sittings; the step last split and the one Split is open on, for this sitting. Where storage
+// refuses (a private window), it is forgotten. Every reader follows a change, wherever it was made: Now, the tray, another screen.
 
 const passedKey = "ashborn-now-passed";
-const passedOverKey = "ashborn-passed-over";
 const timerKey = "ashborn-now-timer";
 const changeEvent = "ashborn:now-memory";
 // A started step's time box, and the extra time offered when it ends
 export const START_MINUTES = 15;
 export const MORE_MINUTES = 5;
-
-export type PassedOver = Record<string, { days: number; last: string }>; // by step: days passed over, the latest
 
 let splitFrom: string | null = null;
 let holding: string | null = null;
@@ -52,13 +48,6 @@ export function setSplitFrom(id: string | null) {
 
 export function setHolding(id: string | null) {
   holding = id;
-  changed();
-}
-
-export const passedOver = () => read<PassedOver>(passedOverKey, {});
-
-export function storePassedOver(counts: PassedOver) {
-  write(passedOverKey, counts);
   changed();
 }
 

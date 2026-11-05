@@ -2,9 +2,13 @@ import { _electron as electron, expect, test } from "@playwright/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
+import { phoneWindow } from "../phoneWindow";
 
 // The redesign's shell: no navigation until signed in, and the theme switch, which lasts across a
-// reload and switches back.
+// reload and switches back; on the phone, Settings holds the theme and the hour the day starts.
+
+const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
 test("rail and theme switch", async () => {
   const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
@@ -43,6 +47,23 @@ test("rail and theme switch", async () => {
     await page.reload();
     await expect(rail).toBeVisible({ timeout: 15_000 });
     expect(await theme()).toBe("light");
+  });
+
+  await test.step("on the phone, Settings holds the theme and the hour the day starts", async () => {
+    const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
+    if (error) throw error;
+    const hour = async () => (await db.from("user_settings").select("day_start_hour").single()).data?.day_start_hour;
+    const before = await hour();
+    await phoneWindow(app, page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("radiogroup", { name: "Theme" }).getByRole("radio", { name: "Dark" }).click();
+    await expect.poll(theme).toBe("dark");
+    try {
+      await page.getByLabel("The day starts at").selectOption("6");
+      await expect.poll(hour).toBe(6);
+    } finally {
+      await db.from("user_settings").upsert({ day_start_hour: before ?? 4 }, { onConflict: "user_id" });
+    }
   });
 
   await app.close();

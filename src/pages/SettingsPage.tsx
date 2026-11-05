@@ -2,10 +2,11 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { connectBackgroundRefresh, fixPermission, type AlarmPermissions } from "../lib/alarms";
 import { db } from "../lib/client";
 import { setTheme, themeNames, themes, useTheme } from "../lib/useTheme";
+import type { Act } from "./home/HomePage";
 
-// The phone's settings: the theme, and what the phone must allow for alarms to ring on time
-// (`permissions` is null outside the Android app)
-export function SettingsPage({ permissions }: { permissions: AlarmPermissions | null }) {
+// The phone's settings: the theme, the hour the day starts (also set from Today's date), and what the
+// phone must allow for alarms to ring on time (`permissions` is null outside the Android app)
+export function SettingsPage({ permissions, dayStartHour, act }: { permissions: AlarmPermissions | null; dayStartHour: number; act: Act }) {
   const theme = useTheme();
   return (
     <div className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto">
@@ -24,6 +25,23 @@ export function SettingsPage({ permissions }: { permissions: AlarmPermissions | 
             </button>
           ))}
         </div>
+      </Group>
+      <Group title="Day">
+        <label className="flex min-h-11 items-center justify-between gap-3 px-1 text-[13px] text-ink/85">
+          The day starts at
+          <select
+            value={dayStartHour}
+            onChange={(event) => void act("updateSettings", { dayStartHour: Number(event.target.value) })}
+            className="min-h-10 rounded-lg border border-ink/10 bg-canvas/70 px-2 font-mono text-[13px] text-ink/85 tabular-nums"
+          >
+            {Array.from({ length: 24 }, (_, hour) => (
+              <option key={hour} value={hour}>
+                {`${hour}`.padStart(2, "0")}:00
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="px-1 text-[12px] text-muted">Until then, ticks and routines count for the day before.</p>
       </Group>
       {permissions ? (
         <Group title="Alarm reliability">

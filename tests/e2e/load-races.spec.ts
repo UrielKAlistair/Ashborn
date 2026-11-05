@@ -51,7 +51,7 @@ test("reads of the whole graph", async () => {
     const { data } = await db.from("graph_nodes").select("created_at").in("id", steps).order("created_at");
     expect(new Set(data?.map(({ created_at }) => created_at)).size).toBe(steps.length);
     expect(await nowTitle()).toBe("Step 1");
-    await db.from("graph_nodes").update({ color: "red", changed_at: { color: new Date().toISOString() } }).eq("id", steps[0]);
+    await db.from("graph_nodes").update({ shelved: false, changed_at: { shelved: new Date().toISOString() } }).eq("id", steps[0]);
     await page.reload();
     await expect(now).toBeVisible({ timeout: 20_000 });
     await page.waitForTimeout(3000); // the first frame is from the device's copy: past the read
@@ -72,11 +72,11 @@ test("reads of the whole graph", async () => {
     await expect(now).toBeVisible({ timeout: 20_000 });
     await page.waitForTimeout(3000);
     await page.getByRole("button", { name: /Show all \d+ ready/ }).click();
-    const list = await page.getByRole("group", { name: "Up next" }).innerText();
+    const list = await now.innerText();
     const places = typed.map((title) => list.indexOf(title));
     expect(places).toEqual([...places].sort((x, y) => x - y));
     expect(places[0]).toBeGreaterThanOrEqual(0);
-    await page.getByRole("button", { name: "Show only Now" }).click();
+    await page.getByRole("button", { name: "Show fewer" }).click();
   });
 
   await test.step("a change queued while a read runs stays shown, and is sent", async () => {

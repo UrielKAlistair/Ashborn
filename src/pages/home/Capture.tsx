@@ -20,7 +20,7 @@ export function requestCapture() {
 // per line. The first capture makes the Inbox; one made while the Inbox is done, hidden or shelved
 // brings it back, so the thought never lands out of sight. Beside it, Sort opens the Inbox one item
 // at a time.
-// `onSorting` hears whether the Sort card is open, so the panel can put Focus away meanwhile
+// `onSorting` hears whether the Sort card is open, so the panel can put Now away meanwhile
 export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapshot; model: GraphModel; act: Act; onSorting?: (open: boolean) => void }) {
   const [draft, setDraft] = useState("");
   const [sorting, setSorting] = useState(false);
@@ -74,9 +74,11 @@ export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapsho
           ref={field}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => event.key === "Enter" && draft.trim() && capture([draft.trim()])}
+          onKeyDown={(event) => event.key === "Enter" && !event.nativeEvent.isComposing && draft.trim() && capture([draft.trim()])}
           onPaste={(event) => {
-            const titles = parseStepList(draft + event.clipboardData.getData("text"));
+            // The pasted list goes where the caret is, over any selected text, as a paste would
+            const { selectionStart, selectionEnd } = event.currentTarget;
+            const titles = parseStepList(draft.slice(0, selectionStart ?? draft.length) + event.clipboardData.getData("text") + draft.slice(selectionEnd ?? draft.length));
             if (titles.length < 2) return;
             event.preventDefault();
             capture(titles);
@@ -138,10 +140,12 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
   };
   const ownQuest = () => void act("moveNode", item.id, null);
   const remove = () => (confirmDelete ? void act("deleteNode", item.id) : setConfirmDelete(true));
+  // What goes with it, said before it goes
+  const goesWithIt = countInside(model, item.id);
   const prioritise = (priority: Priority) => void act("updateNode", item.id, { priority: priority === item.priority ? null : priority });
 
   // On the desktop: M move, Q its own quest, S split, X delete, N skip, 1 to 4 priority, Escape closes; never while
-  // typing in a field. Heard before Focus's keys and kept from them while this card is open.
+  // typing in a field. Heard before Now's keys and kept from them while this card is open.
   const keys = useRef<Record<string, () => void>>({});
   keys.current = splitting ? { "/": requestCapture } : { m: moveTo, q: ownQuest, s: () => setSplitting(true), x: remove, n: onSkip, "/": requestCapture, ...Object.fromEntries(priorities.map((priority) => [`${priority}`, () => prioritise(priority)])) };
   useEffect(() => {
@@ -220,13 +224,17 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
               title="Delete (X)"
               className={`min-h-8 rounded-lg px-2 py-1.5 ${confirmDelete ? "bg-red-500/20 text-red-300" : "text-muted hover:bg-red-500/15 hover:text-red-300"}`}
             >
-              {confirmDelete ? "Delete?" : "Delete"}
+              {confirmDelete ? (goesWithIt ? `Delete, with ${goesWithIt} inside?` : "Delete?") : "Delete"}
             </button>
           </div>
         </>
       )}
     </section>
   );
+}
+
+function countInside(model: GraphModel, id: string): number {
+  return (model.children.get(id) ?? []).reduce((count, step) => count + 1 + countInside(model, step.id), 0);
 }
 
 // Open quests and steps as options, nested as on the graph, leaving out `skip` and all inside it
@@ -242,11 +250,20 @@ function nodeOptions(model: GraphModel, skip?: string, parentId: string | null =
     ]);
 }
 
+// Whether nodeOptions offers `id`: it and every box around it open, and its quest shown
+function offered(model: GraphModel, id: string): boolean {
+  const node = model.byId.get(id);
+  if (!node || isDone(node)) return false;
+  return node.parentId ? offered(model, node.parentId) : node.active;
+}
+
 // A choice of open quests and steps, or none
 export function NodePicker({ model, label, none, value, onChange, className }: { model: GraphModel; label: string; none: string; value: string | null; onChange: (nodeId: string | null) => void; className: string }) {
   return (
     <select aria-label={label} value={value ?? ""} onChange={(event) => onChange(event.target.value || null)} className={className}>
       <option value="">{none}</option>
+      {/* A choice no longer offered (done, or hidden) still shows as chosen */}
+      {value && !offered(model, value) && model.byId.has(value) ? <option value={value}>{model.byId.get(value)!.title}</option> : null}
       {nodeOptions(model)}
     </select>
   );

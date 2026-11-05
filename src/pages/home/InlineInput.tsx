@@ -23,11 +23,14 @@ export function InlineInput({ placeholder, onSubmit, onEscape, onPasteList, auto
         const text = event.clipboardData.getData("text");
         if (!onPasteList || !/\n/.test(text.trim())) return;
         event.preventDefault();
-        onPasteList(value + text);
+        // The list goes where the caret is, over any selected text, as a paste would
+        const { selectionStart, selectionEnd } = event.currentTarget;
+        onPasteList(value.slice(0, selectionStart ?? value.length) + text + value.slice(selectionEnd ?? value.length));
         setValue("");
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter" && value.trim()) {
+        // Not while an input method is composing: its Enter picks a word, it doesn't send
+        if (event.key === "Enter" && !event.nativeEvent.isComposing && value.trim()) {
           onSubmit(value.trim());
           setValue("");
         }

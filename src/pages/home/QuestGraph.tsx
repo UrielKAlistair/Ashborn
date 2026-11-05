@@ -240,6 +240,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
+  // The link chosen, while it still exists: one removed elsewhere (another device, the agent) drops its panel
+  const chosenLink = selectedEdge && snapshot.edges.some((edge) => edge.from === selectedEdge.from && edge.to === selectedEdge.to) ? selectedEdge : null;
   const [questsOpen, setQuestsOpen] = useState(false);
   const fittedFor = useRef<string | null>(null);
   // Hidden until the first layout is fitted: before it, every node sits at the origin
@@ -339,6 +341,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // sizes, so their bounds are known as soon as they are laid out.
   useEffect(() => {
     if (!paneMeasured || fittedFor.current === topKey || Object.keys(placements).length === 0) return;
+    // The phone frames the shown quests' boxes: none laid out yet would make the view NaN
+    if (phone && !shown.some((quest) => placements[quest.id])) return;
     // A frame later React Flow holds the laid-out nodes; a fit cancelled by a newer layout is
     // not counted as done, so the newer one fits instead
     const frame = window.requestAnimationFrame(() => {
@@ -633,9 +637,12 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
             {phone ? null : (
               <ResetLayoutButton
                 onReset={(alsoSteps) => {
-                  // Fit again once the automatic layout lands
+                  const placed = snapshot.nodes.filter((node) => node.position && (alsoSteps || !node.parentId)).map((node) => node.id);
+                  if (placed.length === 0) return;
+                  // Fit again once the automatic layout lands (only when there is one to land, or a later
+                  // edit would move the view)
                   fittedFor.current = null;
-                  void act("resetLayout", snapshot.nodes.filter((node) => node.position && (alsoSteps || !node.parentId)).map((node) => node.id));
+                  void act("resetLayout", placed);
                 }}
               />
             )}
@@ -666,15 +673,15 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         </Panel>
       ) : null}
 
-      {selectedEdge ? (
+      {chosenLink ? (
         <Panel position="bottom-center" className="flex items-center gap-3 rounded-xl border border-ink/10 bg-card px-3 py-2 text-[13px] text-ink/70 shadow-[var(--card-shadow)]">
           <span className="max-w-72 truncate text-ink/60">
-            {model.byId.get(selectedEdge.from)?.title} → {model.byId.get(selectedEdge.to)?.title}
+            {model.byId.get(chosenLink.from)?.title} → {model.byId.get(chosenLink.to)?.title}
           </span>
           <button
             type="button"
             onClick={() => {
-              void act("removeEdge", selectedEdge);
+              void act("removeEdge", chosenLink);
               setSelectedEdge(null);
             }}
             className="ml-auto rounded-lg border border-red-400/25 px-2.5 py-1 text-[12px] text-red-300 hover:bg-red-400/10"
@@ -1613,9 +1620,14 @@ async function layoutTree(
       bottom = Math.max(bottom, position.y + size.height);
     };
 
+    // Steps placed by hand keep their arrangement, moved down together when the header has grown over
+    // them since (a longer title wraps to more lines)
+    const tops = nodes.flatMap((node) => (placedAt(node) ? [placedAt(node)!.y] : []));
+    const lift = tops.length > 0 ? Math.max(0, origin.y - Math.min(...tops)) : 0;
     nodes.forEach((node, i) => {
-      const position = placedAt(node);
-      if (!position) return;
+      const at = placedAt(node);
+      if (!at) return;
+      const position = { x: at.x, y: at.y + lift };
       placements[node.id] = placed(position, sizes[i]);
       extend(position, sizes[i]);
     });
