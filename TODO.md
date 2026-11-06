@@ -9,9 +9,9 @@ Only open work is listed here. What is built, and why it is built that way, is i
 
 ## Now: daily use, in this order
 
-- [ ] Choose the hex look, the grounds and the phone's card menus on `trial/hex-look` (design 243;
-      side by side in `research/hexlook/gallery/index.html`). Only the chosen options, without the
-      switch, go to `main`. It supersedes `trial/light-graph` (228) for the graph.
+- [ ] Still open from the hex trial (design 256): a quest box's edge tinted with its priority, and the
+      phone card's menu on a ⋯ or on a tap of its title row. The trial branches are kept in
+      `research/branches-2026-11-06.bundle` (`git fetch <bundle> trial/hex-look:trial/hex-look`).
 - [ ] Install the release build again (`npm run android:install`) and check it is fast enough to
       keep. The first install was uninstalled for being slow; that is probably fixed.
 - [ ] Try it on the phone, in one sitting: `research/daily-use/phone-checks.md`. Allow the
@@ -59,8 +59,9 @@ Only open work is listed here. What is built, and why it is built that way, is i
 
 ## Security review
 
-- [ ] Try Electron 45 (`try/electron-45`, design 252): its AppImage is in `../Ashborn-try-electron/release/`.
-      Check the tray, Ctrl+Alt+Space and the window controls under native Wayland; merge if they hold.
+- [ ] Electron 45 (design 252): the upgrade is kept in `research/branches-2026-11-06.bundle`
+      (`try/electron-45`). Build it, check the tray, Ctrl+Alt+Space and the window controls under native
+      Wayland, and merge if they hold; Electron 37 is out of support.
 
 - [ ] Sign-ups are still open on the server (`disable_signup: false`, read again 2026-11-06 08:10): commit
       086c67e removed sign-up from the app's screen only, so anyone with the publishable key can create
