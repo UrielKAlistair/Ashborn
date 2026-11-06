@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Black: the launcher's mask cuts it into the icon's shape, with the white scroll in the foreground -->
-    <color name="ic_launcher_background">#000000</color>
+    <!-- The light theme's beige: the launcher's mask cuts it into the icon's shape, with the scroll in the foreground -->
+    <color name="ic_launcher_background">#e4d9b4</color>
 </resources>

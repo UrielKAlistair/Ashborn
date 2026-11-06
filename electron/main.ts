@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, shell } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Tray, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -18,6 +18,9 @@ const PHONE_VIEW_HEIGHT = 860;
 // Tests point ASHBORN_BACKUP_DIR elsewhere, so their data stays out of the real backups.
 const BACKUP_DIR = process.env.ASHBORN_BACKUP_DIR ?? path.join(os.homedir(), ".local", "share", "ashborn", "backups");
 const BACKUPS_KEPT = 30;
+// How long Save at quit waits for the page to answer before the app stays open (a page reloading or
+// crashed never answers): longer than a request's own timeout (15 s), so a slow save can finish
+const SAVE_FOR_QUIT_MS = 30_000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
@@ -27,6 +30,11 @@ type NowStep = { id: string; title: string; endsAt: number | null; canTick: bool
 let nowStep: NowStep = null;
 // Set once the app is really quitting, so closing the window no longer just hides it
 let quitting = false;
+// Work the page holds unsaved (a recipe being edited), named for the question asked at quit; null when none
+let unsaved: string | null = null;
+let askingToQuit = false;
+// Numbers each Save at quit, so a late answer to one given up on isn't taken for the next's
+let saveRequest = 0;
 
 function resolveAppPath(...segments: string[]) {
   return path.join(app.getAppPath(), ...segments);
@@ -167,10 +175,14 @@ function createWindow() {
     if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
+  // A page loaded afresh, or gone, holds no unsaved work, whatever it said before
+  mainWindow.webContents.on("did-start-loading", () => (unsaved = null));
+  mainWindow.webContents.on("render-process-gone", () => (unsaved = null));
   mainWindow.webContents.on("will-navigate", (event, url) => {
     // Every file's origin is "null", so a file must also be the app's own page
+    // ("data:" and the like share that origin too)
     const [to, from] = [new URL(url), new URL(mainWindow!.webContents.getURL())];
-    if (to.origin === from.origin && (to.protocol !== "file:" || to.pathname === from.pathname)) return;
+    if (to.protocol === from.protocol && to.origin === from.origin && (to.protocol !== "file:" || to.pathname === from.pathname)) return;
     event.preventDefault();
     if (/^https?:/.test(url)) void shell.openExternal(url);
   });
@@ -226,12 +238,23 @@ ipcMain.on("now:update", (_event, step: NowStep) => {
   updateTrayMenu();
 });
 
+ipcMain.on("app:unsaved", (_event, what: string | null) => {
+  unsaved = what;
+});
+
 ipcMain.on("app:quit", () => {
   app.quit();
 });
 
 ipcMain.handle("backup:newest", () => {
-  const times = backupFiles().map((name) => fs.statSync(path.join(BACKUP_DIR, name)).mtimeMs);
+  // A file gone between listing and reading (pruned meanwhile) counts for nothing
+  const times = backupFiles().flatMap((name) => {
+    try {
+      return [fs.statSync(path.join(BACKUP_DIR, name)).mtimeMs];
+    } catch {
+      return [];
+    }
+  });
   return times.length > 0 ? Math.max(...times) : null;
 });
 
@@ -246,7 +269,14 @@ ipcMain.handle("backup:write", (_event, json: string) => {
   // Written whole beside it, then put in its place, so a crash mid-write leaves the last good one
   fs.writeFileSync(`${file}.partial`, json, { mode: 0o600 });
   fs.renameSync(`${file}.partial`, file);
-  for (const name of backupFiles().sort().slice(0, -BACKUPS_KEPT)) fs.unlinkSync(path.join(BACKUP_DIR, name));
+  // Today's is in place: an old one that can't be removed is left, and isn't a failed backup
+  for (const name of backupFiles().sort().slice(0, -BACKUPS_KEPT)) {
+    try {
+      fs.unlinkSync(path.join(BACKUP_DIR, name));
+    } catch (error) {
+      console.error(`Could not remove the old backup ${name}`, error);
+    }
+  }
 });
 
 function backupFiles() {
@@ -280,9 +310,53 @@ app.on("activate", () => {
   showMainWindow();
 });
 
-app.on("before-quit", () => {
+// Quitting with work unsaved asks first, as an editor does: Save, Discard or Cancel
+app.on("before-quit", (event) => {
+  if (unsaved && mainWindow) {
+    event.preventDefault();
+    void askBeforeQuit();
+    return;
+  }
   quitting = true;
 });
+
+async function askBeforeQuit() {
+  if (askingToQuit || !mainWindow) return;
+  askingToQuit = true;
+  showMainWindow();
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: "question",
+    message: `You have unsaved ${unsaved}.`,
+    detail: "Save them before quitting?",
+    buttons: ["Save", "Discard", "Cancel"],
+    defaultId: 0,
+    cancelId: 2,
+  });
+  // A save the page refuses leaves the app open, showing why
+  const leave = response === 1 || (response === 0 && (await saveInPage()));
+  askingToQuit = false;
+  if (!leave) return;
+  unsaved = null;
+  app.quit();
+}
+
+// Asks the page to save what it holds; true once saved, false if it couldn't or didn't answer in time
+function saveInPage() {
+  const request = ++saveRequest;
+  return new Promise<boolean>((resolve) => {
+    const settle = (saved: boolean) => {
+      clearTimeout(giveUp);
+      ipcMain.removeListener("app:saved-for-quit", answer);
+      resolve(saved);
+    };
+    const answer = (_event: unknown, saved: boolean, answered: number) => {
+      if (answered === request) settle(saved);
+    };
+    const giveUp = setTimeout(() => settle(false), SAVE_FOR_QUIT_MS);
+    ipcMain.on("app:saved-for-quit", answer);
+    mainWindow!.webContents.send("app:save-for-quit", request);
+  });
+}
 
 app.on("will-quit", () => globalShortcut.unregisterAll());
 

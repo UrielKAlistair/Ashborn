@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { HexTile } from "../components/HexTile";
-import { HomeIcon } from "../components/icons";
+import appIcon from "../../android/icon/ashborn-icon.svg";
 import { alarmsAvailable, connectBackgroundRefresh } from "../lib/alarms";
 import { db } from "../lib/client";
 
@@ -24,9 +23,7 @@ export function SignInPage() {
   return (
     <section className="panel-lift rounded-2xl border border-ink/8 bg-panel flex min-h-0 min-w-0 flex-1 items-center justify-center">
       <form onSubmit={(event) => void submit(event)} className="flex w-72 flex-col gap-3">
-        <HexTile active className="mx-auto h-14 w-16 text-ember">
-          <HomeIcon className="h-7 w-7" />
-        </HexTile>
+        <img src={appIcon} alt="" className="mx-auto -my-2 h-24 w-24" />
         <h1 className="caps mb-2 text-center font-display text-sm font-bold text-ink/90">Sign in</h1>
         <input type="email" required autoFocus placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} className={field} />
         <input type="password" required placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className={field} />

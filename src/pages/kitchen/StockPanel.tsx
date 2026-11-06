@@ -3,9 +3,10 @@ import { fromBase, toBase } from "../../shared/kitchen";
 import { stockUnits, type Kitchen, type StockItem, type StockUnit } from "../../shared/types";
 import type { Act } from "../home/HomePage";
 
-// A bar turns amber below this share of its target, and red below the next
-const AMBER_BELOW = 0.3;
-const RED_BELOW = 0.1;
+// A bar turns amber below this share of its target, and red below the next; in the red its whole track
+// is tinted too, so an empty item still shows
+const AMBER_BELOW = 0.5;
+const RED_BELOW = 0.2;
 // Stock above the target shows as a red tip past the bar's end, never longer than this share of it
 const OVERFLOW_TIP_MAX = 0.05;
 
@@ -28,7 +29,8 @@ export function StockPanel({ kitchen, act }: { kitchen: Kitchen; act: Act }) {
 function StockBar({ item, act }: { item: StockItem; act: Act }) {
   const [editing, setEditing] = useState(false);
   const share = item.target > 0 ? item.onHand / item.target : 0;
-  const fill = share >= AMBER_BELOW ? "bg-emerald-300/80" : share >= RED_BELOW ? "bg-amber-300/85" : "bg-red-400/85";
+  const low = share < RED_BELOW;
+  const fill = share >= AMBER_BELOW ? "bg-emerald-300/80" : !low ? "bg-amber-300/85" : "bg-red-400/85";
   const tip = Math.min(Math.max(share - 1, 0), OVERFLOW_TIP_MAX);
 
   return (
@@ -42,7 +44,7 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
 
       {/* The track leaves room at its end for the overflow tip */}
       <div className="relative h-2" style={{ width: `${100 / (1 + OVERFLOW_TIP_MAX)}%` }} role="meter" aria-label={`${item.name} stock`} aria-valuenow={item.onHand} aria-valuemin={0} aria-valuemax={item.target}>
-        <div className="absolute inset-0 overflow-hidden rounded-full bg-ink/[0.07]">
+        <div className={`absolute inset-0 overflow-hidden rounded-full ${low ? "bg-red-400/25" : "bg-ink/[0.07]"}`} title={low ? "Running out" : undefined}>
           <div className={`h-full rounded-full ${fill}`} style={{ width: `${Math.min(Math.max(share, 0), 1) * 100}%` }} />
         </div>
         {tip > 0 ? <div className="absolute top-0 left-full h-full rounded-r-full bg-red-400/85" style={{ width: `${tip * 100}%` }} title="More than you usually keep" /> : null}

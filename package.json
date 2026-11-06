@@ -22,7 +22,8 @@
     "connector:deploy": "npm run connector:build && npx supabase functions deploy mcp --no-verify-jwt",
     "android:build": "vite build && cap sync android && cd android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk-21} ./gradlew assembleRelease -q",
     "android:install": "npm run android:build && $HOME/Android/Sdk/platform-tools/adb install -r android/app/build/outputs/apk/release/app-release.apk",
-    "android:test": "cd android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk-21} ./gradlew testDebugUnitTest -q"
+    "android:test": "cd android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk-21} ./gradlew testDebugUnitTest -q",
+    "android:lint": "cd android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk-21} ./gradlew :app:lintRelease -q"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
@@ -69,7 +70,7 @@
     ],
     "linux": {
       "target": "AppImage",
-      "icon": "src/assets/ashborn-tray.png",
+      "icon": "src/assets/ashborn-icon.png",
       "category": "Utility"
     },
     "appImage": {

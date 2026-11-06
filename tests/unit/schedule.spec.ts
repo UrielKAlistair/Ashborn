@@ -91,6 +91,12 @@ test("deadlines ring on their due day when they have an alarm time inside the wi
   expect(alarms[0]).toMatchObject({ title: "Due today: Deadline", kind: "plain" });
 });
 
+test("a deadline's alarm before the day-start hour rings in the night after its day, as a routine's does", () => {
+  // Made at 01:00 on the calendar's Tuesday, still Monday's day (it starts at 04:00): due "today", alarm 03:00
+  const deadlines = [deadline({ id: "night", dueDate: "2026-10-19", alarmTime: "03:00" })];
+  expect(times(upcomingAlarms(snapshot({ deadlines }), new Date("2026-10-20T01:00:00"), 2))).toEqual(["deadline:night@2026-10-19 Tue Oct 20 2026 03:00"]);
+});
+
 test("standalone alarms: recurring ones on their days, one-offs once, switched-off ones never", () => {
   const alarms = [
     alarm({ id: "wake", label: "Wake up", kind: "situps", time: "06:00", weekdays: ["Tue", "Wed"] }),

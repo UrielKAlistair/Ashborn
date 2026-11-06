@@ -61,6 +61,7 @@ const phoneMenuWidth = 32;
 // Where nothing can hover (a touch screen in the desktop layout), a quest's buttons stay in its
 // header: group-hover never applies there
 const canHover = window.matchMedia("(hover: hover)").matches;
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const questGap = 40;
 // The quest menu's height with its longest labels, and the room the toolbar takes over the canvas
 const questMenuHeight = 400;
@@ -77,18 +78,26 @@ const openedStorageKey = "ashborn-opened";
 const fitOptions = { padding: 0.15, maxZoom: 1.1 };
 const zoomRange = { min: 0.15, max: 2 };
 
-// On the phone the quests stand in one column, too tall to fit. The view opens on its top, zoomed
-// so the widest box fits the screen's width (never above 1); the rest is a scroll away.
+// On the phone the quests stand in rows, too tall to fit. The zoom makes the widest quest fit the
+// screen's short side (never above 1), so a card is the same size on screen upright or on its side;
+// rows are as wide as the screen at that zoom, so a phone on its side shows more quests across. The
+// view opens on the top; the rest is a scroll away.
 const PHONE_MARGIN = 12;
 // Room at the top for the toolbar (+ New quest, Quests) that floats over the canvas
 const PHONE_TOOLBAR_HEIGHT = 48;
+
+// rowWidth is the pane's width less the margins. The screen's short side stands in for the width
+// upright; a pane narrower than that (the desktop's phone view) is the short side itself.
+function phoneZoom(widest: number, rowWidth: number) {
+  const shortSide = Math.min(rowWidth, Math.min(window.screen.width, window.screen.height) - 2 * PHONE_MARGIN);
+  return Math.min(1, Math.max(zoomRange.min, shortSide / widest));
+}
 
 function phoneViewport(shown: GraphNode[], placements: Record<string, Box>, paneWidth: number) {
   const boxes = shown.flatMap((quest) => (placements[quest.id] ? [placements[quest.id]] : []));
   const left = Math.min(...boxes.map((box) => box.position.x));
   const top = Math.min(...boxes.map((box) => box.position.y));
-  const right = Math.max(...boxes.map((box) => box.position.x + box.size.width));
-  const zoom = Math.min(1, Math.max(zoomRange.min, (paneWidth - 2 * PHONE_MARGIN) / (right - left)));
+  const zoom = phoneZoom(Math.max(...boxes.map((box) => box.size.width)), paneWidth - 2 * PHONE_MARGIN);
   return { x: PHONE_MARGIN - left * zoom, y: PHONE_TOOLBAR_HEIGHT + PHONE_MARGIN - top * zoom, zoom };
 }
 
@@ -222,6 +231,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         let target: string | null = id;
         while (target && !nodeElement(target)) target = latestModel.current.byId.get(target)?.parentId ?? null;
         if (!target) return;
+        userMoved.current = true;
         void fitView({ nodes: [{ id: target }], duration: 400, padding: 0.8, maxZoom: 1.1 });
         flash(target);
       }),
@@ -244,6 +254,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   const chosenLink = selectedEdge && snapshot.edges.some((edge) => edge.from === selectedEdge.from && edge.to === selectedEdge.to) ? selectedEdge : null;
   const [questsOpen, setQuestsOpen] = useState(false);
   const fittedFor = useRef<string | null>(null);
+  // Whether the view moved, by the user or to a node asked for, since the last automatic fit
+  const userMoved = useRef(false);
   // Hidden until the first layout is fitted: before it, every node sits at the origin
   const [shownYet, setShownYet] = useState(false);
   const phonePanZoom = usePhonePanZoom(phone, zoomRange.min, zoomRange.max);
@@ -307,24 +319,46 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     ]);
     return { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone };
   }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo, priorities, fontsReady, phone]);
-  // The set of quests shown, whatever their order: a priority that only reorders them keeps the view
-  const topKey = `${phone}:${shown.map((quest) => quest.id).sort().join()}`;
-
   const paneMeasured = useStore((state) => state.width > 0 && state.height > 0);
   const paneWidth = useStore((state) => state.width);
   const paneHeight = useStore((state) => state.height);
+  const phoneRowWidth = paneWidth - 2 * PHONE_MARGIN;
+  // The set of quests shown, whatever their order: a priority that only reorders them keeps the
+  // view. The phone is framed afresh when it turns.
+  const topKey = `${phone && phoneRowWidth}:${shown.map((quest) => quest.id).sort().join()}`;
 
   // Re-layout only when the rendered structure changes, not on every level-up or window resize.
-  // Quests pack to the room a fit has; the phone is read by scrolling, so it stays one screen wide.
+  // Quests pack to the room a fit has; the phone is read by scrolling, so it stays one screen wide,
+  // and is laid out again when that width changes (the phone turned).
+  // The layout the placements were made for: the phone aims at a node only once it matches, since a
+  // graph kept hidden lays out again only when shown, and aiming by the earlier layout lands off it
+  const layoutKey = `${structureKey}:${phone && phoneRowWidth}`;
+  const [laidOutFor, setLaidOutFor] = useState("");
+
+  // A desktop window that settles at a new size while its view is still the automatic fit (not
+  // panned or zoomed since) is laid out and fitted again: a fit made mid-minimize or mid-restore
+  // would otherwise leave the graph framed for a pane that is gone
+  const [refits, setRefits] = useState(0);
+  useEffect(() => {
+    if (phone || !paneMeasured || fittedFor.current === null) return;
+    const timer = window.setTimeout(() => {
+      if (userMoved.current) return;
+      fittedFor.current = null;
+      setRefits((count) => count + 1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [paneWidth, paneHeight]);
+
   useEffect(() => {
     if (!paneMeasured) return;
     let cancelled = false;
 
     const canvas = { width: paneWidth / (1 + fitOptions.padding), height: paneHeight / (1 + fitOptions.padding), maxZoom: fitOptions.maxZoom };
     const shape: CardShape = { phone, hasSteps: (id) => model.children.has(id), collapsed: (id) => collapsed.has(id), folded: isFolded };
-    void layoutTree(shown, renderedEdges, (id) => stepsOf.get(id) ?? [], addingTo, phone ? null : canvas, shape).then((next) => {
+    void layoutTree(shown, renderedEdges, (id) => stepsOf.get(id) ?? [], addingTo, phone ? phoneRowWidth : canvas, shape).then((next) => {
       if (cancelled) return;
       setPlacements(next);
+      setLaidOutFor(layoutKey);
       setMoving((current) => {
         const held = dragging.current;
         return held && current[held] ? { [held]: current[held] } : {};
@@ -334,7 +368,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     return () => {
       cancelled = true;
     };
-  }, [structureKey, paneMeasured]);
+  }, [structureKey, paneMeasured, phone && phoneRowWidth, refits]);
 
   // Fit the view when the set of quests shown changes, not on every step edit, and only once
   // React Flow knows the canvas size (before that, a fit is silently lost). Nodes carry their
@@ -347,8 +381,9 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     // not counted as done, so the newer one fits instead
     const frame = window.requestAnimationFrame(() => {
       fittedFor.current = topKey;
+      userMoved.current = false;
       const overview = phoneViewport(shown, placements, paneWidth);
-      const focus = phone && asked ? phoneFocus(asked, latestModel.current, placements, overview.zoom, paneWidth, paneHeight) : null;
+      const focus = phone && asked && laidOutFor === layoutKey ? phoneFocus(asked, latestModel.current, placements, overview.zoom, paneWidth, paneHeight) : null;
       if (focus) setAsked(null);
       void (phone ? setViewport(focus?.viewport ?? overview) : fitView(fitOptions)).then(() => {
         setShownYet(true);
@@ -356,15 +391,15 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [placements, paneMeasured, fitView, setViewport, phone, paneWidth, paneHeight, asked]);
+  }, [placements, paneMeasured, fitView, setViewport, phone, paneWidth, paneHeight, asked, laidOutFor]);
 
   // A node asked for after the phone's view was first framed
   useEffect(() => {
-    if (!asked || fittedFor.current !== topKey) return;
+    if (!asked || fittedFor.current !== topKey || laidOutFor !== layoutKey) return;
     setAsked(null);
     const focus = phoneFocus(asked, latestModel.current, placements, phoneViewport(shown, placements, paneWidth).zoom, paneWidth, paneHeight);
     if (focus) void setViewport(focus.viewport).then(() => flash(focus.target));
-  }, [asked, placements]);
+  }, [asked, placements, laidOutFor]);
 
   // Escape closes an open menu before the navbar's hide-to-tray handler sees it
   useEffect(() => {
@@ -579,7 +614,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       ref={phonePanZoom.ref}
       // Pointer events can't stop the browser's own touch scrolling; on a card, outside React
       // Flow's pane, only touch-action can
-      style={{ opacity: shownYet || shown.length === 0 ? 1 : 0, touchAction: phone ? "none" : undefined }}
+      // Fades in once the first layout is fitted, rather than appearing at once
+      style={{ opacity: shownYet || shown.length === 0 ? 1 : 0, transition: reducedMotion ? undefined : "opacity 160ms ease-out", touchAction: phone ? "none" : undefined }}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -587,7 +623,11 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         startedOnIncoming.current = handleType === "target";
       }}
       onConnect={connect}
-      onMoveStart={(_event, viewport) => (zoomAtMoveStart.current = viewport.zoom)}
+      onMoveStart={(event, viewport) => {
+        zoomAtMoveStart.current = viewport.zoom;
+        // Only the user's own moves carry an event; a fit's don't
+        if (event) userMoved.current = true;
+      }}
       onMoveEnd={(_event, viewport) => viewport.zoom !== zoomAtMoveStart.current && phonePanZoom.ref.current && sharpen(phonePanZoom.ref.current)}
       onEdgeClick={(_event, edge) => {
         setMenuFor(null);
@@ -621,7 +661,15 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       className="!bg-transparent"
     >
       <Territories quests={territories} camera={phone ? phonePanZoom.feed : undefined} />
-      <Controls position="bottom-left" showInteractive={false} fitViewOptions={{ ...fitOptions, duration: 300 }} />
+      <Controls
+        position="bottom-left"
+        showInteractive={false}
+        fitViewOptions={{ ...fitOptions, duration: 300 }}
+        onFitView={() => (userMoved.current = false)}
+        // The zoom buttons move the view without an event, so onMoveStart doesn't count them
+        onZoomIn={() => (userMoved.current = true)}
+        onZoomOut={() => (userMoved.current = true)}
+      />
 
       {quests.length > 0 ? (
         <Panel position="top-left" className="flex flex-col items-start gap-2">
@@ -728,7 +776,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
       <Handles phone={data.phone} />
       <div className="priority-mark rounded-2xl" />
 
-      <div className="absolute inset-0 overflow-hidden rounded-2xl border border-ink/12 bg-card shadow-[var(--card-shadow)]" />
+      <div className="absolute inset-0 overflow-hidden rounded-2xl border border-ink/12 bg-card shadow-[var(--node-shadow)]" />
 
       <div className="group relative flex flex-col justify-between px-4 pt-3 pb-3.5" style={{ height: data.header }}>
         <div className="flex items-start gap-2">
@@ -1515,6 +1563,15 @@ function StatWeightsEditor({ node, act }: { node: GraphNode; act: Act }) {
       setSettled((count) => count + 1);
     });
   };
+  // Escape closes the menu without its field losing focus, so an edit still open is saved as it goes
+  const saveLatest = useRef(save);
+  saveLatest.current = save;
+  useEffect(
+    () => () => {
+      if (unsaved.current.size > 0) saveLatest.current();
+    },
+    [],
+  );
 
   return (
     <div className="w-full">
@@ -1559,14 +1616,15 @@ function parseWeight(draft: string): number | undefined {
 // Lays out every rendered level. Inside a box, steps the user has placed keep their place and
 // the rest are laid out automatically (prerequisites to the left) below them. A box is as big as
 // its content needs. Quests are packed on the canvas around the ones the user placed.
-// The phone has a layout of its own, fixed: nothing placed is read, prerequisites run top to
-// bottom, and the quests stand in one column in the order given.
+// The phone has a layout of its own: nothing placed is read, prerequisites run top to bottom, and
+// the quests fill rows as wide as the screen at the phone's zoom, in the order given (one column
+// upright, more on its side).
 async function layoutTree(
   quests: GraphNode[],
   edges: GraphEdge[],
   stepsOf: (id: string) => GraphNode[],
   addingTo: string | null,
-  canvas: Canvas | null,
+  canvas: Canvas | number,
   shape: CardShape,
 ) {
   const placements: Record<string, Box> = {};
@@ -1670,12 +1728,10 @@ async function layoutTree(
   };
 
   const sizes = await Promise.all(quests.map((quest) => measure(quest, 0)));
-  if (shape.phone) {
-    let top = 0;
-    quests.forEach((quest, i) => {
-      placements[quest.id] = placed({ x: 0, y: top }, sizes[i]);
-      top += sizes[i].height + questGap;
-    });
+  if (typeof canvas === "number") {
+    const row = canvas / phoneZoom(Math.max(...sizes.map((size) => size.width)), canvas);
+    const packed = packQuests([], quests.map((quest, i) => ({ id: quest.id, size: sizes[i] })), row, questGap);
+    quests.forEach((quest, i) => (placements[quest.id] = placed(packed[quest.id], sizes[i])));
     return placements;
   }
   const sized = quests.map((quest, i) => ({ id: quest.id, position: quest.position, size: sizes[i] }));

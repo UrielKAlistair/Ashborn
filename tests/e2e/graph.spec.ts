@@ -190,6 +190,19 @@ test("home graph", async () => {
     await page.keyboard.press("Escape");
     await expect(page.getByLabel("INT weight")).toHaveCount(0);
     expect(await windowVisible()).toBe(true);
+
+    // A weight typed and closed with Escape is kept
+    await card("Deep Learning").getByTitle("Options").click();
+    await page.getByLabel("INT weight").fill("2");
+    await page.keyboard.press("Escape");
+    await expect(page.getByLabel("INT weight")).toHaveCount(0);
+    await expect(page.locator("dl div[title='40 xp']", { hasText: "INT" })).toHaveCount(1);
+    await card("Deep Learning").getByTitle("Options").click();
+    await expect(page.getByLabel("INT weight")).toHaveValue("2");
+    await page.getByLabel("INT weight").fill("1.5");
+    await page.getByLabel("INT weight").press("Enter");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dl div[title='30 xp']", { hasText: "INT" })).toHaveCount(1);
   });
 
   await test.step("a step inside a step: the inner one is up next, the outer one isn't", async () => {
@@ -292,7 +305,8 @@ test("home graph", async () => {
 
     await page.reload();
     await expect(card("Deep Learning II")).toBeVisible();
-    expect(await page.locator(".react-flow__node-quest").first().evaluate((element) => element.style.transform)).toBe(dropped);
+    // Cards exist before their layout lands, hidden until the first fit
+    await expect.poll(() => page.locator(".react-flow__node-quest").first().evaluate((element) => element.style.transform)).toBe(dropped);
   });
 
   await test.step("a quest's steps stay put until it is unlocked; its Reset layout leaves the quest in place", async () => {

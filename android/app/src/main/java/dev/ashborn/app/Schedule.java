@@ -55,7 +55,7 @@ final class Schedule {
                 if ("none".equals(routine.getString("alarm")) || time == null || !has(routine.getJSONArray("weekdays"), weekdayOf(date))) continue;
                 String id = routine.getString("id");
                 if (checked.contains(id + "@" + date)) continue;
-                alarms.add(new Alarm("routine:" + id + "@" + date, routineAt(date, time, dayStartHour), routine.getString("title"), routine.getString("alarm")));
+                alarms.add(new Alarm("routine:" + id + "@" + date, onDayAt(date, time, dayStartHour), routine.getString("title"), routine.getString("alarm")));
             }
         }
         long end = new GregorianCalendar(year, month, day + days).getTimeInMillis();
@@ -69,7 +69,7 @@ final class Schedule {
             String time = text(deadline, "alarmTime");
             String due = deadline.getString("dueDate");
             if (time == null || due.compareTo(lastDate) > 0) continue;
-            alarms.add(new Alarm("deadline:" + deadline.getString("id") + "@" + due, atTime(due, time), "Due today: " + deadline.getString("title"), "plain"));
+            alarms.add(new Alarm("deadline:" + deadline.getString("id") + "@" + due, onDayAt(due, time, dayStartHour), "Due today: " + deadline.getString("title"), "plain"));
         }
 
         alarms.addAll(mealReminders(snapshot.getJSONObject("kitchen"), from, days));
@@ -151,8 +151,9 @@ final class Schedule {
         return offsets;
     }
 
-    // When a routine timed `time` rings on its day `date`: within the day, which may run past midnight
-    private static long routineAt(String date, String time, int dayStartHour) {
+    // When `time` falls on the day `date` (a routine's or a deadline's): within the day, which runs from the
+    // day-start hour and so past midnight; 03:00 on a day starting at 04:00 is the night after it
+    private static long onDayAt(String date, String time, int dayStartHour) {
         long at = atTime(date, time);
         return at < startOfDay(date, dayStartHour) ? atTime(addDays(date, 1), time) : at;
     }

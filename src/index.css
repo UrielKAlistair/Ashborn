@@ -7,6 +7,8 @@
 
 /* `phone:` styles apply in the phone layout (usePhone marks <html>), whatever the window's width */
 @custom-variant phone (&:where([data-phone] *));
+/* `short:` styles apply on a short screen, as a phone on its side is */
+@custom-variant short (@media (max-height: 480px));
 
 /* Two themes, dark (the default) and light (beige, a game map's paper), set by data-theme on <html>.
    Components colour themselves with `ink` (text, lines and tints, at an opacity), `canvas`, and
@@ -29,20 +31,23 @@
   --glow: rgb(240 140 70 / 0.07);
   --panel-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px rgb(0 0 0 / 0.35);
   --card-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.9);
+  /* The graph's boxes, many and redrawn after every zoom: a short blur, which costs far less to paint */
+  --node-shadow: 0 6px 16px -6px rgb(0 0 0 / 0.8);
   --sheet-shadow: 0 -20px 60px rgb(0 0 0 / 0.6);
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --color-canvas: #e4d9b4;
-  --color-panel: #f8f1da;
-  --color-card: #fffaea;
+  --color-canvas: #d6c393;
+  --color-panel: #f0e3c0;
+  --color-card: #fbf3dc;
   --color-ink: #33281a;
   --color-ember: #a84a17;
-  --color-muted: #66553a;
+  --color-muted: #5a4a31;
   --glow: rgb(255 248 222 / 0.6);
   --panel-shadow: 0 3px 0 rgb(110 84 40 / 0.22), 0 10px 24px rgb(90 64 30 / 0.12);
   --card-shadow: 0 2px 0 rgb(110 84 40 / 0.28), 0 12px 24px -10px rgb(90 64 30 / 0.28);
+  --node-shadow: 0 2px 0 rgb(110 84 40 / 0.28), 0 6px 12px -6px rgb(90 64 30 / 0.28);
   --sheet-shadow: 0 -8px 24px rgb(90 64 30 / 0.16);
   color-scheme: light;
 

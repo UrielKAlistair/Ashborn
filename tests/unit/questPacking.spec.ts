@@ -45,11 +45,19 @@ test("a wider screen gives a wider layout, and nothing touches", () => {
   expect(ratio(wide)).toBeGreaterThan(ratio(tall));
 });
 
-test("with no canvas it keeps within the widest quest", () => {
+test("given a width narrower than any quest, it keeps to one column as wide as the widest", () => {
   const loose = [quest("a", 280, 100), quest("b", 280, 100), quest("c", 264, 76)];
-  const rects = placed(loose, packQuests([], loose, null, gap));
+  const rects = placed(loose, packQuests([], loose, 200, gap));
   expect(bounds(rects).width).toBe(280);
   expect(rects.map((r) => r.position.x)).toEqual([0, 0, 0]);
+  expectApart(rects);
+});
+
+test("given a width, it fills rows across it, in order", () => {
+  const loose = [quest("a", 280, 100), quest("b", 280, 100), quest("c", 264, 76)];
+  const rects = placed(loose, packQuests([], loose, 700, gap));
+  expect(rects.map((r) => r.position)).toEqual([{ x: 0, y: 0 }, { x: 320, y: 0 }, { x: 0, y: 140 }]);
+  expect(bounds(rects).width).toBeLessThanOrEqual(700);
   expectApart(rects);
 });
 

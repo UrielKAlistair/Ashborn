@@ -4,11 +4,11 @@ import { Navbar } from "./components/Navbar";
 import { WindowControls } from "./components/WindowControls";
 import { PhoneTabs } from "./components/PhoneTabs";
 import { fixPermission, useAlarmPermissions, useAlarmSchedule, useRingingAlarm } from "./lib/alarms";
-import { applyDelta, createApi } from "./lib/api";
-import { useBackupSchedule } from "./lib/backupSchedule";
+import { applyDelta, createApi, keepUnchanged } from "./lib/api";
+import { BACKUP_NOT_MADE, useBackupSchedule } from "./lib/backupSchedule";
 import { api, db } from "./lib/client";
 import { watchChanges } from "./lib/live";
-import { isConnectionError, previewChange, QueueHeld, queueChange, queuedCount, queueUnsent, sendQueue, withIds, type QueuedChange } from "./lib/offline";
+import { isConnectionError, mayPass, previewChange, QueueHeld, queueChange, queuedCount, queueUnsent, sendQueue, signInRefused, unqueue, withIds, type QueuedChange } from "./lib/offline";
 import { usePhone } from "./lib/usePhone";
 import { AtlasPage } from "./pages/AtlasPage";
 import { requestCapture } from "./pages/home/Capture";
@@ -19,8 +19,8 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
 import { onShowOnGraph } from "./pages/home/showOnGraph";
-import { START_MINUTES, storeTimer, timerBox, useNowMemory, useTimeUpNotice } from "./pages/home/nowStore";
-import { useNowMirror } from "./pages/home/nowMirror";
+import { START_MINUTES, storedTimer, storeTimer, timerBox, useNowMemory, useTimeUpNotice } from "./pages/home/nowStore";
+import { NowChoiceContext, useNowMirror } from "./pages/home/nowMirror";
 import { buildGraphModel } from "./shared/graphModel";
 import { chooseNow } from "./shared/nowStep";
 import { derivePriorities, needsFirstStep, prioritisedSteps } from "./shared/priority";
@@ -30,12 +30,19 @@ import { SignInPage } from "./pages/SignInPage";
 import { DEFAULT_DAY_START_HOUR, setDayStartHour } from "./shared/dates";
 import { emptyKitchen } from "./shared/kitchen";
 import type { Delta, Snapshot } from "./shared/types";
+import { LeaveDialog } from "./components/LeaveDialog";
+import { askToLeave, saveForQuit } from "./lib/unsaved";
 
 // The last data seen, shown when the app starts without a connection
 const snapshotStorageKey = "ashborn-snapshot";
 // The packaged desktop app loads its page from a file, where the address is a file path, not a
 // route: there the route lives only in memory and every start opens Home
 const routesInAddress = window.location.protocol !== "file:";
+// Begins the notice for changes the server refused after being queued offline
+const NOT_SAVED = "Not saved from offline: ";
+// Notices of something not saved (those changes, a backup) stay until dismissed rather than going
+// with the next good sync
+const lasting = (notice: string | null) => (notice?.startsWith(NOT_SAVED) || notice?.startsWith(BACKUP_NOT_MADE) ? notice : null);
 // How often the app tries the server again while offline: a request can fail while the device
 // stays online (a server hiccup), and then no "online" event comes
 const OFFLINE_RETRY_MS = 30_000;
@@ -67,10 +74,13 @@ function App() {
   const phone = usePhone();
   const [ringing, stopRinging, snoozeRinging] = useRingingAlarm();
   const permissions = useAlarmPermissions();
-  // Without these two an alarm cannot show at all, so they are asked for everywhere
-  const missingPermission = !permissions ? null : !permissions.notifications ? "notifications" : !permissions.fullScreen ? "fullScreen" : null;
-  useAlarmSchedule(snapshot);
-  useBackupSchedule(userId);
+  // Without these an alarm cannot ring or show, or shows only as a quiet notification, so they are asked
+  // for everywhere, the first one missing at a time
+  const missingPermission = permissions ? ((["notifications", "exactAlarms", "fullScreen", "alarmChannel"] as const).find((need) => !permissions[need]) ?? null) : null;
+  // Each Sync in Settings hands the phone its schedule again, even when the read changed nothing
+  const [syncs, setSyncs] = useState(0);
+  useAlarmSchedule(snapshot, syncs);
+  useBackupSchedule(userId, setError);
   // The data as last updated, ahead of the render that shows it, so a change made straight after
   // another (a tick on a step just added) is checked against it
   const dataRef = useRef(data);
@@ -78,11 +88,19 @@ function App() {
   const loadsRunning = useRef(new Set<Delta[]>());
   const offlineRef = useRef(offline);
   offlineRef.current = offline;
-  // Reads the data again, as the load below does when the server says something changed
-  const readAgainRef = useRef(() => {});
+  // Reads the data again, as the load below does when the server says something changed; settles once the data is read
+  const readAgainRef = useRef(async () => {});
+
+  // The screen shown, for putting the address back when Back is refused (unsaved work, kept)
+  const shownPath = useRef(currentPath);
+  shownPath.current = currentPath;
+  useEffect(() => window.ashborn?.onSaveForQuit(saveForQuit), []);
 
   useEffect(() => {
-    const handlePopState = () => setCurrentPath(window.location.pathname || "/");
+    const handlePopState = () => {
+      // Once left, the screen follows the address: a Save there may have moved it to what was saved
+      void askToLeave().then((leave) => (leave ? setCurrentPath(window.location.pathname || "/") : window.history.pushState({}, "", shownPath.current)));
+    };
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -107,23 +125,37 @@ function App() {
     let arrived: Delta[] = [];
     const replay = (snapshot: Snapshot) => arrived.reduce(applyDelta, snapshot);
     let readRetry = 0;
+    // Waiting for the next load to finish, with none to follow it
+    let settled: (() => void)[] = [];
     const load = async (quietly = false) => {
       if (loading) return;
       loading = true;
       arrived = [];
       loadsRunning.current.add(arrived);
+      // Changes the server refused, gone from the queue: said whatever the read after does
+      let refused: string[] = [];
       try {
-        const refused = await sendQueue((at) => createApi(db, () => at));
+        refused = await sendQueue((at) => createApi(db, () => at));
         const loaded = replay(await api.getSnapshot(userId));
-        // The same data keeps the same objects, so reading it again draws nothing
-        confirm((current) => (JSON.stringify(current) === JSON.stringify(loaded) ? current : loaded));
+        // Unchanged rows keep their objects, so reading the same data again draws nothing, and a
+        // change redraws only what it touched
+        confirm((current) => (current ? keepUnchanged(current, loaded) : loaded));
         setOffline(false);
         // Queued after the queue was sent, while the read ran: the next load sends it
         if (queuedCount() > 0) loadAgain = true;
         setQueued(queuedCount());
-        setError(refused.length > 0 ? `Not saved from offline: ${refused.join("; ")}` : null);
+        setError((shown) => (refused.length > 0 ? NOT_SAVED + refused.join("; ") : lasting(shown)));
       } catch (reason) {
-        if (!isConnectionError(reason)) return setError((reason as Error).message);
+        // Changes refused before the queue was held have left it too
+        if (reason instanceof QueueHeld) refused = [...refused, ...reason.refused];
+        if (refused.length > 0) setError(NOT_SAVED + refused.join("; "));
+        // A server error that may pass (overloaded, restarting) is waited out as a lost connection is;
+        // a sign-in refused is said, since waiting won't mend it
+        const connection = isConnectionError(reason);
+        if (!connection && (!mayPass(reason) || signInRefused(reason))) {
+          const message = (reason as Error).message;
+          return setError(refused.length > 0 ? `${NOT_SAVED}${refused.join("; ")}. Also: ${message}` : message);
+        }
         // A phone just woken has no radio yet: what is on screen stays until a second try says more
         if (quietly && navigator.onLine && !offlineRef.current && dataRef.current.confirmed) {
           confirm((current) => current && replay(current));
@@ -132,12 +164,17 @@ function App() {
           return;
         }
         const fallback = dataRef.current.confirmed ?? loadCachedSnapshot(userId);
-        if (!fallback) return setError("No connection, and no data saved on this device yet.");
+        if (!fallback) {
+          // Nothing to show meanwhile, and no offline state to retry from: tried again on the same beat
+          window.clearTimeout(readRetry);
+          readRetry = window.setTimeout(() => void load(), OFFLINE_RETRY_MS);
+          return setError(connection ? "No connection, and no data saved on this device yet." : `Your data can't be read yet (${(reason as Error).message}); trying again.`);
+        }
         confirm(() => replay(fallback));
         setOffline(true);
         setQueued(queuedCount());
         // A server error, not a lost connection, that keeps holding the queue: say what it is
-        if (reason instanceof QueueHeld && reason.shown && !/fetch|network/i.test(reason.reason)) setError(`Not synced yet: ${reason.reason}`);
+        if (reason instanceof QueueHeld && reason.shown && !/fetch|network/i.test(reason.reason) && refused.length === 0) setError(`Not synced yet: ${reason.reason}`);
       } finally {
         loading = false;
         loadsRunning.current.delete(arrived);
@@ -145,7 +182,7 @@ function App() {
         if (loadAgain) {
           loadAgain = false;
           void load(true);
-        }
+        } else settled.splice(0).forEach((resolve) => resolve());
       }
     };
     const retry = () => {
@@ -154,10 +191,12 @@ function App() {
     const loadNow = () => void load();
 
     // A load under way may have read too early, so it runs again after
-    const readAgain = () => {
-      if (loading) loadAgain = true;
-      else void load(true);
-    };
+    const readAgain = () =>
+      new Promise<void>((resolve) => {
+        settled.push(resolve);
+        if (loading) loadAgain = true;
+        else void load(true);
+      });
     let hiddenAt = 0;
     const readOnWaking = () => {
       if (document.visibilityState === "hidden") hiddenAt = Date.now();
@@ -182,7 +221,8 @@ function App() {
       window.clearInterval(retryTimer);
       window.clearTimeout(readRetry);
       stopWatching();
-      readAgainRef.current = () => {};
+      readAgainRef.current = async () => {};
+      settled.splice(0).forEach((resolve) => resolve());
     };
   }, [userId]);
 
@@ -227,35 +267,55 @@ function App() {
       // The change is stamped when the user makes it, not when it is sent or queued
       const made = changeMoment();
       const change: Pending = { name, args: withIds(name, args), at: made.toISOString() };
-      // Offline, every change waits for the connection; one that could never be accepted is
-      // refused now, with the reason
+      // Offline, every change waits for the connection; one that could never be accepted is refused
+      // now, with the reason. Changes still on their way go into the queue first, in the order made:
+      // queued after this one, or left out of what it is checked against, a step just added could be
+      // sent after a step put inside it, or a tick of it refused as deleted. A request that gets through
+      // after all takes its change off the queue again. Says whether this change was queued.
       const queue = () => {
-        const { confirmed } = dataRef.current;
+        const { confirmed, pending } = dataRef.current;
         if (!confirmed) return false;
-        let delta: Delta;
-        try {
-          delta = queueChange(confirmed, name, change.args, made);
-        } catch (reason) {
-          confirm((current) => current, change);
-          setError((reason as Error).message);
-          return false;
+        const changes = pending.includes(change) ? pending : [...pending, change];
+        let next = confirmed;
+        const refused: string[] = [];
+        let accepted = true;
+        for (const each of changes) {
+          try {
+            const delta = queueChange(next, each.name, each.args, new Date(each.at));
+            loadsRunning.current.forEach((arrived) => arrived.push(delta));
+            next = applyDelta(next, delta);
+          } catch (reason) {
+            refused.push((reason as Error).message);
+            if (each === change) accepted = false;
+          }
         }
-        loadsRunning.current.forEach((arrived) => arrived.push(delta));
-        confirm((current) => current && applyDelta(current, delta), change);
+        update({ confirmed: next, pending: [] });
         setQueued(queuedCount());
-        setError(null);
-        return true;
+        setError(refused.length > 0 ? refused.join("; ") : lasting);
+        return accepted;
       };
 
       if (offlineRef.current) return queue();
+      // Changes still queued go first: sent ahead of them, this one could be undone by an older one
+      // arriving after it (a step deleted, then made again by its queued create). It joins them, and
+      // they are sent now.
+      if (queuedCount() > 0) {
+        const queued = queue();
+        void readAgainRef.current();
+        return queued;
+      }
       update({ ...dataRef.current, pending: [...dataRef.current.pending, change] });
       try {
         const delta = await (createApi(db, () => made)[name] as (...params: unknown[]) => Promise<Delta>)(...change.args);
         loadsRunning.current.forEach((arrived) => arrived.push(delta));
+        // Queued when the connection went, then through after all: not to be sent again
+        if (!dataRef.current.pending.includes(change)) unqueue(change);
         confirm((current) => current && applyDelta(current, delta), change);
-        setError(null);
+        setError(lasting);
         return true;
       } catch (reason) {
+        // Queued when the connection went: the queue sends it, or says why it can't
+        if (!dataRef.current.pending.includes(change)) return true;
         if (!isConnectionError(reason)) {
           confirm((current) => current, change);
           setError((reason as Error).message);
@@ -270,6 +330,11 @@ function App() {
   );
 
   const { act: acting, undoable, dismiss } = useUndoableChanges(act, snapshot);
+  // Settings' Sync: sends what is queued, reads the data again, then hands the phone its schedule
+  const sync = useCallback(async () => {
+    await readAgainRef.current();
+    setSyncs((count) => count + 1);
+  }, []);
 
   // The device tells the hosted agent server, which runs in UTC, which time zone the user is in
   const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -278,20 +343,27 @@ function App() {
     if (snapshot && storedZone !== deviceZone) void act("updateSettings", { timeZone: deviceZone });
   }, [Boolean(snapshot), storedZone, deviceZone]);
 
+  // Leaving a screen with unsaved work asks first (lib/unsaved.ts)
   const navigate = (path: string) => {
     if (path === currentPath) return;
-
-    if (routesInAddress) window.history.pushState({}, "", path);
-    setCurrentPath(path);
+    void askToLeave().then((leave) => {
+      if (!leave) return;
+      if (routesInAddress) window.history.pushState({}, "", path);
+      setCurrentPath(path);
+    });
   };
 
   // The desktop-wide capture shortcut: Home, with the capture field focused
   useEffect(
     () =>
       window.ashborn?.onCapture(() => {
-        if (routesInAddress && window.location.pathname !== "/") window.history.pushState({}, "", "/");
-        setCurrentPath("/");
-        requestCapture();
+        // Work left unsaved on another screen is asked about first, as leaving it any other way is
+        void askToLeave().then((leave) => {
+          if (!leave) return;
+          if (routesInAddress && window.location.pathname !== "/") window.history.pushState({}, "", "/");
+          setCurrentPath("/");
+          requestCapture();
+        });
       }),
     [],
   );
@@ -323,18 +395,23 @@ function App() {
   useTimeUpNotice((stepId) => {
     const step = dataRef.current.confirmed?.nodes.find(({ id }) => id === stepId);
     return step && !step.completedAt ? step.title : undefined;
-  });
+  }, Boolean(snapshot));
+  // A step done anywhere (the graph, the tray, another device) ends its timer, as Done in Now does
+  useEffect(() => {
+    const timer = storedTimer();
+    if (timer && snapshot?.nodes.some(({ id, completedAt }) => id === timer.stepId && completedAt)) storeTimer(null);
+  }, [snapshot?.nodes]);
   // Start or Stop chosen there sets the step's timer, whichever screen is open
   useEffect(() => window.ashborn?.onNowTimer((id, start) => storeTimer(start ? timerBox(id, START_MINUTES) : null)), []);
 
-  // The step in Now on any screen, for the tray's menu and the graph's tag; the card on Home draws the same choice
+  // The step in Now on any screen, for the tray's menu and the graph's tag; the card on Home draws this choice
   const nowDate = useToday(snapshot?.settings.dayStartHour ?? 0);
   // A new day moves the reads bounded by date (the Kitchen's days, the last day's ticks and skips), so
   // a window left open across the day start reads again. Not on the first data, whose own hour can move
   // the date the screen started on.
   const dateRead = useRef<string | null>(null);
   useEffect(() => {
-    if (dateRead.current && dateRead.current !== nowDate) readAgainRef.current();
+    if (dateRead.current && dateRead.current !== nowDate) void readAgainRef.current();
     dateRead.current = snapshot ? nowDate : null;
   }, [nowDate, Boolean(snapshot)]);
   const nowMemory = useNowMemory(nowDate);
@@ -368,27 +445,32 @@ function App() {
       );
     }
 
-    if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={acting} />;
-    if (currentPath === "/settings") return <SettingsPage permissions={permissions} dayStartHour={snapshot.settings.dayStartHour} act={acting} />;
+    const away = (() => {
+      if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={acting} />;
+      if (currentPath === "/settings") return <SettingsPage permissions={permissions} dayStartHour={snapshot.settings.dayStartHour} act={acting} sync={sync} />;
+      if (currentPath === "/kitchen" || currentPath.startsWith("/kitchen/")) {
+        const [, , screen, recipeId] = currentPath.split("/");
+        return (
+          <KitchenPage
+            snapshot={snapshot}
+            act={acting}
+            phone={phone}
+            screen={screen === "recipes" ? "recipes" : screen === "stocks" ? "stocks" : "plan"}
+            recipeId={recipeId ?? null}
+            onNavigate={navigate}
+          />
+        );
+      }
+      return null;
+    })();
 
-    if (currentPath === "/kitchen" || currentPath.startsWith("/kitchen/")) {
-      const [, , screen, recipeId] = currentPath.split("/");
-      return (
-        <KitchenPage
-          snapshot={snapshot}
-          act={acting}
-          phone={phone}
-          screen={screen === "recipes" ? "recipes" : screen === "stocks" ? "stocks" : "plan"}
-          recipeId={recipeId ?? null}
-          onNavigate={navigate}
-        />
-      );
-    }
-
-    if (!phone) return <HomePage snapshot={snapshot} act={acting} />;
+    if (!phone) return away ?? <HomePage snapshot={snapshot} act={acting} />;
+    // On the phone the other sections show inside Home, which keeps the graph it built behind them
     const screen = currentPath === "/graph" ? "graph" : currentPath === "/character" ? "character" : "todo";
-    return <PhoneHome snapshot={snapshot} act={acting} screen={screen} />;
+    return <PhoneHome snapshot={snapshot} act={acting} screen={screen} away={away} />;
   };
+
+  const page = <NowChoiceContext.Provider value={nowChoice}>{renderPage()}</NowChoiceContext.Provider>;
 
   return (
     <main className="relative h-screen overflow-hidden bg-transparent text-ink">
@@ -399,7 +481,7 @@ function App() {
       {phone ? (
         <div className="relative flex h-full min-h-0 flex-col">
           {/* On the desktop's phone view, the content starts below the window's title strip */}
-          <div className={`flex min-h-0 flex-1 overflow-hidden p-3 ${window.ashborn ? "pt-7" : "pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>{renderPage()}</div>
+          <div className={`flex min-h-0 flex-1 overflow-hidden p-3 ${window.ashborn ? "pt-7" : "pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>{page}</div>
           {userId ? <PhoneTabs currentPath={currentPath} onNavigate={navigate} /> : null}
         </div>
       ) : (
@@ -407,12 +489,13 @@ function App() {
           {/* The sections need a signed-in user, so the rail waits for one */}
           {userId ? <Navbar currentPath={currentPath} onNavigate={navigate} /> : null}
 
-          <div className="flex min-h-0 flex-1 justify-between gap-6 overflow-hidden p-6">{renderPage()}</div>
+          <div className="flex min-h-0 flex-1 justify-between gap-6 overflow-hidden p-6">{page}</div>
         </div>
       )}
 
       {window.ashborn ? <WindowControls /> : null}
       {!phone && userId ? <KeyHelp /> : null}
+      <LeaveDialog />
 
       {undoable ? <UndoToast undoable={undoable} act={act} onDismiss={dismiss} phone={phone} /> : null}
 
@@ -425,7 +508,7 @@ function App() {
             onClick={fixPermission[missingPermission]}
             className="rounded-lg border border-amber-300/30 bg-card/95 px-3 py-1.5 text-[11px] tracking-[0.1em] text-amber-100"
           >
-            {missingPermission === "notifications" ? "Allow notifications so alarms can ring" : "Allow alarms over the lock screen"} →
+            {({ notifications: "Allow notifications so alarms can ring", exactAlarms: "Allow alarms and reminders, or none can ring", fullScreen: "Allow alarms over the lock screen", alarmChannel: "Let alarm notifications pop up" } as const)[missingPermission]} →
           </button>
         ) : null}
 

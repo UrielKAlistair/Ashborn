@@ -89,19 +89,10 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
 
   const readNode = async (id: string) => toNode(must(await nodes().select().eq("id", id).single()));
 
-  // Reopens the done boxes from `id` out to its quest, for a step opened or put inside them
-  const reopenAround = async (id: string | null, at: string) => {
-    const around: string[] = [];
-    for (let current = id; current; ) {
-      const box = must(await nodes().select("id, parent_id, completed_at").eq("id", current).maybeSingle()) as Pick<NodeRow, "id" | "parent_id" | "completed_at"> | null;
-      if (!box || box.parent_id === null) break;
-      if (box.completed_at) around.push(box.id);
-      current = box.parent_id;
-    }
-    if (around.length === 0) return [];
-    const fields = { completed_at: null };
-    return (must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).in("id", around).not("completed_at", "is", null).select()) as NodeRow[]).map(toNode);
-  };
+  // Reopens the done boxes from `id` out to its quest, for a step opened or put inside them, in one
+  // request (reopen_around); a quest has no boxes around it
+  const reopenAround = async (id: string | null, at: string) =>
+    id ? (must(await db.rpc("reopen_around", { start: id, at })) as NodeRow[]).map(toNode) : [];
 
   return inRowOrder(db, {
     async getSnapshot(userId) {
@@ -144,8 +135,9 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const at = clock().toISOString();
       // Stamped when made, as on screen until now, so the order doesn't shift when the row comes back
       must(await db.from("graph_nodes").upsert({ id, title, parent_id: parentId, created_at: at }, { onConflict: "id", ignoreDuplicates: true }));
-      const reopened = await reopenAround(parentId, at);
-      return { nodes: [await readNode(id), ...reopened], progressToday: reopened.length ? await readProgressToday(db) : undefined };
+      // The reopen touches only the boxes above the new step, so the step is read meanwhile
+      const [node, reopened] = await Promise.all([readNode(id), reopenAround(parentId, at)]);
+      return { nodes: [node, ...reopened], progressToday: reopened.length ? await readProgressToday(db) : undefined };
     },
 
     async updateNode(id, { title, statWeights, active, done, shelved, priority }) {
@@ -193,8 +185,9 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       // A move that stood: its place in the old box means nothing in the new one, and an open step
       // put into done boxes reopens them
       const moved = (await readNode(id)).parentId === parentId;
-      if (moved) must(await nodes().update({ x: null, y: null, changed_at: stamps({ x: null, y: null }, at) }).eq("id", id));
-      const reopened = moved ? await reopenAround(parentId, at) : [];
+      const unplace = async () => void must(await nodes().update({ x: null, y: null, changed_at: stamps({ x: null, y: null }, at) }).eq("id", id));
+      // The reopen touches only the boxes above the step, so it runs beside clearing the step's place
+      const [, reopened] = moved ? await Promise.all([unplace(), reopenAround(parentId, at)]) : [undefined, []];
 
       return { nodes: [await readNode(id), ...reopened], removedEdges: removed.map(toEdge), progressToday: reopened.length ? await readProgressToday(db) : undefined };
     },
@@ -241,6 +234,13 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     async createRoutine({ id, title, cue, weekdays, time, alarm }) {
       must(await db.from("routines").upsert({ id, title, cue, weekdays, time, alarm }, { onConflict: "id", ignoreDuplicates: true }));
       return { routines: [toRoutine(must(await db.from("routines").select().eq("id", id).single()))] };
+    },
+
+    async updateRoutine(id, patch) {
+      const row = must(await db.from("routines").update({ ...patch, changed_at: stamps(patch, clock().toISOString()) }).eq("id", id).select().maybeSingle());
+      if (!row) throw new Error("This routine was deleted on another device.");
+
+      return { routines: [toRoutine(row as RoutineRow)] };
     },
 
     async deleteRoutine(id) {
@@ -316,7 +316,9 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const fields = { day_start_hour: dayStartHour, time_zone: timeZone };
       must(await db.from("user_settings").upsert({ ...fields, changed_at: stamps(fields, at) }, { onConflict: "user_id" }));
 
-      return { settings: await readSettings(db) };
+      // Today's count is of the ticks since the day started, so a new hour counts again
+      const settings = await readSettings(db);
+      return { settings, progressToday: dayStartHour === undefined ? undefined : await readProgressToday(db, settings.dayStartHour) };
     },
 
     // Every Kitchen change returns the whole Kitchen, read again
@@ -410,6 +412,7 @@ const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string
   removeEdge: (edge) => [`edge:${edge.from}->${edge.to}`, `node:${edge.from}`, `node:${edge.to}`],
   levelUp: (nodeId) => [`node:${nodeId}`],
   createRoutine: (routine) => [`routine:${routine.id}`],
+  updateRoutine: (id) => [`routine:${id}`],
   deleteRoutine: (id) => [`routine:${id}`],
   setRoutineCheck: (routineId, date) => [`routine:${routineId}@${date}`, `routine:${routineId}`],
   createDeadline: (deadline) => [`deadline:${deadline.id}`],
@@ -711,6 +714,33 @@ function edgeKey(edge: { from: string; to: string }) {
 // same order and compare equal as JSON
 function same(a: unknown, b: unknown) {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// A snapshot read again, keeping the objects of `current` wherever a row (or a field holding no
+// rows) is unchanged, so memoised views of unchanged rows draw nothing; all unchanged returns `current`
+export function keepUnchanged(current: Snapshot, loaded: Snapshot): Snapshot {
+  const keyOf = (row: unknown) => (row as { id?: string }).id ?? JSON.stringify(row);
+  let changed = false;
+  const kept = Object.fromEntries(
+    (Object.keys(loaded) as Array<keyof Snapshot>).map((field) => {
+      const before = current[field];
+      const after = loaded[field];
+      if (!Array.isArray(before) || !Array.isArray(after)) {
+        if (same(before, after)) return [field, before];
+        changed = true;
+        return [field, after];
+      }
+      const byKey = new Map(before.map((row) => [keyOf(row), row]));
+      const rows = after.map((row) => {
+        const old = byKey.get(keyOf(row));
+        return old !== undefined && same(old, row) ? old : row;
+      });
+      if (rows.length === before.length && rows.every((row, i) => row === before[i])) return [field, before];
+      changed = true;
+      return [field, rows];
+    }),
+  ) as Snapshot;
+  return changed ? kept : current;
 }
 
 // Upserts keep their place if present and append if new; removals drop by key. An upsert equal to

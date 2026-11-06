@@ -64,6 +64,21 @@ test("start timer and passing over", async () => {
     await expect(now.getByRole("listitem")).toHaveCount(3);
   });
 
+  await test.step("a step done elsewhere ends its timer, so reopening it shows no box", async () => {
+    await choose("Start (15 min)");
+    await expect(now.getByRole("timer", { name: "Time left" })).toBeVisible();
+    const tick = async (done: boolean) => {
+      const at = new Date().toISOString();
+      const { error: updateError } = await db.from("graph_nodes").update({ completed_at: done ? at : null, changed_at: { completed_at: at } }).eq("id", id.draft);
+      if (updateError) throw updateError;
+    };
+    await tick(true);
+    await expect.poll(() => storage("ashborn-now-timer"), { timeout: 10_000 }).toBeNull();
+    await tick(false);
+    await expect(now.getByRole("listitem")).toHaveCount(3, { timeout: 10_000 });
+    await expect(now.getByRole("timer")).toHaveCount(0);
+  });
+
   await test.step("when the time is up: Done, or keep going", async () => {
     await page.evaluate((stepId) => localStorage.setItem("ashborn-now-timer", JSON.stringify({ stepId, startedAt: Date.now() - 60_000, endsAt: Date.now() - 1 })), id.email);
     await page.reload();

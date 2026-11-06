@@ -100,10 +100,41 @@ test("the phone graph's own layout", async () => {
     await expect(page.getByText("Urgent errands")).toBeInViewport();
   });
 
+  // Rows wider than one quest (unit-tested in questPacking.spec) need a phone on its side, wider
+  // than the 640 px at which a desktop window takes the phone layout; only the height is tried here
+  await test.step("on its side, the character's head can be scrolled into view", async () => {
+    await windowSize(640, 360);
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "Character" }).click();
+    const card = page.locator("section").filter({ hasText: /Lvl\s*\d/ }).filter({ hasText: "STR" });
+    await expect(card).toBeVisible();
+    const scroller = page.locator(".panel-scroll").filter({ has: card });
+    await scroller.evaluate((element) => (element.scrollTop = 0));
+    const [top, frame] = [(await card.boundingBox())!, (await scroller.boundingBox())!];
+    expect(top.y).toBeGreaterThanOrEqual(frame.y);
+    if (shots) await page.screenshot({ path: path.join(shots, "phone-character-side.png") });
+    await windowSize(412, 915);
+  });
+
   await test.step("nothing the desktop placed was changed", async () => {
     expect(await saved(ids.placed)).toEqual(desktop[ids.placed]);
     expect(await saved(ids.second)).toEqual(desktop[ids.second]);
     expect(await saved(ids.urgent)).toEqual({ x: null, y: null });
+  });
+
+  await test.step("another section keeps the graph built and a half-typed thought", async () => {
+    await openGraph();
+    await page.locator(".react-flow").evaluate((element) => ((element as HTMLElement).dataset.kept = "yes"));
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "To-do" }).click();
+    await page.getByLabel("Capture a thought").fill("Half a thought");
+    await page.getByRole("button", { name: "Alarms", exact: true }).click();
+    await expect(page.getByLabel("Capture a thought")).toHaveCount(0);
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "To-do" }).click();
+    await expect(page.getByLabel("Capture a thought")).toHaveValue("Half a thought");
+    await page.getByLabel("Capture a thought").fill("");
+    expect(await page.locator(".react-flow").getAttribute("data-kept")).toBe("yes");
   });
 
   for (const theme of ["dark", "light"]) {

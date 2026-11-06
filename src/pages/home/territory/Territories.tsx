@@ -53,8 +53,9 @@ function Territories({ quests, camera }: { quests: TerritoryQuest[]; camera?: Ca
   useLayoutEffect(() => camera?.subscribe((next) => rendererRef.current?.setCamera(next)), [camera]);
 
   useLayoutEffect(() => {
-    if (grid && looks) rendererRef.current?.paint(grid, looks);
-  }, [grid, looks]);
+    if (grid && looks) rendererRef.current?.paint(grid, looks, quests);
+    else rendererRef.current?.clear();
+  }, [grid, looks, quests]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" style={{ zIndex: 0 }} aria-hidden="true" />;
 }

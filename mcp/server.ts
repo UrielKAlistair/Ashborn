@@ -7,11 +7,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createClient, type SupportedStorage } from "@supabase/supabase-js";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prompter } from "../scripts/ask.mjs";
+import { readSettings } from "../src/lib/api";
+import { setDayStartHour } from "../src/shared/dates";
 import { registerTools } from "./tools";
 
 const sessionFile = process.env.ASHBORN_SESSION_FILE ?? path.join(homedir(), ".config", "ashborn", "agent-session.json");
@@ -45,18 +47,23 @@ async function serve() {
     process.exit(1);
   }
 
+  // The user's day-start hour, for the tools' "today" from the first call (the overview reads it
+  // again); unread (offline, say), the default stands until then
+  await readSettings(db).then(({ dayStartHour }) => setDayStartHour(dayStartHour), () => undefined);
   const server = new McpServer({ name: "ashborn", version: "0.1.0" });
   registerTools(server, db, data.session.user.id);
   await server.connect(new StdioServerTransport());
 }
 
-// Keeps the Supabase session in a file only the user can read, so the agent stays signed in
+// Keeps the Supabase session in a file only the user can read, so the agent stays signed in. Written
+// whole beside it and moved into place, so a crash mid-write leaves the last good one.
 function fileStorage(file: string): SupportedStorage {
   const read = (): Record<string, string> => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {});
   const write = (items: Record<string, string>) => {
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify(items), { mode: 0o600 });
-    chmodSync(file, 0o600);
+    mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    writeFileSync(`${file}.partial`, JSON.stringify(items), { mode: 0o600 });
+    chmodSync(`${file}.partial`, 0o600);
+    renameSync(`${file}.partial`, file);
   };
 
   return {

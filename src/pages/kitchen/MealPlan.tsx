@@ -82,7 +82,8 @@ function PhoneDays({ kitchen, act, date, onOpenRecipe }: DaysProps) {
   return (
     <div ref={strip} className="flex min-h-0 flex-1 snap-x py-px snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
       {days.map((day) => (
-        <div key={day} className="flex w-full shrink-0 snap-center px-0.5">
+        // A day's card is as tall as its meals, up to the strip's height, rather than stretched to it
+        <div key={day} className="flex w-full shrink-0 snap-center items-start px-0.5">
           <Day kitchen={kitchen} act={act} day={day} today={date} onOpenRecipe={onOpenRecipe} />
         </div>
       ))}
@@ -97,7 +98,7 @@ function Day({ kitchen, act, day, today: date, onOpenRecipe }: { kitchen: Kitche
   return (
     <div
       aria-label={`Meals on ${day}`}
-      className={`panel-scroll flex min-h-0 w-full flex-col gap-1.5 overflow-y-auto rounded-xl p-2 ${offset === 0 ? "bg-ember/[0.06] ring-1 ring-ember/30" : "bg-ink/[0.015]"} ${offset < 0 ? "opacity-60" : ""}`}
+      className={`panel-scroll flex max-h-full min-h-0 w-full flex-col gap-1.5 overflow-y-auto rounded-xl p-2 ${offset === 0 ? "bg-ember/[0.06] ring-1 ring-ember/30" : "bg-ink/[0.015]"} ${offset < 0 ? "opacity-70" : ""}`}
     >
       <p className="flex flex-wrap items-baseline justify-between gap-x-2 px-1 pb-0.5">
         <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{name}</span>
@@ -170,7 +171,7 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
       </div>
 
       <p className={`mt-1 text-[13px] leading-snug ${cancelled ? "text-ink/35 line-through" : "text-ink/85"} ${meal.fromDefault ? "italic" : ""}`}>
-        {meal.description || (empty ? <span className="text-ink/30 not-italic">Nothing planned</span> : null)}
+        {meal.description || (empty ? <span className="text-muted not-italic">Nothing planned</span> : null)}
       </p>
       <RecipeLinks kitchen={kitchen} recipeIds={meal.recipeIds} onOpenRecipe={onOpenRecipe} />
 

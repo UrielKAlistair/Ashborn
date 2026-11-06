@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { keyNotForPage } from "../../lib/shortcuts";
 import { isDone, type GraphModel } from "../../shared/graphModel";
 import { INBOX_TITLE } from "../../shared/inbox";
 import { parseStepList } from "../../shared/splitList";
@@ -11,6 +12,9 @@ import { SplitSteps } from "./SplitSteps";
 let captureWanted = false;
 const captureEvent = "ashborn:capture";
 
+// The field's text while it is off screen (the phone's other tabs), for the rest of the run
+let keptDraft = "";
+
 export function requestCapture() {
   captureWanted = true;
   window.dispatchEvent(new Event(captureEvent));
@@ -22,7 +26,11 @@ export function requestCapture() {
 // at a time.
 // `onSorting` hears whether the Sort card is open, so the panel can put Now away meanwhile
 export function Capture({ snapshot, model, act, onSorting }: { snapshot: Snapshot; model: GraphModel; act: Act; onSorting?: (open: boolean) => void }) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraftState] = useState(keptDraft);
+  const setDraft = (text: string) => {
+    keptDraft = text;
+    setDraftState(text);
+  };
   const [sorting, setSorting] = useState(false);
   // Sorting the last item away says so for a moment, so the card's going reads as done
   const [cleared, setCleared] = useState(false);
@@ -145,13 +153,13 @@ function SortCard({ item, place, total, snapshot, model, act, onSkip, onClose }:
   const prioritise = (priority: Priority) => void act("updateNode", item.id, { priority: priority === item.priority ? null : priority });
 
   // On the desktop: M move, Q its own quest, S split, X delete, N skip, 1 to 4 priority, Escape closes; never while
-  // typing in a field. Heard before Now's keys and kept from them while this card is open.
+  // typing in a field or with a dialog open. Heard before Now's keys and kept from them while this card is open.
   const keys = useRef<Record<string, () => void>>({});
   keys.current = splitting ? { "/": requestCapture } : { m: moveTo, q: ownQuest, s: () => setSplitting(true), x: remove, n: onSkip, "/": requestCapture, ...Object.fromEntries(priorities.map((priority) => [`${priority}`, () => prioritise(priority)])) };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (keyNotForPage(event)) return;
       if (event.key === "Escape") {
         // Otherwise Escape goes on to hide the window
         event.preventDefault();

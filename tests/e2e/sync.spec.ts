@@ -151,7 +151,9 @@ test("two devices", async () => {
     const routine = crypto.randomUUID();
     await deviceB.createRoutine({ id: routine, title: "Sync routine", cue: "", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], time: null, alarm: "none" });
     const row = page.getByText("Sync routine").locator("xpath=ancestor::*[.//button[@title='Mark done']][1]");
-    await expect(row).toBeVisible({ timeout: 10_000 });
+    // The live connection may still be rejoining after the last step's offline spell: Realtime retries
+    // after 1, 2, 5 and then every 10 s, and reads everything again once rejoined
+    await expect(row).toBeVisible({ timeout: 25_000 });
     await goOffline();
     await row.getByTitle("Mark done").click();
     await deviceB.setRoutineCheck(routine, today(), true);

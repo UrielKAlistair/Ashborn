@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 
 import type { CanvasStyle, RGB } from "../pages/home/territory/territoryRenderer";
-import { fabricAlpha } from "../pages/home/territory/territoryGrid";
 
 // The colour theme, dark or light: data-theme on <html>, which index.css reads, kept in this
 // device's storage
@@ -46,12 +45,14 @@ export function useTheme(): Theme {
   );
 }
 
-// How the hex canvas is drawn in a theme. Light is a paper map: faint cell edges, and each territory
-// only as a border in its quest's colour. Dark tints territories in. Colours are the theme's own.
+// How the hex canvas is drawn in a theme: in the dark light is added, on the light theme's paper the
+// hue is laid down as a wash. The bare fabric is faint everywhere, so the territories carry the
+// picture. Colours are the theme's own.
 export function canvasStyle(theme: Theme): CanvasStyle {
   const ink = cssRgb("--color-ink");
   const hues = { 1: cssRgb("--priority-1"), 2: cssRgb("--priority-2"), 3: cssRgb("--priority-3"), 4: cssRgb("--priority-4"), none: ink };
-  return theme === "light" ? { ink, fabricAlpha: 0.22, paper: true, hues } : { ink, fabricAlpha, paper: false, hues };
+  const dark = theme === "dark";
+  return { ink, fabricAlpha: dark ? 0.045 : 0.09, dark, hues };
 }
 
 // A colour variable of the theme (a #rrggbb) as RGB (0-255), for drawing outside CSS

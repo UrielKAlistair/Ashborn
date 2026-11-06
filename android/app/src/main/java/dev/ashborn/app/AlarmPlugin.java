@@ -1,7 +1,10 @@
 package dev.ashborn.app;
 
 import android.Manifest;
+import android.app.AlarmManager;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -20,19 +23,25 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 // The web app's handle on alarms (src/lib/alarms.ts): hand over the schedule, ask which alarm
-// is ringing, stop or snooze it, check the permissions alarms need, and hand over the session
-// the background refresh signs in with
+// is ringing, stop or snooze it, read back what is scheduled, check the permissions alarms need, hand over the session
+// the background refresh signs in with, and set the notice for the end of Now's timer
 @CapacitorPlugin(name = "AshbornAlarm")
 public class AlarmPlugin extends Plugin {
+    // How many of the stored alarms `held` reports
+    private static final int HELD_SHOWN = 5;
+
     @PluginMethod
     public void schedule(PluginCall call) {
         try {
             JSArray array = call.getArray("alarms", new JSArray());
             List<Alarm> alarms = new ArrayList<>();
             for (int i = 0; i < array.length(); i++) alarms.add(Alarm.fromJson(array.getJSONObject(i)));
-            AlarmScheduler.schedule(getContext(), alarms);
+            AlarmScheduler.handOver(getContext(), alarms, "app");
+            // Restarts the refresh wakes after a force-stop or an update cancelled them
+            RefreshWake.arm(getContext());
             call.resolve();
         } catch (JSONException e) {
             call.reject("Bad alarm list", e);
@@ -48,6 +57,35 @@ public class AlarmPlugin extends Plugin {
         } catch (JSONException e) {
             call.reject("Bad ringing alarm", e);
             return;
+        }
+        call.resolve(result);
+    }
+
+    // What the phone holds: the next alarms in the stored schedule, when the app and the background
+    // refresh each last handed it over, and the next alarm clock Android itself will ring (any app's), with whether it is ours
+    @PluginMethod
+    public void held(PluginCall call) {
+        JSObject result = new JSObject();
+        try {
+            JSArray alarms = new JSArray();
+            for (Alarm alarm : AlarmScheduler.next(getContext(), HELD_SHOWN)) alarms.put(alarm.toJson());
+            result.put("alarms", alarms);
+        } catch (JSONException e) {
+            call.reject("Bad stored schedule", e);
+            return;
+        }
+        for (String by : new String[] {"app", "background"}) {
+            long at = AlarmScheduler.handedAt(getContext(), by);
+            result.put(by + "HandedAt", at == 0 ? JSONObject.NULL : (Object) at);
+        }
+        AlarmManager.AlarmClockInfo system = getContext().getSystemService(AlarmManager.class).getNextAlarmClock();
+        if (system == null) result.put("system", JSONObject.NULL);
+        else {
+            PendingIntent show = system.getShowIntent();
+            JSObject next = new JSObject();
+            next.put("at", system.getTriggerTime());
+            next.put("ours", show != null && getContext().getPackageName().equals(show.getCreatorPackage()));
+            result.put("system", next);
         }
         call.resolve(result);
     }
@@ -101,10 +139,18 @@ public class AlarmPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("notifications", notifications);
         result.put("fullScreen", fullScreen);
+        // Android 12 and 12L let the user take exact alarms away (SCHEDULE_EXACT_ALARM), and then no
+        // alarm can be set; from 13 on, USE_EXACT_ALARM is granted for good
+        result.put("exactAlarms", Build.VERSION.SDK_INT < 31 || Build.VERSION.SDK_INT >= 33 || getContext().getSystemService(AlarmManager.class).canScheduleExactAlarms());
         PowerManager power = getContext().getSystemService(PowerManager.class);
         result.put("battery", power.isIgnoringBatteryOptimizations(getContext().getPackageName()));
         result.put("xiaomi", "xiaomi".equalsIgnoreCase(Build.MANUFACTURER));
         result.put("background", AlarmRefreshWorker.connected(getContext()));
+        // The Alarms channel must be of high importance to pop up and to show over the lock screen;
+        // some phones (HyperOS) lower a new channel's, or the user may have
+        AlarmService.createChannel(getContext());
+        NotificationChannel channel = getContext().getSystemService(NotificationManager.class).getNotificationChannel(AlarmService.CHANNEL);
+        result.put("alarmChannel", channel != null && channel.getImportance() >= NotificationManager.IMPORTANCE_HIGH);
         call.resolve(result);
     }
 
@@ -142,6 +188,30 @@ public class AlarmPlugin extends Plugin {
                 ActivityCompat.requestPermissions(getActivity(), new String[] {Manifest.permission.POST_NOTIFICATIONS}, 1);
             }
         }
+        call.resolve();
+    }
+
+    // `at` (epoch ms) the end of Now's timer on the step `title`; 0 when no timer runs
+    @PluginMethod
+    public void timeUp(PluginCall call) {
+        TimeUp.set(getContext(), call.getLong("at", 0L), call.getString("title", ""));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void openExactAlarmSettings(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            getActivity().startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getContext().getPackageName())));
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void openAlarmChannelSettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName())
+            .putExtra(Settings.EXTRA_CHANNEL_ID, AlarmService.CHANNEL);
+        getActivity().startActivity(intent);
         call.resolve();
     }
 

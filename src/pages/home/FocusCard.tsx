@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { requestCapture } from "./Capture";
+import { keyNotForPage } from "../../lib/shortcuts";
 import { paletteOf } from "../../lib/theme";
 import { questOf, type GraphModel } from "../../shared/graphModel";
 import { needsFirstStep, type Priorities } from "../../shared/priority";
 import type { GraphNode, ISODate, Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
-import { chooseNow } from "../../shared/nowStep";
+import { useNowChoice } from "./nowMirror";
 import { MORE_MINUTES, setHolding, setSplitFrom, START_MINUTES, storePassed, storeTimer, timerBox, useNowMemory } from "./nowStore";
 import { SplitSteps } from "./SplitSteps";
 import { showOnGraph } from "./showOnGraph";
@@ -14,7 +15,7 @@ import { Tick } from "./Tick";
 // How many steps Now lists while folded
 const NOW_ROWS = 3;
 
-// The to-do as one list: the step chooseNow picks, then the rest in the to-do's order, the ones put off
+// The to-do as one list: the step in Now (the app's choice, nowMirror.ts), then the rest in the to-do's order, the ones put off
 // today last. It shows the first few until unfolded. Each row has its tick, its title, its quest's dot
 // and a ⋯ menu with Start (a 15-minute box), Not now (to the end of the list for the day) and Split it.
 // While a started step's time runs, or Split is open on one, Now holds that step alone.
@@ -35,16 +36,17 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, empty
     saveShowAll(show);
   };
   const [clock, setClock] = useState(Date.now);
-  const choice = chooseNow(steps, memory, clock, date);
+  const choice = useNowChoice();
   const timer = memory.timer;
   // The keys act on the first row, whichever render set them up
   const keys = useRef<Record<string, () => void>>({});
 
-  // On the desktop: D done, T start or stop, N not now, S split, / the capture field; never while typing in a field
+  // On the desktop: D done, T start or stop, N not now, S split, / the capture field; never while typing in a
+  // field or with a dialog open
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
-      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (keyNotForPage(event)) return;
       const action = keys.current[event.key.toLowerCase()];
       if (!action) return;
       event.preventDefault();
@@ -68,9 +70,10 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, empty
     setClock(Date.now());
     if (!timer || timer.endsAt <= Date.now()) return;
     const tick = window.setInterval(() => setClock(Date.now()), 1000);
+    // At least the end: a timeout can fire a millisecond early, which would leave 0:00 showing for good
     const end = window.setTimeout(() => {
       window.clearInterval(tick);
-      setClock(Date.now());
+      setClock(Math.max(Date.now(), timer.endsAt));
     }, timer.endsAt - Date.now());
     return () => {
       window.clearInterval(tick);
@@ -231,7 +234,7 @@ function RowMenu({ title, items }: { title: string; items: { label: string; onCl
         onClick={() => setOpen(!open)}
         aria-label={`Actions for ${title}`}
         aria-expanded={open}
-        className="flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-muted hover:bg-ink/8 hover:text-ink/85 pointer-coarse:h-8 pointer-coarse:w-8"
+        className="relative flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-muted before:absolute before:-inset-1.5 before:content-[''] hover:bg-ink/8 hover:text-ink/85 pointer-coarse:h-8 pointer-coarse:w-8"
       >
         ⋯
       </button>

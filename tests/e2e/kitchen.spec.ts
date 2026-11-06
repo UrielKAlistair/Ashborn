@@ -96,10 +96,13 @@ test("kitchen", async () => {
     await expect(stock("Rice").getByTitle("More than you usually keep")).toBeVisible();
     await expect.poll(() => onHand("Rice")).toBe(5000);
 
-    await setStock("Butter beans", "0.2");
+    // Amber below half the target, red below a fifth; empty is red too, its whole track tinted
+    await setStock("Butter beans", "0.4");
     await expect(stock("Butter beans").locator(".bg-amber-300\\/85")).toHaveCount(1);
-    await setStock("Butter beans", "0.05");
+    await setStock("Butter beans", "0.1");
     await expect(stock("Butter beans").locator(".bg-red-400\\/85")).toHaveCount(1);
+    await setStock("Butter beans", "0");
+    await expect(stock("Butter beans").getByTitle("Running out")).toBeVisible();
     await setStock("Butter beans", "1");
   });
 
@@ -157,8 +160,51 @@ test("kitchen", async () => {
     await meal("lunch").getByRole("button", { name: "Rice and beans" }).click();
     await page.getByRole("button", { name: "Edit" }).click();
     await page.getByLabel("Rice amount").fill("300");
+    // A change isn't thrown away without asking
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("alertdialog", { name: "Discard changes?" })).toBeVisible();
+    await page.getByRole("button", { name: "Keep editing" }).click();
+    await expect(page.getByLabel("Rice amount")).toHaveValue("300");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("300 g")).toBeVisible();
+    // Discarded when the user says so; with nothing changed, Cancel closes at once
+    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByLabel("Rice amount").fill("999");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(page.getByText("300 g")).toBeVisible();
+    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page.getByText("300 g")).toBeVisible();
+
+    // Leaving the screen with an edit open asks too, and so does quitting the app
+    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByLabel("Rice amount").fill("999");
+    await openScreen("Kitchen", "Planning");
+    await expect(page.getByRole("alertdialog", { name: "Discard changes?" })).toBeVisible();
+    await page.getByRole("button", { name: "Keep editing" }).click();
+    await expect(page.getByLabel("Rice amount")).toHaveValue("999");
+    const asked = await app.evaluate(async ({ app: electronApp, dialog }) => {
+      let message = "";
+      // Answered Cancel: the app stays open
+      dialog.showMessageBox = (async (_window: unknown, options: { message: string }) => {
+        message = options.message;
+        return { response: 2, checkboxChecked: false };
+      }) as unknown as typeof dialog.showMessageBox;
+      electronApp.quit();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return message;
+    });
+    expect(asked).toBe("You have unsaved changes to this recipe.");
+    await expect(page.getByLabel("Rice amount")).toHaveValue("999");
+    // So does the capture shortcut, which opens Home
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send("app:capture"));
+    await expect(page.getByRole("alertdialog", { name: "Discard changes?" })).toBeVisible();
+    await page.getByRole("button", { name: "Keep editing" }).click();
+    await expect(page.getByLabel("Rice amount")).toHaveValue("999");
+    await openScreen("Kitchen", "Planning");
+    await page.getByRole("button", { name: "Discard" }).click();
 
     await openScreen("Kitchen", "Planning");
     await meal("lunch").getByTitle("Mark not done").click();
@@ -198,6 +244,25 @@ test("kitchen", async () => {
     await page.getByRole("button", { name: "Save" }).click();
     await page.getByRole("switch", { name: "Default week" }).click();
     await expect(meal("breakfast", later)).toContainText("Oats");
+  });
+
+  await test.step("Back out of an edit: Discard closes the editor; Save opens what was saved, at its address", async () => {
+    const asked = page.getByRole("alertdialog", { name: "Discard changes?" });
+    await openScreen("Kitchen", "Cookbook");
+    await page.getByRole("button", { name: "Rice and beans" }).click();
+    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByLabel("Rice amount").fill("999");
+    await page.goBack();
+    await asked.getByRole("button", { name: "Discard" }).click();
+    await expect(page.getByLabel("Rice amount")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "+ New recipe" }).click();
+    await page.getByLabel("Recipe name").fill("Backed out");
+    await page.goBack();
+    await asked.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("heading", { name: "Backed out" })).toBeVisible();
+    const { data } = await db.from("recipes").select("id").eq("title", "Backed out").single();
+    expect(new URL(page.url()).pathname).toBe(`/kitchen/recipes/${(data as { id: string }).id}`);
   });
 
   await test.step("on a phone-sized window the Kitchen is three screens", async () => {

@@ -10,7 +10,8 @@ const CARD_PORTRAIT_ZOOM = 2;
 const statBars: Record<StatKey, string> = { STR: "bg-red-300/80", DEX: "bg-orange-300/80", INT: "bg-blue-500/85", WIS: "bg-emerald-300/80", CHR: "bg-violet-300/80", MND: "bg-teal-300/80" };
 
 // The character: portrait, overall level and the six stats. On the desktop a row beside the
-// to-do list; on the phone (`card`) a tall card with a larger portrait and the stats beneath it.
+// to-do list; on the phone (`card`) a tall card with a larger portrait and the stats beneath it, or
+// beside it when the phone is on its side.
 export function CharacterPanel({ model, card = false }: { model: GraphModel; card?: boolean }) {
   const overall = statLevel(model.totalStatXp);
   const tier = portraitTier(overall.level);
@@ -36,7 +37,7 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
   );
 
   const stats = (
-    <dl className={`grid min-w-0 grid-cols-2 content-center ${card ? "w-full gap-x-6 gap-y-4" : "flex-1 gap-x-3 gap-y-2"}`}>
+    <dl className={`grid min-w-0 grid-cols-2 content-center ${card ? "w-full gap-x-6 gap-y-4 landscape:flex-1" : "flex-1 gap-x-3 gap-y-2"}`}>
       {statKeys.map((key) => {
         const { level, percent } = statLevel(model.statXp[key]);
         return (
@@ -55,7 +56,7 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
   );
 
   return card ? (
-    <section className="panel-lift flex w-full max-w-sm flex-col items-center gap-8 rounded-2xl border border-ink/8 bg-panel px-6 py-8">
+    <section className="panel-lift flex w-full max-w-sm flex-col items-center gap-8 rounded-2xl border border-ink/8 bg-panel px-6 py-8 landscape:max-w-2xl landscape:flex-row landscape:gap-10 landscape:py-5">
       {portrait}
       {stats}
     </section>

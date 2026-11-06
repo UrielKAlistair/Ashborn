@@ -192,6 +192,44 @@ test("quest layout", async () => {
     await expect.poll(() => savedX(ids.step)).toBeNull();
   });
 
+  await test.step("a window that settles at a new size is fitted again, unless the view was moved", async () => {
+    const scale = () => page.locator(".react-flow__viewport").evaluate((element) => Number(/scale\(([\d.]+)\)/.exec((element as HTMLElement).style.transform)![1]));
+    const resize = async (width: number, height: number) => {
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].unmaximize());
+      await expect
+        .poll(async () => {
+          await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setSize(w, h), [width, height]);
+          await page.waitForTimeout(300);
+          return page.evaluate(() => innerWidth);
+        })
+        .toBe(width);
+      await page.waitForTimeout(900);
+    };
+    await resize(1400, 900);
+    await page.getByRole("button", { name: "Fit View" }).click();
+    await page.waitForTimeout(600);
+    const fitted = await scale();
+    await resize(760, 560);
+    expect(await scale()).toBeLessThan(fitted * 0.9);
+    await resize(1400, 900);
+    expect(await scale()).toBeCloseTo(fitted, 2);
+
+    const pane = (await page.locator(".react-flow__pane").boundingBox())!;
+    await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+    await page.mouse.wheel(0, -300);
+    await page.waitForTimeout(600);
+    const zoomed = await scale();
+    await resize(760, 560);
+    expect(await scale()).toBe(zoomed);
+
+    await page.getByRole("button", { name: "Fit View" }).click();
+    await page.getByRole("button", { name: "Zoom In" }).click();
+    await page.waitForTimeout(600);
+    const buttonZoomed = await scale();
+    await resize(1400, 900);
+    expect(await scale()).toBe(buttonZoomed);
+  });
+
   await test.step("the phone window keeps quests one screen wide", async () => {
     await phoneWindow(app, page);
     await page.reload();

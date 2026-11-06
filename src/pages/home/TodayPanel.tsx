@@ -72,7 +72,10 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const checked = new Set(
     snapshot.routineChecks.filter((check) => check.date === date).map((check) => check.routineId),
   );
-  const deadlines = snapshot.deadlines.filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS);
+  // Soonest first: one added or moved since the last read sits at the end of the list as held
+  const deadlines = snapshot.deadlines
+    .filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   return (
     <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-ink/8 bg-panel px-4 py-4">
@@ -286,7 +289,8 @@ function Unprioritised({ steps, model, act, priorities, openAtFirst }: { steps: 
 }
 
 // The ready steps in their quests, in the order the quests first come up, with how many open steps
-// each quest holds in all, ready or waiting on another
+// each quest holds in all, ready or waiting on another; a box with nothing open inside is one itself,
+// still to be ticked
 function byQuest(steps: GraphNode[], model: GraphModel) {
   const groups = new Map<string, { quest: GraphNode; steps: GraphNode[]; open: number }>();
   for (const step of steps) {
@@ -299,10 +303,10 @@ function byQuest(steps: GraphNode[], model: GraphModel) {
 }
 
 function openSteps(model: GraphModel, id: string): number {
-  return (model.children.get(id) ?? []).reduce(
-    (count, step) => count + (model.children.has(step.id) ? openSteps(model, step.id) : isDone(step) || model.shelved.has(step.id) ? 0 : 1),
-    0,
-  );
+  return (model.children.get(id) ?? []).reduce((count, step) => {
+    const inside = model.children.has(step.id) ? openSteps(model, step.id) : 0;
+    return count + (inside > 0 ? inside : isDone(step) || model.shelved.has(step.id) ? 0 : 1);
+  }, 0);
 }
 
 // `quiet`: drawn in plain ink until pointed at, for a step under a quest's own chips

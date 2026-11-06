@@ -65,6 +65,7 @@ export type Alarm = {
 };
 
 export type AlarmPatch = Partial<Omit<Alarm, "id">>;
+export type RoutinePatch = Partial<Omit<Routine, "id">>;
 
 // One ring skipped: the schedule's key for it (see AlarmInstance) and the day it rings on
 export type AlarmSkip = { key: string; date: ISODate };
@@ -222,6 +223,7 @@ export type AshbornApi = {
   removeEdge(edge: GraphEdge): Promise<Delta>;
   levelUp(nodeId: string, id: string): Promise<Delta>; // ids made by the caller, so a resend counts once
   createRoutine(routine: Routine): Promise<Delta>;
+  updateRoutine(id: string, patch: RoutinePatch): Promise<Delta>; // keeps its ticks
   deleteRoutine(id: string): Promise<Delta>;
   setRoutineCheck(routineId: string, date: ISODate, checked: boolean): Promise<Delta>;
   createDeadline(deadline: Deadline): Promise<Delta>;

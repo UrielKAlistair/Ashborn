@@ -27,12 +27,12 @@ export function prerequisitesFirst<T extends { id: string }>(quests: T[], edges:
 
 // The zoom a layout W wide and H tall is shown at is min(maxZoom, width / W, height / H). Of the
 // region widths, the one kept shows the layout largest; among those tied (usually at maxZoom) it is
-// the one with more than one column, then the closest to the canvas's shape. With no canvas, the
-// region is the widest quest.
-export function packQuests(pinned: PinnedQuest[], loose: PackedQuest[], canvas: Canvas | null, gap: number): Record<string, Point> {
+// the one with more than one column, then the closest to the canvas's shape. Given a width instead
+// (the phone, read by scrolling down), the region is that wide, or as wide as the widest quest.
+export function packQuests(pinned: PinnedQuest[], loose: PackedQuest[], canvas: Canvas | number, gap: number): Record<string, Point> {
   if (loose.length === 0) return {};
   const widest = Math.max(...loose.map(({ size }) => size.width));
-  if (!canvas) return packWithin(widest, pinned, loose, gap);
+  if (typeof canvas === "number") return packWithin(Math.max(widest, canvas), pinned, loose, gap);
 
   // Every width a row of the quests in order can need
   let row = -gap;

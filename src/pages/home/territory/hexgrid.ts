@@ -1,7 +1,5 @@
 // A flat-topped hexagonal grid in "odd columns shifted down" layout: the fabric behind the quest
-// graph. Cells are drawn slightly small, leaving hairline gaps.
-
-export const hexCellScale = 0.9;
+// graph.
 
 export const hexRowHeight = (radius: number) => Math.sqrt(3) * radius;
 export const hexColumnWidth = (radius: number) => 1.5 * radius;

@@ -5,9 +5,11 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.media.AudioAttributes;
+import android.os.Build;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.RingtoneManager;
@@ -33,13 +35,15 @@ public class AlarmService extends Service {
     // The stop of the ring the user saw when stopping or snoozing it
     static final String EXTRA_SHOWN_KIND = "shownKind";
     static final String EXTRA_SHOWN_KEY = "shownKey";
-    private static final String CHANNEL = "alarms";
+    static final String CHANNEL = "alarms";
     private static final int NOTIFICATION_ID = 1;
 
     private MediaPlayer player;
     private Vibrator vibrator;
     // The rings going off now, in the order they fired
     private final List<Alarm> parts = new ArrayList<>();
+    // Whether a ring is going, for the background refresh to stay out of its way (RefreshWake)
+    static volatile boolean ringing = false;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -57,6 +61,7 @@ public class AlarmService extends Service {
 
         try {
             parts.add(Alarm.fromJson(new JSONObject(intent.getStringExtra(AlarmScheduler.EXTRA_ALARM))));
+            ringing = true;
             AlarmScheduler.setRinging(this, parts);
         } catch (JSONException | NullPointerException e) {
             Log.e("Ashborn", "Bad alarm", e);
@@ -64,13 +69,13 @@ public class AlarmService extends Service {
             // must get there before it stops, or the system ends the app.
             if (!parts.isEmpty()) return START_STICKY;
             createChannel();
-            startForeground(NOTIFICATION_ID, new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.mipmap.ic_launcher).setContentTitle("Alarm").build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            toForeground(new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_stat_ashborn).setContentTitle("Alarm").build());
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf(startId);
             return START_NOT_STICKY;
         }
 
-        startForeground(NOTIFICATION_ID, notification(Alarm.joined(parts)), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        toForeground(notification(Alarm.joined(parts)));
         // The sound starts again for each ring that joins
         stopSound();
         startSound();
@@ -79,10 +84,22 @@ public class AlarmService extends Service {
         return START_STICKY;
     }
 
+    // A service's type is given from Android 10 on, where it is needed
+    private void toForeground(Notification notification) {
+        if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        else startForeground(NOTIFICATION_ID, notification);
+    }
+
     private void createChannel() {
+        createChannel(this);
+    }
+
+    // Making it again changes nothing the user has set on it; Settings makes it early, so it can be
+    // checked and set before the first ring
+    static void createChannel(Context context) {
         NotificationChannel channel = new NotificationChannel(CHANNEL, "Alarms", NotificationManager.IMPORTANCE_HIGH);
         channel.setSound(null, null); // the service plays the sound itself, looping
-        getSystemService(NotificationManager.class).createNotificationChannel(channel);
+        context.getSystemService(NotificationManager.class).createNotificationChannel(channel);
     }
 
     private Notification notification(Alarm alarm) {
@@ -90,7 +107,7 @@ public class AlarmService extends Service {
 
         PendingIntent open = AlarmScheduler.openAppIntent(this);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_ashborn)
             .setContentTitle(alarm.title)
             .setContentText("plain".equals(alarm.kind) ? "Alarm" : "Open Ashborn to stop it")
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -151,6 +168,7 @@ public class AlarmService extends Service {
     private void stopRinging(int startId) {
         stopSound();
         parts.clear();
+        ringing = false;
         try {
             AlarmScheduler.setRinging(this, parts);
         } catch (JSONException e) {

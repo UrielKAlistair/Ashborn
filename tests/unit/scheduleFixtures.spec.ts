@@ -114,6 +114,7 @@ const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] 
         deadline({ id: "later", dueDate: "2026-10-26", alarmTime: "09:00" }),
         deadline({ id: "quiet", dueDate: "2026-10-20" }),
         deadline({ id: "overdue", dueDate: "2026-10-18", alarmTime: "09:00" }),
+        deadline({ id: "night", dueDate: "2026-10-21", alarmTime: "03:00" }),
       ],
     }),
     from: "2026-10-19T06:00:00",

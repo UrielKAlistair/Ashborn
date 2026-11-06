@@ -56,6 +56,10 @@ test("a linked deadline raises nothing; a priority given in Ready reaches Now", 
   await expect(deadlines.getByLabel("Deadline for")).toHaveValue(quest, { timeout: 10_000 });
   await expect(deadlines.getByLabel("Deadline for").locator("option:checked")).toHaveText("Reading");
 
+  // One added since the last read takes its place by date, not the end of the list
+  await db.from("deadlines").insert([{ title: "Due sooner", due_date: today() }]);
+  await expect(deadlines.locator("p").filter({ hasText: /^(Due sooner|Reading quiz)$/ })).toHaveText(["Due sooner", "Reading quiz"], { timeout: 10_000 });
+
   await app.close();
   rmSync(profile, { recursive: true, force: true });
 });

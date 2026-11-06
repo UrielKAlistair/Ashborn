@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ServerError } from "../../src/lib/api";
-import { QueueHeld, queuedCount, sendQueue, type QueuedChange } from "../../src/lib/offline";
+import { QueueHeld, queuedCount, sendQueue, unqueue, type QueuedChange } from "../../src/lib/offline";
 import type { AshbornApi } from "../../src/shared/types";
 
 // The offline queue: what is kept, what is dropped, and changes made while it is being sent
@@ -38,6 +38,21 @@ test("a change queued while the queue is being sent is kept and sent too", async
   expect(queuedCount()).toBe(0);
 });
 
+test("a change taken off the queue while it is being sent takes nothing else with it", async () => {
+  const first = rename("first");
+  setQueue([first, rename("second")]);
+  const sent: string[] = [];
+  await sendQueue(
+    apiWith(async (title) => {
+      sent.push(title);
+      // Its own request, queued when the connection went, got through meanwhile
+      if (title === "first") unqueue(first);
+    }),
+  );
+  expect(sent).toEqual(["first", "second"]);
+  expect(queuedCount()).toBe(0);
+});
+
 test("a change the server can never accept is dropped and reported; the rest are sent", async () => {
   setQueue([rename("refused"), rename("fine")]);
   const refused = await sendQueue(
@@ -47,6 +62,19 @@ test("a change the server can never accept is dropped and reported; the rest are
   );
   expect(refused).toEqual(["violates check constraint"]);
   expect(queuedCount()).toBe(0);
+});
+
+test("a change refused before the queue is held is still reported, with the hold", async () => {
+  setQueue([rename("refused"), rename("held")]);
+  const held = await sendQueue(
+    apiWith(async (title) => {
+      if (title === "refused") throw new ServerError("violates check constraint", "23514", 400);
+      throw new TypeError("fetch failed");
+    }),
+  ).catch((error: unknown) => error);
+  expect(held).toBeInstanceOf(QueueHeld);
+  expect((held as QueueHeld).refused).toEqual(["violates check constraint"]);
+  expect(titles()).toEqual(["held"]);
 });
 
 test("a server error that may pass holds the queue, counting tries until it is shown", async () => {

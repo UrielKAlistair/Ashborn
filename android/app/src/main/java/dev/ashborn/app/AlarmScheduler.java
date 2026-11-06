@@ -25,6 +25,7 @@ final class AlarmScheduler {
     private static final String RINGING = "ringing";
     private static final String SNOOZED = "snoozed";
     private static final String SNOOZE_PREFIX = "snooze:";
+    private static final String HANDED_AT_PREFIX = "handedAt:";
     private static final long SNOOZE_MS = 10 * 60_000;
 
     static final String EXTRA_ALARM = "alarm";
@@ -37,11 +38,8 @@ final class AlarmScheduler {
     // whole, for snoozing and re-arming after a reboot.
     static synchronized void schedule(Context context, List<Alarm> alarms) throws JSONException {
         AlarmManager manager = context.getSystemService(AlarmManager.class);
-        List<Alarm> snoozed = load(context, SNOOZED);
-        for (Alarm old : load(context, SCHEDULED)) manager.cancel(fireIntent(context, old));
-        for (Alarm old : snoozed) manager.cancel(fireIntent(context, old));
-
         long now = System.currentTimeMillis();
+        List<Alarm> snoozed = load(context, SNOOZED);
         Map<String, Alarm> byKey = new LinkedHashMap<>();
         JSONArray scheduled = new JSONArray();
         for (Alarm alarm : alarms) {
@@ -54,6 +52,14 @@ final class AlarmScheduler {
             stillSnoozed.put(alarm.toJson());
         }
 
+        // Setting a key again replaces its alarm (one PendingIntent per key), so only the alarms
+        // that leave are cancelled: cancelling all first would drop a ring falling due meanwhile
+        List<Alarm> before = load(context, SCHEDULED);
+        before.addAll(snoozed);
+        for (Alarm old : before) {
+            if (leaves(old, byKey.get(old.key), now)) manager.cancel(fireIntent(context, old));
+        }
+
         // Stored first, and each alarm set on its own, so one the system refuses (exact alarms not
         // allowed) neither loses the schedule nor stops the alarms after it from being set
         prefs(context).edit().putString(SCHEDULED, scheduled.toString()).putString(SNOOZED, stillSnoozed.toString()).apply();
@@ -62,9 +68,41 @@ final class AlarmScheduler {
             try {
                 manager.setAlarmClock(new AlarmManager.AlarmClockInfo(alarm.at, openAppIntent(context)), fireIntent(context, alarm));
             } catch (RuntimeException e) {
+                // Not replaced, an earlier time set before would still ring
+                manager.cancel(fireIntent(context, alarm));
                 Log.e("Ashborn", "Could not set the alarm " + alarm.key, e);
             }
         }
+    }
+
+    // Whether a set alarm must be cancelled when `next` (null if gone) replaces it: it is gone, or moved
+    // to a time already past, which is not set again; one moved to a later time is replaced by setting it
+    static boolean leaves(Alarm old, Alarm next, long now) {
+        return next == null || (next.at <= now && next.at != old.at);
+    }
+
+    // Schedules `alarms` as handed over by `by` ("app" or "background"), and records when
+    static synchronized void handOver(Context context, List<Alarm> alarms, String by) throws JSONException {
+        schedule(context, alarms);
+        prefs(context).edit().putLong(HANDED_AT_PREFIX + by, System.currentTimeMillis()).apply();
+    }
+
+    // When `by` last handed the schedule over, in epoch milliseconds; 0 if it never has
+    static long handedAt(Context context, String by) {
+        return prefs(context).getLong(HANDED_AT_PREFIX + by, 0);
+    }
+
+    // The next `count` alarms still to ring, snoozes included, soonest first
+    static List<Alarm> next(Context context, int count) throws JSONException {
+        return next(load(context, SCHEDULED), load(context, SNOOZED), System.currentTimeMillis(), count);
+    }
+
+    static List<Alarm> next(List<Alarm> scheduled, List<Alarm> snoozed, long now, int count) {
+        List<Alarm> due = new ArrayList<>();
+        for (Alarm alarm : scheduled) if (alarm.at > now) due.add(alarm);
+        for (Alarm alarm : snoozed) if (alarm.at > now) due.add(alarm);
+        due.sort((a, b) -> Long.compare(a.at, b.at));
+        return new ArrayList<>(due.subList(0, Math.min(count, due.size())));
     }
 
     // The snoozes still to ring: those due later whose ring is still in the schedule, so one whose

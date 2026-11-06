@@ -18,6 +18,7 @@ import type {
   Placement,
   Recipe,
   Routine,
+  RoutinePatch,
   Snapshot,
   StockItem,
 } from "../shared/types";
@@ -122,6 +123,7 @@ const preview: Record<Mutation, Preview> = {
     return { nodes: [{ ...node, ownXp: node.ownXp + PROGRESS_UNIT, lastActive: at }], progressToday: countedToday(snapshot, 1) };
   },
   createRoutine: (_snapshot, [routine]) => ({ routines: [routine as Routine] }),
+  updateRoutine: (snapshot, [id, patch]) => ({ routines: [{ ...existing(snapshot.routines, id, "This routine"), ...(patch as RoutinePatch) }] }),
   deleteRoutine: (_snapshot, [id]) => ({ removedRoutineIds: [id] }),
   setRoutineCheck: (_snapshot, [routineId, date, checked]) => ({ routineCheck: { routineId, date, checked } }),
   setAlarmSkip: (_snapshot, [key, date, skipped]) => ({ alarmSkip: { key, date, skipped } }),
@@ -134,7 +136,9 @@ const preview: Record<Mutation, Preview> = {
   deleteAlarm: (_snapshot, [id]) => ({ removedAlarmIds: [id] }),
   updateSettings: (snapshot, [patch]) => ({ settings: { ...snapshot.settings, ...definedOnly(patch) } }),
   // The Kitchen
-  createStockItem: (snapshot, [item]) => kitchen(snapshot, { items: [...snapshot.kitchen.items, { ...(item as StockItem), onHand: 0, readAt: null }] }),
+  // An item already here (its row arrived live before the reply) keeps what the server holds
+  createStockItem: (snapshot, [item]) =>
+    snapshot.kitchen.items.some(({ id }) => id === (item as StockItem).id) ? {} : kitchen(snapshot, { items: [...snapshot.kitchen.items, { ...(item as StockItem), onHand: 0, readAt: null }] }),
   updateStockItem: (snapshot, [id, patch]) => {
     existing(snapshot.kitchen.items, id, "This stock item");
     return kitchen(snapshot, { items: snapshot.kitchen.items.map((item) => (item.id === id ? { ...item, ...definedOnly(patch) } : item)) });
@@ -183,6 +187,18 @@ export function queueChange(snapshot: Snapshot, name: Mutation, args: unknown[],
   const delta = preview[name](snapshot, change.args, at);
   saveQueue([...loadQueue(), change]);
   return delta;
+}
+
+// Takes a change off the queue again: its own request, queued when the connection went, got through
+export function unqueue(change: QueuedChange) {
+  saveQueue(without(loadQueue(), change));
+}
+
+// The queue less its first entry for `change` (the same change: made at the same moment, with the
+// same arguments), wherever it now stands
+function without(queue: QueuedChange[], change: QueuedChange) {
+  const at = queue.findIndex((queued) => queued.at === change.at && queued.name === change.name && JSON.stringify(queued.args) === JSON.stringify(change.args));
+  return at < 0 ? queue : [...queue.slice(0, at), ...queue.slice(at + 1)];
 }
 
 // Queues changes sent but not answered when the app closes, so they are sent again at the next
@@ -258,11 +274,13 @@ export function queuedCount() {
 
 // Thrown when the queue stops on a change worth sending again (no connection, or a server error
 // that may pass); the change and those after it wait. `tries` counts the server errors it has met,
-// and `shown` says whether that is enough to tell the user why.
+// and `shown` says whether that is enough to tell the user why. `refused` lists the errors of changes
+// dropped earlier in the same pass, which are gone from the queue and must still be reported.
 export class QueueHeld extends Error {
   constructor(
     readonly reason: string,
     readonly tries: number,
+    readonly refused: string[] = [],
   ) {
     super(`fetch failed: queued changes held (${reason})`);
   }
@@ -275,7 +293,8 @@ export class QueueHeld extends Error {
 // Sends queued changes in order, each through an API whose clock says when it was made. A change
 // that can never succeed, or has been tried for too long, is dropped and its error returned; at one
 // worth trying again, sending stops and QueueHeld is thrown. The queue is read again before each
-// send, since changes made meanwhile are appended to it.
+// send, since changes made meanwhile are appended to it, and one may be taken off (unqueue): a change
+// sent is removed as itself, not as whatever is first by then.
 export async function sendQueue(apiAt: (at: Date) => AshbornApi): Promise<string[]> {
   const refused: string[] = [];
 
@@ -286,16 +305,16 @@ export async function sendQueue(apiAt: (at: Date) => AshbornApi): Promise<string
       await (api[name] as (...params: unknown[]) => Promise<Delta>)(...args);
     } catch (error) {
       // No connection says nothing about the change; a server error counts against it
-      if (isConnectionError(error)) throw new QueueHeld((error as Error).message, tries);
+      if (isConnectionError(error)) throw new QueueHeld((error as Error).message, tries, refused);
       const failingSince = next.failingSince ?? new Date().toISOString();
       const givenUp = tries + 1 >= GIVE_UP_TRIES && Date.now() - Date.parse(failingSince) >= GIVE_UP_MS;
       if (mayPass(error) && !givenUp) {
-        saveQueue([{ ...next, tries: tries + 1, failingSince }, ...loadQueue().slice(1)]);
-        throw new QueueHeld((error as Error).message, tries + 1);
+        saveQueue(loadQueue().map((queued) => (without([queued], next).length === 0 ? { ...queued, tries: tries + 1, failingSince } : queued)));
+        throw new QueueHeld((error as Error).message, tries + 1, refused);
       }
       refused.push((error as Error).message);
     }
-    saveQueue(loadQueue().slice(1));
+    saveQueue(without(loadQueue(), next));
   }
 
   return refused;
@@ -307,11 +326,17 @@ export async function sendQueue(apiAt: (at: Date) => AshbornApi): Promise<string
 // Postgres, a lost connection (08), clashing transactions (40), no resources (53), a lock not
 // granted (55P03) or a cancelled statement (57). Anything else, and any refusal of ours ("deleted
 // on another device", a unit of the wrong kind), can never succeed.
-function mayPass(error: unknown) {
+export function mayPass(error: unknown) {
   if (!(error instanceof ServerError)) return false;
   const { code, status } = error;
   if (code === "") return [0, 401, 408, 429].includes(status) || status >= 500;
   return /^(08|40|53|57|PGRST[023])/.test(code) || code === "55P03";
+}
+
+// The server refusing the sign-in (an expired or revoked session): it may pass for a queued change,
+// once the session is renewed, but a read that meets it says so rather than waiting
+export function signInRefused(error: unknown) {
+  return error instanceof ServerError && (error.status === 401 || /^PGRST3/.test(error.code));
 }
 
 // Supabase reports an unreachable server as a failed fetch, and a request given up on as a timeout

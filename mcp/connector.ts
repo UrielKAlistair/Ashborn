@@ -17,18 +17,45 @@ declare const Deno: { serve(handler: (request: Request) => Promise<Response>): u
 
 const NO_TIME_ZONE = "Ashborn doesn't know your time zone yet: open the Ashborn app once on your phone or laptop, then try again.";
 
+// One request at a time in an isolate, a shortcut: the day-start hour and time zone are set
+// process-wide per request (98), so two accounts' requests overlapping would read "today" in each
+// other's zone. The fix is for the settings to travel with each request. With JSON replies, a
+// request's tools have finished when its reply is made.
+// A request that hangs gives up after REQUEST_MS, so it can't hold every later one; past MAX_WAITING
+// queued, a request is turned away rather than queued without end.
+const REQUEST_MS = 25_000;
+const MAX_WAITING = 8;
+let running: Promise<unknown> = Promise.resolve();
+let waiting = 0;
+function oneAtATime(serve: () => Promise<Response>): Promise<Response> {
+  if (waiting >= MAX_WAITING) return Promise.resolve(new Response("Busy: try again in a moment", { status: 503, headers: { "Retry-After": "5" } }));
+  waiting++;
+  const timed = () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<Response>((resolve) => {
+      timer = setTimeout(() => resolve(new Response("Timed out", { status: 504 })), REQUEST_MS);
+    });
+    return Promise.race([serve(), timeout]).finally(() => clearTimeout(timer));
+  };
+  const reply = running.then(timed, timed).finally(() => waiting--);
+  running = reply.catch(() => undefined);
+  return reply;
+}
+
 // Each request builds its own server: an Edge Function keeps no state between requests. The
 // function runs in UTC, so dates and clock times are read in the user's zone from their settings.
 Deno.serve(
-  pipeline([withOAuthProtectedResource(), withSupabase({ auth: "user" })], async (request, { supabase, userClaims }) => {
-    const settings = await readSettings(supabase);
-    setDayStartHour(settings.dayStartHour);
-    setTimeZone(settings.timeZone);
+  pipeline([withOAuthProtectedResource(), withSupabase({ auth: "user" })], (request, { supabase, userClaims }) =>
+    oneAtATime(async () => {
+      const settings = await readSettings(supabase);
+      setDayStartHour(settings.dayStartHour);
+      setTimeZone(settings.timeZone);
 
-    const server = new McpServer({ name: "ashborn", version: "0.1.0" });
-    registerTools(server, supabase, userClaims!.id, () => (settings.timeZone ? null : NO_TIME_ZONE));
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    await server.connect(transport);
-    return transport.handleRequest(request);
-  }),
+      const server = new McpServer({ name: "ashborn", version: "0.1.0" });
+      registerTools(server, supabase, userClaims!.id, () => (settings.timeZone ? null : NO_TIME_ZONE));
+      const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+      await server.connect(transport);
+      return transport.handleRequest(request);
+    }),
+  ),
 );

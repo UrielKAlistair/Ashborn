@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The status bar's icon for Ashborn's notifications: a hex ring round a hex, in one colour, as
+     Android draws small icons from their alpha alone -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M22,12 L17,20.66 L7,20.66 L2,12 L7,3.34 L17,3.34 Z M20,12 L16,18.93 L8,18.93 L4,12 L8,5.07 L16,5.07 Z M16,12 L14,15.46 L10,15.46 L8,12 L10,8.54 L14,8.54 Z" />
+</vector>

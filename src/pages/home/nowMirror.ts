@@ -1,9 +1,15 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from "react";
+import type { NowChoice } from "../../shared/nowStep";
 
 export type MirroredNow = { id: string; title: string; endsAt: number | null; canTick: boolean } | null;
 
 // The step in Now, shown again elsewhere: in the desktop tray's menu, and marked on the graph. The app
 // passes it on every render; it is sent on only when it changed.
+// The step in Now as the app chose it (App.tsx), for the card on Home: one choice, which the tray and
+// the graph mirror, so none of them can disagree
+export const NowChoiceContext = createContext<NowChoice | null>(null);
+export const useNowChoice = () => useContext(NowChoiceContext);
+
 export function useNowMirror(now: MirroredNow) {
   const sent = useRef<string | undefined>(undefined);
   const next = JSON.stringify(now);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { alarmsAvailable, setTimeUpNotice } from "../../lib/alarms";
 import type { NowMemory, StartTimer } from "../../shared/nowStep";
 import type { ISODate } from "../../shared/types";
 
@@ -65,11 +66,28 @@ function changed() {
 }
 
 // Says when a started step's time is up, whichever screen is open and even with the window hidden.
-// `titleOf` names the step, or gives nothing once it is done or gone, and then nothing is said.
-export function useTimeUpNotice(titleOf: (stepId: string) => string | undefined) {
+// `titleOf` names the step, or gives nothing once it is done or gone, and then nothing is said. On
+// the phone, where the page can't notify and stops when put away, the phone says it (TimeUp.java),
+// set again whenever the timer or its step's title changes, and when the app comes back to the screen
+// (which takes down a notice already shown). `known`: the data is in, so `titleOf` can name a step;
+// until then nothing is set or cleared.
+export function useTimeUpNotice(titleOf: (stepId: string) => string | undefined, known: boolean) {
   const latestTitleOf = useRef(titleOf);
   latestTitleOf.current = titleOf;
+  useSyncExternalStore(onNowMemoryChange, () => version);
+  const timer = alarmsAvailable ? storedTimer() : null;
+  const title = timer ? titleOf(timer.stepId) : undefined;
+  const noticeAt = timer && title !== undefined ? timer.endsAt : 0;
   useEffect(() => {
+    if (!alarmsAvailable || !known) return;
+    const set = () => setTimeUpNotice(noticeAt, title ?? "");
+    set();
+    const onShow = () => document.visibilityState === "visible" && set();
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
+  }, [noticeAt, title, known]);
+  useEffect(() => {
+    if (alarmsAvailable) return;
     let end = 0;
     const schedule = () => {
       window.clearTimeout(end);

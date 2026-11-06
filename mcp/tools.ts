@@ -7,14 +7,26 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createApi, readKitchen } from "../src/lib/api";
 import { buildGraphModel, isDone, isFinished, questOf, statKeys, trainedStats, type GraphModel } from "../src/shared/graphModel";
-import { addDays, atTime, currentTimeZone, daysBetween, setDayStartHour, today, week, weekdayOf } from "../src/shared/dates";
+import { addDays, atTime, currentTimeZone, dayOf, daysBetween, setDayStartHour, today, toISODate, week, weekdayOf } from "../src/shared/dates";
 import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
-import { byTime, nextOccurrence } from "../src/shared/schedule";
+import { byTime, nextOccurrence, onDayAt } from "../src/shared/schedule";
 import { inboxLast, inInbox } from "../src/shared/inbox";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../src/shared/priority";
 import { goneQuiet } from "../src/shared/goneQuiet";
-import { mealSlots, stockUnits, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
+import { mealSlots, stockUnits, type Alarm, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type RoutinePatch, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
+
+// Bounds on what one call may carry, generous for a plan or a week of meals, so a call can't ask for
+// unbounded work: ids and refs, titles and short texts, a recipe's method, and any list
+const ID_MAX = 64;
+const TITLE_MAX = 300;
+const BODY_MAX = 20_000;
+const LIST_MAX = 300;
+
+// Ends every reply that sets something to ring: the phone learns of it when Ashborn is opened there or
+// on its background refresh, which Android can hold back for hours while the phone sleeps
+const RINGS_ON_PHONE =
+  "The phone picks this up when Ashborn is opened there, or on its background refresh, which can lag while the phone sleeps: ask the user to open Ashborn on the phone (Settings > Sync now shows what it holds) to be sure it rings.";
 
 // The tools, acting as whoever `db` is signed in as, `userId`. `blocked` gives a reason every tool refuses
 // with, or null.
@@ -26,8 +38,8 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       return reason ? failure(reason) : handler(...args);
     }) as never)) as McpServer["registerTool"];
 
-  const id = z.string().describe("A node id, as shown by `overview`");
-  const ids = z.array(z.string()).min(1).describe("Node ids, as shown by `overview`");
+  const id = z.string().max(ID_MAX).describe("A node id, as shown by `overview`");
+  const ids = z.array(z.string().max(ID_MAX)).min(1).max(LIST_MAX).describe("Node ids, as shown by `overview`");
   const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe("HH:MM, 24-hour local time");
   // A day that exists: 2026-02-30 would roll over into March
   const date = z
@@ -63,6 +75,33 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     }
     return text(`${done}.`);
   };
+  // The `after` links of an add_plan call the server would refuse, as add_edge does: a prerequisite in
+  // another box than its step, or a loop (only the call's own steps can make one: nothing existing
+  // leads to them yet)
+  const linkProblems = async (steps: Array<{ ref: string; parent?: string; after?: string[] }>, parentId: string | null) => {
+    const refs = new Set(steps.map(({ ref }) => ref));
+    const boxOf = new Map(steps.map((step) => [step.ref, step.parent ?? parentId]));
+    const existingAfter = [...new Set(steps.flatMap((step) => step.after ?? []).filter((name) => !refs.has(name)))];
+    const rows = existingAfter.length ? (((await db.from("graph_nodes").select("id, parent_id").in("id", existingAfter)).data ?? []) as { id: string; parent_id: string | null }[]) : [];
+    rows.forEach((row) => boxOf.set(row.id, row.parent_id));
+    const problems = steps.flatMap((step) =>
+      (step.after ?? []).filter((name) => boxOf.get(name) !== boxOf.get(step.ref)).map((name) => `"${step.ref}" can't come after "${name}": only steps in the same box can be linked.`),
+    );
+    const visiting = new Set<string>();
+    const done = new Set<string>();
+    const loops = (ref: string): boolean => {
+      if (visiting.has(ref)) return true;
+      if (done.has(ref)) return false;
+      visiting.add(ref);
+      const found = (steps.find((step) => step.ref === ref)?.after ?? []).some((name) => refs.has(name) && loops(name));
+      visiting.delete(ref);
+      done.add(ref);
+      return found;
+    };
+    const looping = steps.find((step) => loops(step.ref));
+    if (looping) problems.push(`The \`after\` links make a loop through "${looping.ref}".`);
+    return problems;
+  };
   // Whether a deadline id names one of the user's deadlines, so a wrong id is refused rather than
   // answered "Deleted."
   const deadlineExists = async (deadlineId: string) => Boolean((await db.from("deadlines").select("id").eq("id", deadlineId).maybeSingle()).data);
@@ -83,7 +122,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "overview",
     {
       description:
-        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list, the Inbox of unsorted thoughts last (done steps marked [x], prerequisites shown as 'after'), hidden quests, today's routines and open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
+        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list, the Inbox of unsorted thoughts last (done steps marked [x], prerequisites shown as 'after'), hidden quests, every routine with its weekdays (today's ticked or not), alarms, skipped rings ahead, open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
       inputSchema: { quest_id: z.string().optional().describe("Show only this quest") },
     },
     async ({ quest_id }) => {
@@ -99,17 +138,18 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       description:
         "Adds several steps at once, nested and linked: the main way to turn a plan into the graph. Each step has a short `ref` of your choosing; `parent` puts it inside another step (a ref from this call or an existing id), otherwise it goes under `parent_id`. `after` lists prerequisites that must be done first; they must share the step's parent. List parents before their steps. With parent_id null, top-level entries become new quests.",
       inputSchema: {
-        parent_id: z.string().nullable().describe("Existing node the plan goes into, or null for new quests"),
+        parent_id: z.string().max(ID_MAX).nullable().describe("Existing node the plan goes into, or null for new quests"),
         steps: z
           .array(
             z.object({
-              ref: z.string().describe("Your label for this step, unique in this call"),
-              title: z.string().describe("A few words (about 2 to 4): titles show on small cards in the graph"),
-              parent: z.string().optional().describe("Ref or id of the step this one sits inside"),
-              after: z.array(z.string()).optional().describe("Refs or ids of sibling prerequisites"),
+              ref: z.string().max(ID_MAX).describe("Your label for this step, unique in this call"),
+              title: z.string().trim().min(1).max(TITLE_MAX).describe("A few words (about 2 to 4): titles show on small cards in the graph"),
+              parent: z.string().max(ID_MAX).optional().describe("Ref or id of the step this one sits inside"),
+              after: z.array(z.string().max(ID_MAX)).max(LIST_MAX).optional().describe("Refs or ids of sibling prerequisites"),
             }),
           )
-          .min(1),
+          .min(1)
+          .max(LIST_MAX),
       },
     },
     async ({ parent_id, steps }) => {
@@ -123,6 +163,8 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       const nodeIdsFound = await existingNodes(named);
       const unknown = named.filter((name) => !nodeIdsFound.has(name));
       if (unknown.length) return failure(`Not a ref in this call nor a quest or step: ${unknown.join(", ")}. Nothing was added.`);
+      const unlinkable = await linkProblems(steps, parent_id);
+      if (unlinkable.length) return failure([...unlinkable, "Nothing was added."].join("\n"));
 
       const created = new Map<string, string>(); // ref → id
       const resolve = (refOrId: string) => created.get(refOrId) ?? refOrId;
@@ -213,7 +255,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
 
   register(
     "rename",
-    { description: "Renames a quest or step. Keep titles to a few words: they show on small cards.", inputSchema: { id, title: z.string().min(1) } },
+    { description: "Renames a quest or step. Keep titles to a few words: they show on small cards.", inputSchema: { id, title: z.string().trim().min(1).max(TITLE_MAX) } },
     async ({ id, title }) => run([() => api.updateNode(id, { title })], "Renamed"),
   );
 
@@ -221,7 +263,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "move",
     {
       description: "Moves a step (with its own steps) into another node, or makes it a quest with parent_id null. Its links are removed, since links only join steps in the same box, and it is placed afresh in its new box.",
-      inputSchema: { id, parent_id: z.string().nullable() },
+      inputSchema: { id, parent_id: z.string().max(ID_MAX).nullable() },
     },
     async ({ id, parent_id }) => run([() => api.moveNode(id, parent_id)], "Moved"),
   );
@@ -292,11 +334,12 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     {
       description:
         "Adds a dated obligation, optionally with an alarm at a time on its due day (rings on the phone). Linking it to a quest or step (`node_id`) only groups it there; a deadline never changes a priority, which only the user sets. For a ring with no deadline, use add_alarm with a date.",
-      inputSchema: { title: z.string().min(1), due_date: date, alarm_time: clock.optional(), node_id: id.optional().describe("The quest or step it belongs to") },
+      inputSchema: { title: z.string().min(1).max(TITLE_MAX), due_date: date, alarm_time: clock.optional(), node_id: id.optional().describe("The quest or step it belongs to") },
     },
     async ({ title, due_date, alarm_time, node_id }) => {
+      if (node_id && !(await existingNodes([node_id])).has(node_id)) return failure(`Not a quest or step: ${node_id}. Nothing was added.`);
       const deadlineId = crypto.randomUUID();
-      return run([() => api.createDeadline({ id: deadlineId, title, dueDate: due_date, alarmTime: alarm_time ?? null, nodeId: node_id ?? null })], `Added deadline [${deadlineId}]`);
+      return run([() => api.createDeadline({ id: deadlineId, title, dueDate: due_date, alarmTime: alarm_time ?? null, nodeId: node_id ?? null })], `Added deadline [${deadlineId}]${alarm_time ? `. ${RINGS_ON_PHONE}` : ""}`);
     },
   );
 
@@ -308,7 +351,8 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     },
     async ({ id, node_id }) => {
       if (!(await deadlineExists(id))) return failure(`No deadline ${id}.`);
-      return run([() => api.linkDeadline(id, node_id ?? null)], node_id ? "Linked deadline" : "Unlinked deadline");
+      if (node_id && !(await existingNodes([node_id])).has(node_id)) return failure(`Not a quest or step: ${node_id}.`);
+      return run([() => api.linkDeadline(id, node_id || null)], node_id ? "Linked deadline" : "Unlinked deadline");
     },
   );
 
@@ -327,7 +371,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       description:
         "Sets an alarm that rings on the user's phone, apart from any routine or deadline: in some minutes from now (a nap), once at a time (on `date`, or else the next time the clock shows it), or recurring at a time on chosen weekdays (waking up). An alarm can be plain, or stop only after walking or sit-ups.",
       inputSchema: {
-        label: z.string().optional(),
+        label: z.string().max(TITLE_MAX).optional(),
         in_minutes: z.number().int().positive().optional().describe("Ring this many minutes from now"),
         time: clock.optional().describe("Ring at this time (once, unless weekdays are given)"),
         date: date.optional().describe("The day a one-off alarm rings; needs a time, not weekdays"),
@@ -355,7 +399,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
               enabled: true,
             }),
         ],
-        at ? `Alarm set for ${at.toLocaleString(undefined, { timeZone: currentTimeZone() })}` : "Recurring alarm set",
+        `${at ? `Alarm set for ${at.toLocaleString(undefined, { timeZone: currentTimeZone() })}` : "Recurring alarm set"}. ${RINGS_ON_PHONE}`,
       );
     },
   );
@@ -366,9 +410,9 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       description:
         "Adds a recurring task on chosen weekdays, with an optional if-then cue such as 'after dinner', and an optional time. With a time it can ring an alarm on the phone: plain, or one that only stops after walking or sit-ups (for waking up).",
       inputSchema: {
-        title: z.string().min(1),
+        title: z.string().min(1).max(TITLE_MAX),
         weekdays: z.array(z.enum(week as [string, ...string[]])).min(1),
-        cue: z.string().optional(),
+        cue: z.string().max(TITLE_MAX).optional(),
         time: clock.optional(),
         alarm: z.enum(["none", "plain", "walk", "situps"]).optional().describe("Needs a time"),
       },
@@ -377,10 +421,99 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       if (alarm && alarm !== "none" && !time) return failure("An alarm needs a time.");
       return run(
         [() => api.createRoutine({ id: crypto.randomUUID(), title, cue: cue ?? "", weekdays: weekdays as typeof week, time: time ?? null, alarm: alarm ?? "none" })],
-        "Added routine",
+        `Added routine${alarm && alarm !== "none" ? `. ${RINGS_ON_PHONE}` : ""}`,
       );
     },
   );
+
+  register(
+    "update_routine",
+    {
+      description: "Changes a routine: its title, cue, weekdays, time or alarm. Only the fields given change; its ticks are kept. To change one date only, use skip_ring.",
+      inputSchema: {
+        id: z.string().max(ID_MAX).describe("A routine id, as shown by `overview`"),
+        title: z.string().min(1).max(TITLE_MAX).optional(),
+        cue: z.string().max(TITLE_MAX).optional(),
+        weekdays: z.array(z.enum(week as [string, ...string[]])).min(1).optional(),
+        time: clock.nullable().optional().describe("null removes the time (and so the alarm)"),
+        alarm: z.enum(["none", "plain", "walk", "situps"]).optional().describe("Needs a time"),
+      },
+    },
+    async ({ id, title, cue, weekdays, time, alarm }) => {
+      const current = (await api.getSnapshot(userId)).routines.find((routine) => routine.id === id);
+      if (!current) return failure(`No routine ${id}.`);
+      const patch = Object.fromEntries(Object.entries({ title, cue, weekdays, time, alarm }).filter(([, value]) => value !== undefined)) as RoutinePatch;
+      if (time === null && alarm === undefined) patch.alarm = "none";
+      if ((patch.alarm ?? current.alarm) !== "none" && !(time === undefined ? current.time : time)) return failure("An alarm needs a time.");
+      if (Object.keys(patch).length === 0) return failure("Nothing to change.");
+      return run([() => api.updateRoutine(id, patch)], `Updated routine${(patch.alarm ?? current.alarm) !== "none" ? `. ${RINGS_ON_PHONE}` : ""}`);
+    },
+  );
+
+  register(
+    "skip_ring",
+    {
+      description:
+        "Stops one date's ring of a routine's alarm or of a recurring alarm, leaving every other date as it is; with instead_at it rings at that time instead, that date only (as a one-off alarm with the same title and kind). Use it to keep an alarm out of an exam or a meeting. restore_ring undoes it.",
+      inputSchema: {
+        id: z.string().max(ID_MAX).describe("A routine id or a recurring alarm's id, as shown by `overview`"),
+        date: date.describe("The date whose ring to skip, YYYY-MM-DD"),
+        instead_at: clock.optional().describe("Ring at this time instead, on the same date"),
+      },
+    },
+    async ({ id, date: day, instead_at }) => {
+      const found = await ringOn(id, day);
+      if ("problem" in found) return failure(found.problem);
+      const { ring } = found;
+      if (ring.at(ring.time).getTime() <= Date.now()) return failure(`The ${day} ring at ${ring.time} has already passed.`);
+      const moved = instead_at ? ring.at(instead_at) : null;
+      if (moved && moved.getTime() <= Date.now()) return failure(`${day} ${instead_at} has passed.`);
+      const alarmId = crypto.randomUUID();
+      const changes = [() => api.setAlarmSkip(ring.key, day, true)];
+      if (moved) changes.push(() => api.createAlarm({ id: alarmId, label: movedLabel(ring), kind: ring.kind, at: moved.toISOString(), time: null, weekdays: [], enabled: true }));
+      const when = (at: Date) => at.toLocaleString(undefined, { timeZone: currentTimeZone() });
+      return run(
+        changes,
+        `${ring.title} will not ring at ${ring.time} on ${day}${moved ? `; it rings at ${when(moved)} instead (alarm [${alarmId}])` : ""}. ${RINGS_ON_PHONE}`,
+        ["the skip", "the alarm at the new time"],
+      );
+    },
+  );
+
+  register(
+    "restore_ring",
+    {
+      description: "Undoes skip_ring: the date's ring is back at its usual time, and the one-off alarm a move made is deleted.",
+      inputSchema: { id: z.string().max(ID_MAX).describe("A routine id or a recurring alarm's id"), date: date },
+    },
+    async ({ id, date: day }) => {
+      const found = await ringOn(id, day);
+      if ("problem" in found) return failure(found.problem);
+      const { ring, snapshot } = found;
+      if (!snapshot.skippedAlarms.some((skip) => skip.key === ring.key)) return failure(`${ring.title} is not skipped on ${day}.`);
+      const replacements = movedAlarms(snapshot, ring, day);
+      return run(
+        [() => api.setAlarmSkip(ring.key, day, false), ...replacements.map((alarm) => () => api.deleteAlarm(alarm.id))],
+        `${ring.title} rings at ${ring.time} on ${day} again${replacements.length ? ", and the alarm at the new time is deleted" : ""}. ${RINGS_ON_PHONE}`,
+      );
+    },
+  );
+
+  // The ring a routine or a recurring alarm makes on `day`, or why it makes none
+  const ringOn = async (ringId: string, day: string): Promise<{ problem: string } | { ring: Ring & { kind: Alarm["kind"] }; snapshot: Snapshot }> => {
+    const snapshot = await api.getSnapshot(userId);
+    setDayStartHour(snapshot.settings.dayStartHour);
+    const routine = snapshot.routines.find((candidate) => candidate.id === ringId);
+    const alarm = snapshot.alarms.find((candidate) => candidate.id === ringId);
+    if (!routine && !alarm) return { problem: `No routine or alarm ${ringId}.` };
+    if (alarm && !alarm.time) return { problem: "That is a one-off alarm: delete it, and add another at the new time." };
+    const ring: Ring = routine
+      ? { key: `routine:${ringId}@${day}`, title: routine.title, kind: routine.alarm === "none" ? null : routine.alarm, time: routine.time ?? "", weekdays: routine.weekdays, at: (time) => onDayAt(day, time, snapshot.settings.dayStartHour), dayOf: (at) => dayOf(at, snapshot.settings.dayStartHour) }
+      : { key: `alarm:${ringId}@${day}`, title: alarm!.label || "Alarm", kind: alarm!.kind, time: alarm!.time!, weekdays: alarm!.weekdays, at: (time) => atTime(day, time), dayOf: toISODate };
+    if (!ring.kind || !ring.time) return { problem: `${ring.title} has no alarm.` };
+    if (!ring.weekdays.includes(weekdayOf(day))) return { problem: `${ring.title} does not ring on ${day}, a ${weekdayOf(day)}; it rings on ${ring.weekdays.join(" ")}.` };
+    return { ring: ring as Ring & { kind: Alarm["kind"] }, snapshot };
+  };
 
   register(
     "delete_alarm",
@@ -404,7 +537,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   // amount may use another unit of the same kind (g), converted when it is saved.
   const slot = z.enum(mealSlots);
   const unit = z.enum(stockUnits);
-  const recipeIds = z.array(z.string()).optional().describe("Recipe ids, as shown by `kitchen`");
+  const recipeIds = z.array(z.string().max(ID_MAX)).max(LIST_MAX).optional().describe("Recipe ids, as shown by `kitchen`");
 
   register(
     "kitchen",
@@ -423,18 +556,19 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
         "Creates a recipe, or replaces one when `id` is given: what you pass replaces that part (title, body, ingredients, reminders); what you leave out stays. `body` is free text for the reader, with any amounts and formatting. `ingredients` are only the tracked bulk staples cooking deducts from stock (rice, beans; never spices), each naming a stock item by id or name, in a unit of the item's kind. `reminders` are alarms rung for a planned meal using the recipe: `offset_minutes` (negative is earlier) from the meal's time, or from another reminder given by its `ref`. A new recipe with no reminders given gets one, 'Start prep', 45 minutes before the meal; pass [] for none.",
       inputSchema: {
         id: z.string().optional().describe("Recipe id to replace"),
-        title: z.string().min(1).optional().describe("Needed for a new recipe"),
-        body: z.string().optional(),
+        title: z.string().min(1).max(TITLE_MAX).optional().describe("Needed for a new recipe"),
+        body: z.string().max(BODY_MAX).optional(),
         ingredients: z
-          .array(z.object({ item: z.string().describe("Stock item id or name"), amount: z.number().positive(), unit, name: z.string().optional().describe("Defaults to the item's name") }))
+          .array(z.object({ item: z.string().max(TITLE_MAX).describe("Stock item id or name"), amount: z.number().positive(), unit, name: z.string().max(TITLE_MAX).optional().describe("Defaults to the item's name") }))
+          .max(LIST_MAX)
           .optional(),
         reminders: z
           .array(
             z.object({
-              ref: z.string().describe("Your label for it, unique in this call"),
-              label: z.string().min(1),
+              ref: z.string().max(ID_MAX).describe("Your label for it, unique in this call"),
+              label: z.string().min(1).max(TITLE_MAX),
               offset_minutes: z.number().int(),
-              from: z.string().optional().describe("Ref of the reminder this one is timed from; omit to time it from the meal"),
+              from: z.string().max(ID_MAX).optional().describe("Ref of the reminder this one is timed from; omit to time it from the meal"),
             }),
           )
           .optional(),
@@ -454,6 +588,9 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
         resolved.push({ id: crypto.randomUUID(), itemId: item.id, name: ingredient.name ?? item.name, amount: toBase(ingredient.amount, ingredient.unit), unit: ingredient.unit });
       }
 
+      const reminderRefs = (reminders ?? []).map(({ ref }) => ref);
+      const repeated = reminderRefs.filter((ref, index) => reminderRefs.indexOf(ref) !== index);
+      if (repeated.length) return failure(`Each reminder ref must be unique; repeated: ${[...new Set(repeated)].join(", ")}.`);
       const refs = new Map((reminders ?? []).map((reminder) => [reminder.ref, crypto.randomUUID()]));
       const unknown = (reminders ?? []).find((reminder) => reminder.from && !refs.has(reminder.from));
       if (unknown) return failure(`Reminder "${unknown.ref}" is timed from "${unknown.from}", which is not a ref in this call.`);
@@ -469,7 +606,10 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "delete_recipe",
     { description: "Deletes a recipe. Meals that used it keep their description.", inputSchema: { id: z.string() } },
-    async ({ id }) => run([() => api.deleteRecipe(id)], "Deleted recipe"),
+    async ({ id }) => {
+      if (!(await readKitchen(db)).recipes.some((recipe) => recipe.id === id)) return failure(`No recipe ${id}.`);
+      return run([() => api.deleteRecipe(id)], "Deleted recipe");
+    },
   );
 
   register(
@@ -477,13 +617,13 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     {
       description:
         "Starts tracking a bulk staple (a carbohydrate or protein source: rice, beans, lentils). Never spices or the like. `unit` is how it is shown; `target` (the amount to keep on hand) and `on_hand` are in that unit.",
-      inputSchema: { name: z.string().min(1), unit, target: z.number().nonnegative(), on_hand: z.number().nonnegative().optional() },
+      inputSchema: { name: z.string().min(1).max(TITLE_MAX), unit, target: z.number().nonnegative(), on_hand: z.number().nonnegative().optional() },
     },
     async ({ name, unit, target, on_hand }) => {
       const id = crypto.randomUUID();
       const changes = [() => api.createStockItem({ id, name, unit, target: toBase(target, unit) })];
       if (on_hand) changes.push(() => api.setStock(crypto.randomUUID(), id, toBase(on_hand, unit)));
-      return run(changes, `Added ${name} [${id}]`);
+      return run(changes, `Added ${name} [${id}]`, ["the item", "its amount on hand"]);
     },
   );
 
@@ -491,7 +631,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "update_stock_item",
     {
       description: "Renames a stock item, changes its target (in its unit), or its unit to another of the same kind (kg to g).",
-      inputSchema: { id: z.string(), name: z.string().min(1).optional(), unit: unit.optional(), target: z.number().nonnegative().optional() },
+      inputSchema: { id: z.string(), name: z.string().min(1).max(TITLE_MAX).optional(), unit: unit.optional(), target: z.number().nonnegative().optional() },
     },
     async ({ id, name, unit, target }) => {
       const item = (await readKitchen(db)).items.find((candidate) => candidate.id === id);
@@ -503,7 +643,10 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "delete_stock_item",
     { description: "Stops tracking a stock item. Recipe ingredients naming it stay, untracked.", inputSchema: { id: z.string() } },
-    async ({ id }) => run([() => api.deleteStockItem(id)], "Deleted stock item"),
+    async ({ id }) => {
+      if (!(await readKitchen(db)).items.some((item) => item.id === id)) return failure(`No stock item ${id}.`);
+      return run([() => api.deleteStockItem(id)], "Deleted stock item");
+    },
   );
 
   register(
@@ -526,30 +669,38 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     {
       description:
         "Plans meals on dates: each a short description ('rice with butter beans') and optionally recipes. This replaces what those dates and slots showed (their own plan or the default week), and plans a cancelled meal again. A meal already cooked keeps its stock deduction.",
-      inputSchema: { meals: z.array(z.object({ date, slot, description: z.string(), recipes: recipeIds })).min(1) },
+      inputSchema: { meals: z.array(z.object({ date, slot, description: z.string().max(TITLE_MAX), recipes: recipeIds })).min(1).max(LIST_MAX) },
     },
     async ({ meals }) =>
       run(
         meals.map((meal) => () => planMeal(api, meal.date, meal.slot, meal.description, meal.recipes ?? [], "planned")),
         `Planned ${meals.length} meal${meals.length === 1 ? "" : "s"}`,
+        meals.map((meal) => `${meal.date} ${meal.slot}`),
       ),
   );
 
   register(
     "cancel_meals",
     {
-      description: "Cancels meals in advance (eating out), which also silences their reminders. Without `slots`, cancels the whole day. A cooked meal cannot be cancelled.",
+      description: "Cancels meals in advance (eating out), which also silences their reminders. Without `slots`, cancels the whole day, leaving any meal already cooked. A cooked meal named in `slots` is refused: unmark it first.",
       inputSchema: { date, slots: z.array(slot).optional() },
     },
     async ({ date, slots }) => {
       // Read around the date itself, which may lie past the days the Kitchen usually holds
       const kitchen = await readKitchen(db, date);
+      const asked = slots ?? [...mealSlots];
+      const cooked = asked.filter((each) => shownMeal(kitchen, date, each).status === "cooked");
+      if (slots && cooked.length) return failure(`Cooked, so not cancelled: the ${cooked.join(" and ")} of ${date}; unmark it first. Nothing was changed.`);
+      const cancelling = asked.filter((each) => !cooked.includes(each));
+      const were = cooked.length === 1 ? "was" : "were";
+      if (cancelling.length === 0) return text(`Nothing cancelled: the ${cooked.join(" and ")} of ${date} ${were} cooked.`);
       return run(
-        (slots ?? [...mealSlots]).map((each) => () => {
+        cancelling.map((each) => () => {
           const shown = shownMeal(kitchen, date, each);
           return planMeal(api, date, each, shown.description, shown.recipeIds, "cancelled");
         }),
-        "Cancelled",
+        cooked.length ? `Cancelled the ${cancelling.join(" and ")}; the ${cooked.join(" and ")} ${were} cooked and ${cooked.length === 1 ? "stays" : "stay"}` : "Cancelled",
+        cancelling,
       );
     },
   );
@@ -559,13 +710,14 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     {
       description: "Sets the default week: what a weekday's slot shows when its date has no meal planned. Planning a date overrides it for that date only.",
       inputSchema: {
-        meals: z.array(z.object({ weekday: z.enum(week as [string, ...string[]]), slot, description: z.string(), recipes: recipeIds })).min(1),
+        meals: z.array(z.object({ weekday: z.enum(week as [string, ...string[]]), slot, description: z.string().max(TITLE_MAX), recipes: recipeIds })).min(1).max(LIST_MAX),
       },
     },
     async ({ meals }) =>
       run(
         meals.map((meal) => () => api.setDefaultMeal({ weekday: meal.weekday as (typeof week)[number], slot: meal.slot, description: meal.description, recipeIds: meal.recipes ?? [] })),
         "Default week set",
+        meals.map((meal) => `${meal.weekday} ${meal.slot}`),
       ),
   );
 
@@ -580,19 +732,25 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       // its amounts off a stock counted since the first time
       if (shownMeal(await readKitchen(db, date), date, slot).status === "cooked") return failure(`The ${slot} of ${date} is already cooked.`);
       try {
-        const { kitchen } = await api.cookMeal(date, slot, crypto.randomUUID());
-        const { untracked } = mealDeductions(kitchen!, shownMeal(kitchen!, date, slot));
-        return text(untracked.length ? `Cooked. Not deducted (no longer tracked): ${untracked.join(", ")}.` : "Cooked.");
+        await api.cookMeal(date, slot, crypto.randomUUID());
       } catch (error) {
         return failure((error as Error).message);
       }
+      // Read around the date itself, which may lie past the days the Kitchen usually holds; cooked
+      // either way, so a failed read only leaves the note out
+      const kitchen = await readKitchen(db, date).catch(() => null);
+      const untracked = kitchen ? mealDeductions(kitchen, shownMeal(kitchen, date, slot)).untracked : [];
+      return text(untracked.length ? `Cooked. Not deducted (no longer tracked): ${untracked.join(", ")}.` : "Cooked.");
     },
   );
 
   register(
     "uncook_meal",
     { description: "Unticks a cooked meal, putting back exactly what cooking it deducted.", inputSchema: { date, slot } },
-    async ({ date, slot }) => run([() => api.uncookMeal(date, slot)], "Unticked"),
+    async ({ date, slot }) => {
+      if (shownMeal(await readKitchen(db, date), date, slot).status !== "cooked") return failure(`The ${slot} of ${date} is not cooked.`);
+      return run([() => api.uncookMeal(date, slot)], "Unticked");
+    },
   );
 }
 
@@ -660,15 +818,31 @@ function describeKitchen(kitchen: Kitchen, short = false): string {
   return lines.join("\n");
 }
 
-// Runs changes one after another and stops at the first that fails
-async function run(changes: Array<() => Promise<Delta>>, done: string) {
-  try {
-    for (const change of changes) await change();
-    return text(`${done}.`);
-  } catch (error) {
-    return failure((error as Error).message);
+// Runs changes one after another and stops at the first that fails. With several, `labels` names
+// each, so a failure partway says which were made.
+async function run(changes: Array<() => Promise<Delta>>, done: string, labels: string[] = []) {
+  for (const [index, change] of changes.entries()) {
+    try {
+      await change();
+    } catch (error) {
+      const message = (error as Error).message;
+      if (changes.length === 1) return failure(message);
+      const name = (at: number) => labels[at] ?? `change ${at + 1}`;
+      const made = changes.slice(0, index).map((_, at) => name(at));
+      return failure(`${message} (at ${name(index)}). ${made.length ? `Already made: ${made.join(", ")}.` : "Nothing was changed."}`);
+    }
   }
+  return text(`${done}.`);
 }
+
+// One date's ring of a routine or a recurring alarm (skip_ring). `at` places a clock time on its date;
+// `dayOf` gives the date a moment belongs to, as the ring counts days
+type Ring = { key: string; title: string; kind: Alarm["kind"] | null; time: string; weekdays: string[]; at: (time: string) => Date; dayOf: (at: Date) => string };
+
+// A moved ring's one-off alarm is named for the ring, so restore_ring can find it
+const movedLabel = (ring: Ring) => `${ring.title} (moved from ${ring.time})`;
+const movedAlarms = (snapshot: Snapshot, ring: Ring, day: string) =>
+  snapshot.alarms.filter((alarm) => alarm.at && alarm.label === movedLabel(ring) && ring.dayOf(new Date(alarm.at)) === day);
 
 // The tracker as an indented outline an agent can read. As in the app, a finished box
 // is one line and a finished quest is listed under Completed (or Archived, if hidden); asking for
@@ -679,10 +853,12 @@ function describe(snapshot: Snapshot, questId?: string) {
   const model = buildGraphModel(snapshot);
   const folds = (id: string) => !questId && isFinished(model, id);
   const quests = (model.children.get(null) ?? []).filter((quest) => (questId ? quest.id === questId : true));
-  const completed = quests.filter((quest) => quest.active && folds(quest.id));
-  const shown = inboxLast(quests.filter((quest) => quest.active && !folds(quest.id)), snapshot.inboxId);
-  const archived = quests.filter((quest) => !quest.active && model.finishedAt.has(quest.id));
-  const hidden = quests.filter((quest) => !quest.active && !model.finishedAt.has(quest.id));
+  // One quest asked for is shown whether or not it is hidden from the dashboard
+  const inView = (quest: GraphNode) => quest.active || Boolean(questId);
+  const completed = quests.filter((quest) => inView(quest) && folds(quest.id));
+  const shown = inboxLast(quests.filter((quest) => inView(quest) && !folds(quest.id)), snapshot.inboxId);
+  const archived = quests.filter((quest) => !inView(quest) && model.finishedAt.has(quest.id));
+  const hidden = quests.filter((quest) => !inView(quest) && !model.finishedAt.has(quest.id));
   const lines: string[] = [];
 
   const shownIds = new Set(shown.map((quest) => quest.id));
@@ -721,16 +897,24 @@ function describe(snapshot: Snapshot, questId?: string) {
 
   if (!questId) {
     const weekday = weekdayOf(today());
-    const routines = snapshot.routines.filter((routine) => routine.weekdays.includes(weekday)).sort(byTime);
     const checked = new Set(snapshot.routineChecks.filter((check) => check.date === today()).map((check) => check.routineId));
+    const titleOf = (key: string) => {
+      const [, kind, ringId] = /^(\w+):([^@]+)@/.exec(key) ?? [];
+      const source = kind === "routine" ? snapshot.routines.find((routine) => routine.id === ringId) : kind === "alarm" ? snapshot.alarms.find((alarm) => alarm.id === ringId) : undefined;
+      return source ? `${"title" in source ? source.title : source.label || "Alarm"} [${ringId}]` : key;
+    };
+    const skips = snapshot.skippedAlarms.filter((skip) => skip.date >= today()).sort((a, b) => a.date.localeCompare(b.date));
     lines.push(
-      "Routines today:",
-      ...(routines.length
-        ? routines.map(
-            (routine) =>
-              `- [${checked.has(routine.id) ? "x" : " "}] ${routine.time ? `${routine.time} ` : ""}${routine.title} [${routine.id}]${routine.cue ? ` (${routine.cue})` : ""}${routine.alarm !== "none" ? ` (alarm: ${routine.alarm})` : ""}`,
-          )
+      "Routines (today's tick shown for those due today):",
+      ...(snapshot.routines.length
+        ? [...snapshot.routines].sort(byTime).map((routine) => {
+            const due = routine.weekdays.includes(weekday) ? ` today [${checked.has(routine.id) ? "x" : " "}]` : "";
+            return `- ${routine.time ? `${routine.time} ` : ""}${routine.title} [${routine.id}] on ${routine.weekdays.join(" ")}${routine.cue ? ` (${routine.cue})` : ""}${routine.alarm !== "none" ? ` (alarm: ${routine.alarm})` : ""}${due}`;
+          })
         : ["- none"]),
+      "",
+      "Skipped rings ahead (restore_ring undoes one):",
+      ...(skips.length ? skips.map((skip) => `- ${skip.date} ${titleOf(skip.key)}`) : ["- none"]),
       "",
       "Alarms:",
       ...(snapshot.alarms.length

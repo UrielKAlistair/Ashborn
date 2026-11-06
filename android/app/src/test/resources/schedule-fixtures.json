@@ -520,6 +520,13 @@
             "title": "Deadline",
             "dueDate": "2026-10-18",
             "alarmTime": "09:00"
+          },
+          {
+            "id": "night",
+            "nodeId": null,
+            "title": "Deadline",
+            "dueDate": "2026-10-21",
+            "alarmTime": "03:00"
           }
         ],
         "kitchen": {
@@ -535,6 +542,12 @@
           "key": "deadline:soon@2026-10-20",
           "at": "2026-10-20T09:00:00",
           "title": "Due today: Essay",
+          "kind": "plain"
+        },
+        {
+          "key": "deadline:night@2026-10-21",
+          "at": "2026-10-22T03:00:00",
+          "title": "Due today: Deadline",
           "kind": "plain"
         },
         {

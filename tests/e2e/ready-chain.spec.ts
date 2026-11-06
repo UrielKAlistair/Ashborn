@@ -54,3 +54,44 @@ test("a chain takes one priority, on its quest", async () => {
   await app.close();
   rmSync(profile, { recursive: true, force: true });
 });
+
+// A box whose steps are all done is still to be ticked itself, so it counts as an open step: two such
+// boxes in one quest are both offered
+test("boxes with every step done are each offered a priority", async () => {
+  const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
+  if (error) throw error;
+  for (const table of ["graph_nodes", "deadlines"]) await db.from(table).delete().not("id", "is", null);
+  const id = { chores: crypto.randomUUID(), laundry: crypto.randomUUID(), dishes: crypto.randomUUID() };
+  const done = new Date().toISOString();
+  for (const rows of [
+    [{ id: id.chores, title: "Chores", parent_id: null }],
+    [
+      { id: id.laundry, title: "Laundry", parent_id: id.chores },
+      { id: id.dishes, title: "Dishes", parent_id: id.chores },
+    ],
+    [
+      { title: "Wash", parent_id: id.laundry, completed_at: done },
+      { title: "Dry", parent_id: id.dishes, completed_at: done },
+    ],
+  ]) {
+    const { error: insertError } = await db.from("graph_nodes").insert(rows);
+    if (insertError) throw insertError;
+  }
+
+  const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
+  const env = { ...process.env } as Record<string, string>;
+  delete env.ELECTRON_RUN_AS_NODE;
+  env.ASHBORN_BACKUP_DIR = path.join(profile, "backups");
+  const app = await electron.launch({ args: [`--user-data-dir=${profile}`, "."], env });
+  const page = await app.firstWindow();
+  await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
+  await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
+  await expect(page.getByText("2 ready of 2")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("group", { name: "Priority for Laundry" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Priority for Dishes" })).toBeVisible();
+
+  await app.close();
+  rmSync(profile, { recursive: true, force: true });
+});

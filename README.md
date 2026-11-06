@@ -99,4 +99,3 @@ shown), `add_deadline`, `add_routine`, `add_alarm`.
 ## Credits
 
 - Alarms icon: "alarm-clock" from [Lucide](https://lucide.dev), licensed [ISC](https://lucide.dev/license).
-- Treasury icon: "Open treasure chest" by Skoll, from [game-icons.net](https://game-icons.net), licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).

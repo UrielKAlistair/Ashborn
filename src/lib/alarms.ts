@@ -10,33 +10,58 @@ const SCHEDULE_DAYS = 7;
 // How often the open app checks whether an alarm has started ringing
 const RINGING_POLL_MS = 2000;
 
-export type AlarmPermissions = { notifications: boolean; fullScreen: boolean; battery: boolean; xiaomi: boolean; background: boolean };
+// alarmChannel: the Alarms notification channel is of high importance, so a ring pops up and shows over the lock screen;
+// exactAlarms: alarms can be set at all (Android 12 lets the user take that away)
+export type AlarmPermissions = { notifications: boolean; exactAlarms: boolean; fullScreen: boolean; alarmChannel: boolean; battery: boolean; xiaomi: boolean; background: boolean };
 
 export type RingingAlarm = { key: string; at: number; title: string; kind: Exclude<AlarmKind, "none"> };
+
+// What the phone holds: the next alarms in its stored schedule, when (epoch ms) the app and the
+// background refresh each last handed the schedule over, and the next alarm clock Android itself
+// will ring, from any app
+export type HeldSchedule = {
+  alarms: RingingAlarm[];
+  appHandedAt: number | null;
+  backgroundHandedAt: number | null;
+  system: { at: number; ours: boolean } | null;
+};
 
 // The native side, in android/app/src/main/java/dev/ashborn/app/AlarmPlugin.java
 type AlarmPlugin = {
   schedule(options: { alarms: RingingAlarm[] }): Promise<void>;
   ringing(): Promise<{ alarm: RingingAlarm | null }>;
+  held(): Promise<HeldSchedule>;
   // `key` and `kind`: the ring shown; refused (stopped false) when another ring is going, or a harder one has joined it since
   stop(options: { key: string; kind: RingingAlarm["kind"] }): Promise<{ stopped: boolean }>;
   snooze(options: { key: string; kind: RingingAlarm["kind"] }): Promise<{ stopped: boolean }>;
   permissions(): Promise<AlarmPermissions>;
   requestNotifications(): Promise<void>;
   openFullScreenSettings(): Promise<void>;
+  openAlarmChannelSettings(): Promise<void>;
+  openExactAlarmSettings(): Promise<void>;
   requestBatteryExemption(): Promise<void>;
   openAutostart(): Promise<void>;
   connectBackground(options: { url: string; publishableKey: string; refreshToken: string }): Promise<void>;
+  // `at` (epoch ms) the end of Now's timer on the step `title`, 0 when none runs; replaces the last
+  timeUp(options: { at: number; title: string }): Promise<void>;
 };
 
 // Alarms exist only in the Android app
 export const alarmsAvailable = Capacitor.isNativePlatform();
 const plugin = registerPlugin<AlarmPlugin>("AshbornAlarm");
 
+// Has the phone say "Time's up" at `at` (epoch ms) about `title`, as a notification; 0 clears it
+export const setTimeUpNotice = (at: number, title: string) => void plugin.timeUp({ at, title });
+
+// Told each time the app has handed the phone its schedule
+const handedOver = new Set<() => void>();
+const handOver = (alarms: RingingAlarm[]) => void plugin.schedule({ alarms }).then(() => handedOver.forEach((listener) => listener()));
+
 // Keeps the phone's alarm clock in step with the routines and deadlines on screen: on each change,
 // and again whenever the app comes back to the screen, since the background refresh may have
-// replaced the schedule meanwhile with what the server held (without changes still queued here)
-export function useAlarmSchedule(snapshot: Snapshot | null) {
+// replaced the schedule meanwhile with what the server held (without changes still queued here).
+// A change of `syncs` hands it over again.
+export function useAlarmSchedule(snapshot: Snapshot | null, syncs: number) {
   const alarms = snapshot
     ? upcomingAlarms(snapshot, new Date(Date.now() - RING_LOOKBACK_MS), SCHEDULE_DAYS + 1).map((alarm) => ({ key: alarm.key, at: alarm.at.getTime(), title: alarm.title, kind: alarm.kind }))
     : null;
@@ -45,13 +70,13 @@ export function useAlarmSchedule(snapshot: Snapshot | null) {
   latest.current = alarms;
 
   useEffect(() => {
-    if (alarmsAvailable && alarms) void plugin.schedule({ alarms });
-  }, [signature]);
+    if (alarmsAvailable && alarms) handOver(alarms);
+  }, [signature, syncs]);
 
   useEffect(() => {
     if (!alarmsAvailable) return;
     const resend = () => {
-      if (document.visibilityState === "visible" && latest.current) void plugin.schedule({ alarms: latest.current });
+      if (document.visibilityState === "visible" && latest.current) handOver(latest.current);
     };
     document.addEventListener("visibilitychange", resend);
     return () => document.removeEventListener("visibilitychange", resend);
@@ -108,10 +133,32 @@ export function useAlarmPermissions() {
   return permissions;
 }
 
+// What the phone holds, read again after each handover from the app and whenever the app comes back
+// to the front (the background refresh may have handed one over meanwhile); null off the phone
+export function useHeldSchedule() {
+  const [held, setHeld] = useState<HeldSchedule | null>(null);
+
+  useEffect(() => {
+    if (!alarmsAvailable) return;
+    const read = () => void plugin.held().then(setHeld);
+    read();
+    handedOver.add(read);
+    document.addEventListener("visibilitychange", read);
+    return () => {
+      handedOver.delete(read);
+      document.removeEventListener("visibilitychange", read);
+    };
+  }, []);
+
+  return held;
+}
+
 // The settings screens that grant each of them
 export const fixPermission = {
   notifications: () => void plugin.requestNotifications(),
   fullScreen: () => void plugin.openFullScreenSettings(),
+  alarmChannel: () => void plugin.openAlarmChannelSettings(),
+  exactAlarms: () => void plugin.openExactAlarmSettings(),
   battery: () => void plugin.requestBatteryExemption(),
   autostart: () => void plugin.openAutostart(),
 };

@@ -65,7 +65,8 @@ test("reads of the whole graph", async () => {
     const typed = ["Zebra", "Mango", "Apple", "Kiwi", "Banana", "Cherry"];
     await page.locator("textarea").fill(typed.join("\n"));
     await now.getByRole("button", { name: /^Add/ }).click();
-    await expect.poll(async () => (await db.from("graph_nodes").select("id").in("title", typed)).data?.length).toBe(typed.length);
+    // Each step takes a few sequential requests to the server (about 0.35 s each from here), so six take seconds
+    await expect.poll(async () => (await db.from("graph_nodes").select("id").in("title", typed)).data?.length, { timeout: 20_000 }).toBe(typed.length);
     const stored = async () => (await db.from("graph_nodes").select("title").in("title", typed).order("created_at").order("id")).data?.map(({ title }) => title);
     expect(await stored()).toEqual(typed);
     await page.reload();

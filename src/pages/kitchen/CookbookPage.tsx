@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { askToLeave, holdUnsaved } from "../../lib/unsaved";
 import { HexMark } from "../../components/HexTile";
 import { DEFAULT_REMINDER, fromBase, recipeProblems, sameKind, toBase } from "../../shared/kitchen";
 import { stockUnits, type Kitchen, type Recipe, type RecipeIngredient, type RecipeReminder, type StockUnit } from "../../shared/types";
@@ -12,16 +13,19 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
   // The recipe being written; `isNew` is fixed when writing starts, so saving an edit of a recipe
   // deleted elsewhere meanwhile is refused rather than recreating it
   const [draft, setDraft] = useState<{ recipe: Recipe; isNew: boolean } | null>(null);
+  // Leaving the editor asks first when it holds changes (lib/unsaved.ts)
+  const leaveEditor = (then: () => void) => void askToLeave().then((leave) => leave && then());
   const recipes = [...kitchen.recipes].sort((a, b) => a.title.localeCompare(b.title));
   const open = recipes.find((recipe) => recipe.id === recipeId) ?? null;
 
-  const startNew = () => {
-    onOpenRecipe(null);
-    setDraft({
-      recipe: { id: crypto.randomUUID(), title: "", body: "", ingredients: [], reminders: [{ id: crypto.randomUUID(), anchorId: null, ...DEFAULT_REMINDER }] },
-      isNew: true,
+  const startNew = () =>
+    leaveEditor(() => {
+      onOpenRecipe(null);
+      setDraft({
+        recipe: { id: crypto.randomUUID(), title: "", body: "", ingredients: [], reminders: [{ id: crypto.randomUUID(), anchorId: null, ...DEFAULT_REMINDER }] },
+        isNew: true,
+      });
     });
-  };
 
   const detail = draft ? (
     <RecipeEditor
@@ -30,11 +34,13 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
       recipe={draft.recipe}
       onSave={async (recipe) => {
         // Kept open if the save failed, so nothing written is lost
-        if (!(await act("saveRecipe", recipe, draft.isNew))) return;
+        if (!(await act("saveRecipe", recipe, draft.isNew))) return false;
         setDraft(null);
         onOpenRecipe(recipe.id);
+        return true;
       }}
-      onCancel={() => setDraft(null)}
+      onCancel={() => leaveEditor(() => setDraft(null))}
+      onDiscard={() => setDraft(null)}
     />
   ) : open ? (
     <RecipeView
@@ -62,10 +68,12 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
         <button
           key={recipe.id}
           type="button"
-          onClick={() => {
-            setDraft(null);
-            onOpenRecipe(recipe.id);
-          }}
+          onClick={() =>
+            leaveEditor(() => {
+              setDraft(null);
+              onOpenRecipe(recipe.id);
+            })
+          }
           className={`rounded-lg px-3 py-2 text-left text-[13px] phone:min-h-11 ${recipe.id === open?.id && !draft ? "bg-ember/10 text-ember" : "bg-ink/[0.03] text-ink/80 hover:bg-ink/[0.055]"}`}
         >
           {recipe.title}
@@ -79,10 +87,12 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
         <button
           type="button"
-          onClick={() => {
-            setDraft(null);
-            onOpenRecipe(null);
-          }}
+          onClick={() =>
+            leaveEditor(() => {
+              setDraft(null);
+              onOpenRecipe(null);
+            })
+          }
           className="self-start text-[13px] text-muted phone:min-h-11 phone:pr-3"
         >
           ‹ Recipes
@@ -161,8 +171,10 @@ function RecipeView({ kitchen, recipe, onEdit, onDelete }: { kitchen: Kitchen; r
 }
 
 // Write or rewrite a recipe: its text, the ingredients it deducts, and the alarms it sets.
-// Nothing is saved until Save, which refuses what recipeProblems finds.
-function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen; recipe: Recipe; onSave: (recipe: Recipe) => Promise<void>; onCancel: () => void }) {
+// Nothing is saved until Save, which refuses what recipeProblems finds. While anything differs from
+// the recipe as it opened, the edit is held as unsaved (lib/unsaved.ts), so leaving asks first.
+type RecipeEditorProps = { kitchen: Kitchen; recipe: Recipe; onSave: (recipe: Recipe) => Promise<boolean>; onCancel: () => void; onDiscard: () => void };
+function RecipeEditor({ kitchen, recipe, onSave, onCancel, onDiscard }: RecipeEditorProps) {
   const [draft, setDraft] = useState(recipe);
   // Amounts as typed, in each ingredient's own unit, so a half-typed number is kept
   const [amounts, setAmounts] = useState<Record<string, string>>(() =>
@@ -181,6 +193,29 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
     ),
   });
 
+  // Saves if recipeProblems finds nothing; true once saved. The hold is let go first, since the save
+  // leaves the editor (and may navigate), and taken again if the save fails.
+  const save = async () => {
+    const edited = withAmounts();
+    const found = recipeProblems(edited, kitchen.items);
+    setProblems(found);
+    if (found.length > 0) return false;
+    release.current?.();
+    const saved = await onSave(edited);
+    if (!saved) setHoldAgain((count) => count + 1);
+    return saved;
+  };
+  const changed = JSON.stringify(draft) !== JSON.stringify(recipe) || Object.entries(amounts).some(([id, amount]) => amount !== opened[id]);
+  const latestSave = useRef(save);
+  latestSave.current = save;
+  const release = useRef<(() => void) | null>(null);
+  const [holdAgain, setHoldAgain] = useState(0);
+  useEffect(() => {
+    if (!changed) return;
+    release.current = holdUnsaved({ what: "changes to this recipe", save: () => latestSave.current(), discard: onDiscard });
+    return release.current;
+  }, [changed, holdAgain]);
+
   const setIngredient = (id: string, patch: Partial<RecipeIngredient>) =>
     setDraft({ ...draft, ingredients: draft.ingredients.map((ingredient) => (ingredient.id === id ? { ...ingredient, ...patch } : ingredient)) });
   const setReminder = (id: string, patch: Partial<RecipeReminder>) =>
@@ -198,10 +233,7 @@ function RecipeEditor({ kitchen, recipe, onSave, onCancel }: { kitchen: Kitchen;
       className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5"
       onSubmit={(event) => {
         event.preventDefault();
-        const recipe = withAmounts();
-        const found = recipeProblems(recipe, kitchen.items);
-        setProblems(found);
-        if (found.length === 0) void onSave(recipe);
+        void save();
       }}
     >
       <input

@@ -80,11 +80,17 @@ test("focus", async () => {
     await expect(first()).toContainText("Read the survey");
   });
 
-  await test.step("the keys: N passes, / goes to the capture field and typing there passes nothing", async () => {
+  await test.step("the keys: N passes, but not under the keys list; / goes to the capture field and typing there passes nothing", async () => {
     await page.keyboard.press("n");
     await expect(first()).toContainText("Apply to DTL");
     await page.keyboard.press("n");
     await expect(first()).toContainText("Read the survey");
+    // With the keys list open, the keys are not for Now
+    await page.keyboard.press("?");
+    await page.keyboard.press("n");
+    await expect(first()).toContainText("Read the survey");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Keys" })).toHaveCount(0);
     await page.keyboard.press("/");
     await expect(page.getByLabel("Capture a thought")).toBeFocused();
     await page.keyboard.type("n");

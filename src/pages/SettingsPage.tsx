@@ -1,12 +1,14 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { connectBackgroundRefresh, fixPermission, type AlarmPermissions } from "../lib/alarms";
+import { connectBackgroundRefresh, fixPermission, useHeldSchedule, type AlarmPermissions } from "../lib/alarms";
 import { db } from "../lib/client";
+import { currentTimeZone } from "../shared/dates";
 import { setTheme, themeNames, themes, useTheme } from "../lib/useTheme";
 import type { Act } from "./home/HomePage";
 
 // The phone's settings: the theme, the hour the day starts (also set from Today's date), and what the
-// phone must allow for alarms to ring on time (`permissions` is null outside the Android app)
-export function SettingsPage({ permissions, dayStartHour, act }: { permissions: AlarmPermissions | null; dayStartHour: number; act: Act }) {
+// phone must allow for alarms to ring on time, and the alarms it holds (`permissions` is null outside
+// the Android app). `sync` reads the data again and hands the phone its schedule.
+export function SettingsPage({ permissions, dayStartHour, act, sync }: { permissions: AlarmPermissions | null; dayStartHour: number; act: Act; sync: () => Promise<void> }) {
   const theme = useTheme();
   return (
     <div className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto">
@@ -19,7 +21,7 @@ export function SettingsPage({ permissions, dayStartHour, act }: { permissions: 
               role="radio"
               aria-checked={theme === option}
               onClick={() => setTheme(option)}
-              className={`min-h-11 flex-1 rounded-lg text-[13px] ${theme === option ? "bg-card text-ink shadow-[var(--card-shadow)]" : "text-muted"}`}
+              className={`min-h-11 flex-1 rounded-lg text-[13px] ${theme === option ? "bg-ember/12 font-medium text-ember ring-1 ring-ember/40" : "text-muted"}`}
             >
               {themeNames[option]}
             </button>
@@ -48,6 +50,11 @@ export function SettingsPage({ permissions, dayStartHour, act }: { permissions: 
           <Reliability permissions={permissions} />
         </Group>
       ) : null}
+      {permissions ? (
+        <Group title="Alarms on this phone">
+          <Held sync={sync} />
+        </Group>
+      ) : null}
     </div>
   );
 }
@@ -70,7 +77,9 @@ function Reliability({ permissions }: { permissions: AlarmPermissions }) {
   const background = permissions.background || connected;
   const items = [
     { label: "Notifications allowed", done: permissions.notifications, fix: fixPermission.notifications },
+    { label: "Alarms may be set", done: permissions.exactAlarms, fix: fixPermission.exactAlarms },
     { label: "Alarms show over the lock screen", done: permissions.fullScreen, fix: fixPermission.fullScreen },
+    { label: "Alarm notifications pop up", done: permissions.alarmChannel, fix: fixPermission.alarmChannel },
     { label: "Battery optimisation off for Ashborn", done: permissions.battery, fix: fixPermission.battery },
     ...(permissions.xiaomi ? [{ label: "Autostart on (Xiaomi)", done: null, fix: fixPermission.autostart }] : []),
     { label: "Alarms refresh while the app is closed", done: background, fix: () => setAsking(true) },
@@ -90,15 +99,71 @@ function Reliability({ permissions }: { permissions: AlarmPermissions }) {
   );
 }
 
+// The phone's stored schedule and when the app and the background refresh each last handed it over,
+// with a button to sync now
+function Held({ sync }: { sync: () => Promise<void> }) {
+  const held = useHeldSchedule();
+  const [syncing, setSyncing] = useState(false);
+
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      await sync();
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 px-1 text-[13px]">
+      <button type="button" onClick={() => void syncNow()} disabled={syncing} className="min-h-11 rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50">
+        {syncing ? "Syncing…" : "Sync now"}
+      </button>
+      {held ? (
+        <>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]">
+            <dt className="text-muted">From the app</dt>
+            <dd className="font-mono tabular-nums text-ink/85">{held.appHandedAt ? moment(held.appHandedAt) : "never"}</dd>
+            <dt className="text-muted">From the background</dt>
+            <dd className="font-mono tabular-nums text-ink/85">{held.backgroundHandedAt ? moment(held.backgroundHandedAt) : "never"}</dd>
+            <dt className="text-muted">Android rings next</dt>
+            <dd className="font-mono tabular-nums text-ink/85">{held.system ? `${moment(held.system.at)}${held.system.ours ? "" : " (another app)"}` : "nothing set"}</dd>
+          </dl>
+          {held.alarms.length === 0 ? (
+            <p className="text-ink/85">No alarms to ring.</p>
+          ) : (
+            <ul aria-label="Next alarms on this phone" className="space-y-1">
+              {held.alarms.map((alarm) => (
+                <li key={alarm.key} className="flex gap-3 text-ink/85">
+                  <span className="font-mono tabular-nums text-muted">{moment(alarm.at)}</span>
+                  <span className="min-w-0 truncate">{alarm.title}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+// A moment as its weekday and clock time
+const moment = (at: number) => new Date(at).toLocaleString([], { timeZone: currentTimeZone(), weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
 function BackgroundSignIn({ onConnected }: { onConnected: () => void }) {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  // While connecting, so a second tap doesn't make a second session
+  const [connecting, setConnecting] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    setConnecting(true);
+    setMessage(null);
     const { data } = await db.auth.getSession();
     const email = data.session?.user.email;
     const error = email ? await connectBackgroundRefresh(email, password) : "Not signed in.";
+    setConnecting(false);
     if (error) setMessage(error);
     else onConnected();
   };
@@ -106,7 +171,7 @@ function BackgroundSignIn({ onConnected }: { onConnected: () => void }) {
   return (
     <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-center gap-2 px-1 pt-1">
       <input type="password" required autoFocus placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-canvas/70 px-3 py-2 text-xs text-ink/90 placeholder:text-muted focus:border-ink/30 focus:outline-none" />
-      <button type="submit" className="min-h-11 rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50">
+      <button type="submit" disabled={connecting} className="min-h-11 rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50">
         Connect
       </button>
       {message ? <p className="w-full text-[12px] text-ink/60">{message}</p> : null}

@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { buildGraphModel } from "../../shared/graphModel";
 import type { Snapshot } from "../../shared/types";
 import { statLevel } from "../../shared/progression";
 import { CharacterPanel } from "../home/CharacterPanel";
 import { portraitTier, preparePortrait } from "../home/Portrait";
 import type { Act } from "../home/HomePage";
-import { QuestGraph } from "../home/QuestGraph";
+import { QuestGraph } from "../home/LazyQuestGraph";
 import { TodayPanel } from "../home/TodayPanel";
 
 export type PhoneHomeScreen = "todo" | "graph" | "character";
 
 // The phone's Home section, one screen at a time: what to do today, the graph (to look at more
-// than to edit), and the character
-export function PhoneHome({ snapshot, act, screen }: { snapshot: Snapshot; act: Act; screen: PhoneHomeScreen }) {
+// than to edit), and the character. Another section (`away`, Alarms, Kitchen or Settings) is shown
+// in it in Today's place, so the graph built behind it stays built.
+export function PhoneHome({ snapshot, act, screen, away }: { snapshot: Snapshot; act: Act; screen: PhoneHomeScreen; away?: ReactNode }) {
   // The model reads only nodes and edges, so a routine, deadline or Kitchen change leaves it, and
   // everything the graph derives from it, as it was
   const model = useMemo(() => buildGraphModel(snapshot), [snapshot.nodes, snapshot.edges]);
@@ -56,9 +57,15 @@ export function PhoneHome({ snapshot, act, screen }: { snapshot: Snapshot; act: 
           {questGraph}
         </section>
       ) : null}
-      {screen === "character" ? (
-        <div className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-y-auto">
-          <CharacterPanel model={model} card />
+      {away ? (
+        <div className="flex min-h-0 min-w-0 flex-1">{away}</div>
+      ) : screen === "character" ? (
+        // Centred by auto margins, which give way when the card is taller than the screen (the phone
+        // on its side): centring by justify-content would push its top out of scrolling's reach
+        <div className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+          <div className="my-auto flex w-full justify-center">
+            <CharacterPanel model={model} card />
+          </div>
         </div>
       ) : screen === "todo" ? (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

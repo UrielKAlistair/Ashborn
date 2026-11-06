@@ -45,7 +45,7 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
     for (const routine of snapshot.routines) {
       if (routine.alarm === "none" || !routine.time || !routine.weekdays.includes(weekdayOf(date))) continue;
       if (checked.has(`${routine.id}@${date}`)) continue;
-      alarms.push({ key: `routine:${routine.id}@${date}`, at: routineAt(date, routine.time, dayStartHour), title: routine.title, kind: routine.alarm });
+      alarms.push({ key: `routine:${routine.id}@${date}`, at: onDayAt(date, routine.time, dayStartHour), title: routine.title, kind: routine.alarm });
     }
   }
   const end = startOfDay(addDays(firstDate, days), 0);
@@ -56,7 +56,7 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
   const lastDate = addDays(firstDate, days - 1);
   for (const deadline of snapshot.deadlines) {
     if (!deadline.alarmTime || deadline.dueDate > lastDate) continue;
-    alarms.push({ key: `deadline:${deadline.id}@${deadline.dueDate}`, at: atTime(deadline.dueDate, deadline.alarmTime), title: `Due today: ${deadline.title}`, kind: "plain" });
+    alarms.push({ key: `deadline:${deadline.id}@${deadline.dueDate}`, at: onDayAt(deadline.dueDate, deadline.alarmTime, dayStartHour), title: `Due today: ${deadline.title}`, kind: "plain" });
   }
 
   for (const reminder of mealReminders(snapshot.kitchen, from, days)) alarms.push({ ...reminder, kind: "plain" });
@@ -71,8 +71,9 @@ export function nextOccurrence(time: string, now = new Date()) {
   return at > now ? at : atTime(addDays(toISODate(now), 1), time);
 }
 
-// When a routine timed `time` rings on its day `date`: within the day, which may run past midnight
-function routineAt(date: ISODate, time: string, dayStartHour: number) {
+// When `time` falls on the day `date` (a routine's or a deadline's): within the day, which runs from the
+// day-start hour and so past midnight; 03:00 on a day starting at 04:00 is the night after it
+export function onDayAt(date: ISODate, time: string, dayStartHour: number) {
   const at = atTime(date, time);
   return at < startOfDay(date, dayStartHour) ? atTime(addDays(date, 1), time) : at;
 }

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { applyDelta } from "../../src/lib/api";
+import { applyDelta, keepUnchanged } from "../../src/lib/api";
 import { emptyKitchen } from "../../src/shared/kitchen";
 import { PROGRESS_UNIT } from "../../src/shared/progression";
 import type { GraphNode, Snapshot } from "../../src/shared/types";
@@ -92,4 +92,18 @@ test("XP counts the completion that was kept, and activity only moves forward", 
   const older = node("a", { completedAt: null, ownXp: 3, lastActive: "2026-11-03T00:00:02.000Z", stamps: { completed_at: "2026-11-03T00:00:02Z" } });
   const [merged] = applyDelta({ ...snapshot, nodes: [shown] }, { nodes: [older] }).nodes;
   expect(merged).toMatchObject({ completedAt: "2026-11-03T00:00:05Z", ownXp: PROGRESS_UNIT + 3, lastActive: "2026-11-03T00:00:05.000Z" });
+});
+
+test("a snapshot read again keeps the objects of the rows it leaves unchanged", () => {
+  const same = structuredClone(snapshot);
+  expect(keepUnchanged(snapshot, same)).toBe(snapshot);
+
+  const renamed = structuredClone(snapshot);
+  renamed.nodes[1].title = "b, renamed";
+  const kept = keepUnchanged(snapshot, renamed);
+  expect(kept.nodes[0]).toBe(snapshot.nodes[0]);
+  expect(kept.nodes[1]).toEqual(renamed.nodes[1]);
+  expect(kept.edges).toBe(snapshot.edges);
+  expect(kept.kitchen).toBe(snapshot.kitchen);
+  expect(kept.settings).toBe(snapshot.settings);
 });

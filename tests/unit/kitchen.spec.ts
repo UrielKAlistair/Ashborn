@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { cooked, fromBase, mealDeductions, mealReminders, read, recipeProblems, reminderOffsets, sameKind, shownMeal, toBase, uncooked } from "../../src/shared/kitchen";
-import type { Kitchen, Recipe, RecipeReminder, StockItem } from "../../src/shared/types";
+import { previewChange } from "../../src/lib/offline";
+import { cooked, emptyKitchen, fromBase, mealDeductions, mealReminders, read, recipeProblems, reminderOffsets, sameKind, shownMeal, toBase, uncooked } from "../../src/shared/kitchen";
+import type { Kitchen, Recipe, RecipeReminder, Snapshot, StockItem } from "../../src/shared/types";
 
 // The Kitchen's rules: units, stock arithmetic, the default week, deductions and reminder times
 
@@ -135,4 +136,12 @@ test("meal reminders ring for planned meals with recipes; not cancelled or cooke
     "meal:2026-10-20:lunch:soak Tue Oct 20 2026 00:00 soak (lunch: Rice and beans)",
     "meal:2026-10-20:lunch:drain Tue Oct 20 2026 08:00 drain (lunch: Rice and beans)",
   ]);
+});
+
+// Shown while on its way: an item whose row already arrived live is not listed a second time
+test("a stock item made while its row has already arrived is listed once", () => {
+  const item: StockItem = { id: "rice", name: "Rice", unit: "kg", target: 2000, onHand: 1500, readAt: "2026-11-06T00:00:00.000Z" };
+  const snapshot = { kitchen: { ...emptyKitchen, items: [item] } } as Snapshot;
+  const delta = previewChange(snapshot, "createStockItem", [{ id: "rice", name: "Rice", unit: "kg", target: 2000 }], "2026-11-06T00:01:00.000Z");
+  expect((delta.kitchen ?? snapshot.kitchen).items).toEqual([item]);
 });

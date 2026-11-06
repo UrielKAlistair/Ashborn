@@ -28,5 +28,12 @@ contextBridge.exposeInMainWorld("ashborn", {
     return () => ipcRenderer.removeListener("now:timer", handle);
   },
   newestBackup: () => ipcRenderer.invoke("backup:newest"),
+  setUnsaved: (what: string | null) => ipcRenderer.send("app:unsaved", what),
+  onSaveForQuit: (save: () => Promise<boolean>) => {
+    // A save that throws answers false, so main is never left waiting; `request` says which ask it answers
+    const handle = async (_event: unknown, request: number) => ipcRenderer.send("app:saved-for-quit", await save().catch(() => false), request);
+    ipcRenderer.on("app:save-for-quit", handle);
+    return () => ipcRenderer.removeListener("app:save-for-quit", handle);
+  },
   writeBackup: (json: string) => ipcRenderer.invoke("backup:write", json),
 });

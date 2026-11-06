@@ -3,7 +3,7 @@ import type { Mutation } from "../../lib/api";
 import { buildGraphModel } from "../../shared/graphModel";
 import type { AshbornApi, Snapshot } from "../../shared/types";
 import { CharacterPanel } from "./CharacterPanel";
-import { QuestGraph } from "./QuestGraph";
+import { QuestGraph } from "./LazyQuestGraph";
 import { TodayPanel } from "./TodayPanel";
 
 // Runs a change in the main process and merges what it returns into the data on screen; resolves
