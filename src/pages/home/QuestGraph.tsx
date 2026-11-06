@@ -36,7 +36,7 @@ import { SplitContext, SplitSteps } from "./SplitSteps";
 import { useIsNowStep } from "./nowMirror";
 import { onShowOnGraph, takeWaitingShow } from "./showOnGraph";
 import { sharpen, usePhonePanZoom } from "./phonePanZoom";
-import Territories from "./territory/Territories";
+import Territories, { setTerritoryFocus } from "./territory/Territories";
 import type { TerritoryQuest } from "./territory/territoryGrid";
 import { Tick } from "./Tick";
 import { fontsLoaded, labelWidth, lineHeight, measureTitles, titleLines, type TitleText } from "./titleLines";
@@ -319,6 +319,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     ]);
     return { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone };
   }, [model, snapshot.edges, collapsed, opened, today, dayStartHour, addingTo, priorities, fontsReady, phone]);
+  // Each rendered node's quest, whose territory a hover keeps lit
+  const questOf = useMemo(() => new Map(rendered.map(({ node, questId }) => [node.id, questId])), [rendered]);
   const paneMeasured = useStore((state) => state.width > 0 && state.height > 0);
   const paneWidth = useStore((state) => state.width);
   const paneHeight = useStore((state) => state.height);
@@ -644,6 +646,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       zoomOnPinch={!phone}
       nodesDraggable={!phone}
       nodeDragThreshold={4}
+      onNodeMouseEnter={(_event, entered) => setTerritoryFocus(questOf.get(entered.id) ?? null)}
+      onNodeMouseLeave={() => setTerritoryFocus(null)}
       nodesConnectable={!phone}
       onNodeDragStart={(_event, dragged) => (dragging.current = dragged.id)}
       onNodeDrag={(_event, dragged) => follow(dragged.id, dragged.position)}

@@ -10,6 +10,10 @@ import type { CameraFeed } from "../phonePanZoom";
 // territoryGrid.ts), drawn on a WebGL canvas (territoryRenderer.ts). Without WebGL the graph
 // simply has no background.
 
+// The hovered quest, told to the canvas without re-rendering anything
+const focusListeners = new Set<(id: string | null) => void>();
+export const setTerritoryFocus = (id: string | null) => focusListeners.forEach((listener) => listener(id));
+
 // `camera`, on the phone, moves the territory during a gesture, before React Flow's store knows
 function Territories({ quests, camera }: { quests: TerritoryQuest[]; camera?: CameraFeed }) {
   const store = useStoreApi();
@@ -49,6 +53,12 @@ function Territories({ quests, camera }: { quests: TerritoryQuest[]; camera?: Ca
   }, [store]);
 
   useLayoutEffect(() => rendererRef.current?.setStyle(canvasStyle(theme)), [theme]);
+
+  useLayoutEffect(() => {
+    const listener = (id: string | null) => rendererRef.current?.setFocus(id);
+    focusListeners.add(listener);
+    return () => void focusListeners.delete(listener);
+  }, []);
 
   useLayoutEffect(() => camera?.subscribe((next) => rendererRef.current?.setCamera(next)), [camera]);
 

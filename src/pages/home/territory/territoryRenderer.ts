@@ -12,6 +12,7 @@ import type { CellLook, Grid, TerritoryQuest } from "./territoryGrid";
 // is drawn while nothing changes.
 
 const paintFadeMs = 200;
+const focusFadeMs = 150;
 const maxPixelRatio = 2;
 
 const vertexShader = `
@@ -37,6 +38,7 @@ uniform sampler2D u_owner;  // per cell: owner's index + 1 (0: none) as 16 bits 
 uniform sampler2D u_rects;  // per quest, a column: row 0 its box's corner, row 1 its size, 16 bits each
 uniform vec3 u_rectInfo;    // quests, and the map point the corners are measured from
 uniform float u_reach;      // how far a territory's light runs past its quest's edge, map units
+uniform vec2 u_focus;       // the hovered quest's index + 1 (0: none), and how far the others are dimmed in (0-1)
 uniform float u_dark;       // 1 on the dark theme: light is added; 0 on paper: colour is laid down
 
 vec4 over(vec4 below, vec3 rgb, float alpha) {
@@ -111,6 +113,9 @@ void main() {
   float fromBox = length(max(max(low - p, p - high), 0.0));
   float t = clamp(fromBox / u_reach, 0.0, 1.0);
   float light = paint.a * exp(-2.2 * t) * (1.0 - smoothstep(0.7, 1.0, t));
+  // While a quest is hovered, every other territory dims, more on paper than in the dark
+  float others = u_focus.x > 0.5 && abs(index - u_focus.x) > 0.5 ? u_focus.y : 0.0;
+  light *= 1.0 - (u_dark > 0.5 ? 0.3 : 0.4) * others;
   vec3 hue = paint.rgb;
   // The light pools round the card, whatever the cells, and shows up the grid's lines where it falls
   float core = line(abs(h - edge), 0.5 * cssPx, px);
@@ -151,6 +156,11 @@ export class TerritoryRenderer {
   private dirty = true;
 
   private camera: Camera = { x: 0, y: 0, zoom: 1 };
+  // The hovered quest, and the others' dimming fading towards `focusTarget` (1 while hovered, 0 after)
+  private focusId: string | null = null;
+  private focusShown = 0;
+  private focusTarget = 0;
+  private focusAt = 0;
   private style: CanvasStyle = { ink: [255, 255, 255], fabricAlpha: 0, dark: true, hues: { 1: [255, 255, 255], 2: [255, 255, 255], 3: [255, 255, 255], 4: [255, 255, 255], none: [255, 255, 255] } };
 
   // Cell state, by texel (row-major over the grid's columns and rows)
@@ -215,6 +225,25 @@ export class TerritoryRenderer {
     this.style = style;
     if (this.grid) this.paint(this.grid, this.looks, this.quests, true);
     this.invalidate();
+  }
+
+  // Dims every territory but this quest's (null: none), fading in or out
+  setFocus(id: string | null) {
+    // Leaving one card for another of the same quest changes nothing
+    if (id === null ? this.focusTarget === 0 : id === this.focusId && this.focusTarget === 1) return;
+    const now = performance.now();
+    this.focusShown = this.focusLevel(now);
+    // From one quest straight to another the dimming stays, and moves to the new one
+    if (id) this.focusId = id;
+    this.focusTarget = id ? 1 : 0;
+    this.focusAt = now;
+    this.invalidate();
+  }
+
+  private focusLevel(now: number) {
+    // A frame's timestamp can be a little before the change that started the fade
+    const progress = Math.max(0, Math.min(1, (now - this.focusAt) / focusFadeMs));
+    return this.focusShown + (this.focusTarget - this.focusShown) * progress;
   }
 
   setCamera(camera: Camera) {
@@ -335,11 +364,13 @@ export class TerritoryRenderer {
   private render = (now: number) => {
     this.frame = 0;
     const fading = this.fading.size > 0;
+    // One frame past the fade's end, so its last level is drawn
+    const focusing = now - this.focusAt < focusFadeMs + 20;
     if (fading) this.stepFades(now);
-    if (this.dirty || fading) this.draw();
+    if (this.dirty || fading || focusing) this.draw(now);
     this.dirty = false;
     // Fades run frame by frame; otherwise nothing is redrawn until something changes
-    if (fading) this.frame = requestAnimationFrame(this.render);
+    if (fading || focusing) this.frame = requestAnimationFrame(this.render);
   };
 
   private resize() {
@@ -349,7 +380,7 @@ export class TerritoryRenderer {
     this.invalidate();
   }
 
-  private draw() {
+  private draw(now = performance.now()) {
     const { gl, canvas, uniforms: u } = this;
     if (!this.program || !this.textures) return;
     const ratio = canvas.width / Math.max(1, canvas.clientWidth);
@@ -374,6 +405,8 @@ export class TerritoryRenderer {
     gl.uniform3f(u.rectInfo, this.rectBytes.length / 8, this.rectOrigin[0], this.rectOrigin[1]);
     gl.uniform1f(u.reach, territoryReach);
     gl.uniform1f(u.dark, this.style.dark ? 1 : 0);
+    const focusIndex = this.focusId ? this.quests.findIndex((quest) => quest.id === this.focusId) + 1 : 0;
+    gl.uniform2f(u.focus, focusIndex, this.focusLevel(now));
     const grid = this.grid;
     if (grid) gl.uniform4f(u.grid, grid.cols[0], grid.rows[0], grid.cols[1] - grid.cols[0] + 1, grid.rows[1] - grid.rows[0] + 1);
     else gl.uniform4f(u.grid, 0, 0, 0, 0);
@@ -415,7 +448,7 @@ export class TerritoryRenderer {
     gl.enableVertexAttribArray(corner);
     gl.vertexAttribPointer(corner, 2, gl.FLOAT, false, 0, 0);
 
-    for (const name of ["size", "ratio", "camera", "radius", "fabric", "grid", "rectInfo", "reach", "dark"]) {
+    for (const name of ["size", "ratio", "camera", "radius", "fabric", "grid", "rectInfo", "reach", "dark", "focus"]) {
       this.uniforms[name] = gl.getUniformLocation(program, `u_${name}`);
     }
     const texture = (unit: number, name: string) => {
