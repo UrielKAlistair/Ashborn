@@ -64,6 +64,17 @@ test("a change the server can never accept is dropped and reported; the rest are
   expect(queuedCount()).toBe(0);
 });
 
+test("a refusal quoting the user's text is a refusal, not a lost connection, whatever the text says", async () => {
+  setQueue([rename("refused"), rename("fine")]);
+  const refused = await sendQueue(
+    apiWith(async (title) => {
+      if (title === "refused") throw new ServerError("Network pasta was deleted on another device", "P0001", 400);
+    }),
+  );
+  expect(refused).toEqual(["Network pasta was deleted on another device"]);
+  expect(queuedCount()).toBe(0);
+});
+
 test("a change refused before the queue is held is still reported, with the hold", async () => {
   setQueue([rename("refused"), rename("held")]);
   const held = await sendQueue(

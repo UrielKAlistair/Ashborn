@@ -1,20 +1,28 @@
 // Ashborn's agent tools: read and edit quests, steps, links, routines, deadlines, alarms and the
 // Kitchen, as the signed-in user. Served on stdio from the laptop (mcp/server.ts) and over HTTP as
 // the hosted connector (mcp/connector.ts).
+//
+// registerTools registers every tool, in groups: the overview, the graph, deadlines, alarms,
+// routines, skipping and restoring rings, then the Kitchen (its view first). Every change goes through the app's own API
+// (src/lib/api.ts), so it keeps the same rules and stamps as a change made in the app. A tool checks
+// what it can before changing anything; a change of several parts refused partway says what was
+// already done. Replies are
+// plain sentences of what changed, or why not (run, failure). describe, near the end, writes the
+// overview an agent reads first.
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { createApi, readKitchen } from "../src/lib/api";
+import { createApi, readKitchen, readSettings } from "../src/lib/api";
 import { buildGraphModel, isDone, isFinished, questOf, statKeys, trainedStats, type GraphModel } from "../src/shared/graphModel";
 import { addDays, atTime, currentTimeZone, dayOf, daysBetween, setDayStartHour, today, toISODate, week, weekdayOf } from "../src/shared/dates";
-import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, shownMeal, toBase } from "../src/shared/kitchen";
+import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, sameName, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
 import { byTime, nextOccurrence, onDayAt } from "../src/shared/schedule";
 import { inboxLast, inInbox } from "../src/shared/inbox";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../src/shared/priority";
 import { goneQuiet } from "../src/shared/goneQuiet";
-import { mealSlots, stockUnits, type Alarm, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type RoutinePatch, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
+import { mealDaysAhead, mealDaysBack, mealSlots, stockUnits, type Alarm, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type DeadlinePatch, type RoutinePatch, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
 // Bounds on what one call may carry, generous for a plan or a week of meals, so a call can't ask for
 // unbounded work: ids and refs, titles and short texts, a recipe's method, and any list
@@ -23,10 +31,10 @@ const TITLE_MAX = 300;
 const BODY_MAX = 20_000;
 const LIST_MAX = 300;
 
-// Ends every reply that sets something to ring: the phone learns of it when Ashborn is opened there or
+// Ends every reply that sets something to ring (run adds the full stop): the phone learns of it when Ashborn is opened there or
 // on its background refresh, which Android can hold back for hours while the phone sleeps
 const RINGS_ON_PHONE =
-  "The phone picks this up when Ashborn is opened there, or on its background refresh, which can lag while the phone sleeps: ask the user to open Ashborn on the phone (Settings > Sync now shows what it holds) to be sure it rings.";
+  "The phone picks this up when Ashborn is opened there, or on its background refresh, which can lag while the phone sleeps: ask the user to open Ashborn on the phone (Settings > Sync now shows what it holds) to be sure it rings";
 
 // The tools, acting as whoever `db` is signed in as, `userId`. `blocked` gives a reason every tool refuses
 // with, or null.
@@ -122,7 +130,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "overview",
     {
       description:
-        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list, the Inbox of unsorted thoughts last (done steps marked [x], prerequisites shown as 'after'), hidden quests, every routine with its weekdays (today's ticked or not), alarms, skipped rings ahead, open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
+        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list, the Inbox of unsorted thoughts last (done steps marked [x], prerequisites shown as 'after'), shelved quests, every routine with its weekdays (today's ticked or not), alarms, skipped rings ahead, open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
       inputSchema: { quest_id: z.string().optional().describe("Show only this quest") },
     },
     async ({ quest_id }) => {
@@ -230,7 +238,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "shelve",
     {
-      description: "Shelves quests or steps: they stay on the graph, greyed, and nothing inside them is offered as ready until they are unshelved.",
+      description: "Shelves quests or steps: they and everything inside them leave the graph and the to-do, kept, until they are unshelved. A shelved quest is listed under Shelved quests in `overview`; a shelved step still shows in its quest's outline, marked (shelved).",
       inputSchema: { ids },
     },
     async ({ ids }) => runEach(ids, (nodeId) => api.updateNode(nodeId, { shelved: true }), "Shelved"),
@@ -310,22 +318,21 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "update_quest",
     {
       description:
-        "Sets which stats a quest trains and how much, and whether it is shown on the dashboard. Each XP earned in the quest adds weight × XP to each stat.",
+        "Sets which stats a quest trains and how much. Each XP earned in the quest adds weight × XP to each stat.",
       inputSchema: {
         id,
         stat_weights: z
           .partialRecord(z.enum(statKeys), z.number().nonnegative())
           .optional()
           .describe('Weight per stat, e.g. {"INT": 0.2, "CHR": 0.1}; replaces the quest\'s weights, and {} trains nothing'),
-        shown: z.boolean().optional(),
       },
     },
-    async ({ id, stat_weights, shown }) => {
-      // Stats and showing belong to quests: on a step they would be stored and do nothing
+    async ({ id, stat_weights }) => {
+      // Stats belong to quests: on a step they would be stored and do nothing
       const { data } = await db.from("graph_nodes").select("parent_id").eq("id", id).maybeSingle();
       if (!data || (data as { parent_id: string | null }).parent_id !== null) return failure(`${id} is not a quest.`);
-      if (stat_weights === undefined && shown === undefined) return failure("Give stat_weights, shown, or both.");
-      return run([() => api.updateNode(id, { statWeights: stat_weights, active: shown })], "Updated");
+      if (stat_weights === undefined) return failure("Give stat_weights.");
+      return run([() => api.updateNode(id, { statWeights: stat_weights })], "Updated");
     },
   );
 
@@ -334,25 +341,45 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     {
       description:
         "Adds a dated obligation, optionally with an alarm at a time on its due day (rings on the phone). Linking it to a quest or step (`node_id`) only groups it there; a deadline never changes a priority, which only the user sets. For a ring with no deadline, use add_alarm with a date.",
-      inputSchema: { title: z.string().min(1).max(TITLE_MAX), due_date: date, alarm_time: clock.optional(), node_id: id.optional().describe("The quest or step it belongs to") },
+      inputSchema: { title: z.string().trim().min(1).max(TITLE_MAX), due_date: date, alarm_time: clock.optional(), node_id: id.optional().describe("The quest or step it belongs to") },
     },
     async ({ title, due_date, alarm_time, node_id }) => {
       if (node_id && !(await existingNodes([node_id])).has(node_id)) return failure(`Not a quest or step: ${node_id}. Nothing was added.`);
+      // As add_alarm: an alarm whose moment has passed would never ring
+      if (alarm_time && onDayAt(due_date, alarm_time, (await readSettings(db)).dayStartHour).getTime() <= Date.now()) {
+        return failure(`${due_date} ${alarm_time} has passed: give a later alarm_time, or none. Nothing was added.`);
+      }
       const deadlineId = crypto.randomUUID();
       return run([() => api.createDeadline({ id: deadlineId, title, dueDate: due_date, alarmTime: alarm_time ?? null, nodeId: node_id ?? null })], `Added deadline [${deadlineId}]${alarm_time ? `. ${RINGS_ON_PHONE}` : ""}`);
     },
   );
 
   register(
-    "link_deadline",
+    "update_deadline",
     {
-      description: "Links a deadline to the quest or step it belongs to, which groups it there and changes no priority; null or no node_id unlinks it.",
-      inputSchema: { id: z.string().describe("A deadline id, as shown by `overview`"), node_id: id.nullish() },
+      description:
+        "Changes a deadline: its title, due date, alarm time on the due day, or the quest or step it is linked to. Only the fields given change. Linking only groups it there and changes no priority.",
+      inputSchema: {
+        id: z.string().describe("A deadline id, as shown by `overview`"),
+        title: z.string().trim().min(1).max(TITLE_MAX).optional(),
+        due_date: date.optional(),
+        alarm_time: clock.nullable().optional().describe("null removes the alarm"),
+        node_id: id.nullable().optional().describe("The quest or step it belongs to; null unlinks it"),
+      },
     },
-    async ({ id, node_id }) => {
-      if (!(await deadlineExists(id))) return failure(`No deadline ${id}.`);
-      if (node_id && !(await existingNodes([node_id])).has(node_id)) return failure(`Not a quest or step: ${node_id}.`);
-      return run([() => api.linkDeadline(id, node_id || null)], node_id ? "Linked deadline" : "Unlinked deadline");
+    async ({ id, title, due_date, alarm_time, node_id }) => {
+      const current = (await db.from("deadlines").select("due_date, alarm_time").eq("id", id).maybeSingle()).data as { due_date: string; alarm_time: string | null } | null;
+      if (!current) return failure(`No deadline ${id}.`);
+      if (node_id && !(await existingNodes([node_id])).has(node_id)) return failure(`Not a quest or step: ${node_id}. Nothing was changed.`);
+      const patch = Object.fromEntries(Object.entries({ title, dueDate: due_date, alarmTime: alarm_time, nodeId: node_id }).filter(([, value]) => value !== undefined)) as DeadlinePatch;
+      if (Object.keys(patch).length === 0) return failure("Nothing to change.");
+      // As add_deadline: an alarm whose moment has passed would never ring
+      const alarmAt = alarm_time === undefined ? current.alarm_time?.slice(0, 5) : alarm_time;
+      const dueOn = due_date ?? current.due_date;
+      if ((due_date !== undefined || alarm_time) && alarmAt && onDayAt(dueOn, alarmAt, (await readSettings(db)).dayStartHour).getTime() <= Date.now()) {
+        return failure(`${dueOn} ${alarmAt} has passed: give a later alarm_time, or null for none. Nothing was changed.`);
+      }
+      return run([() => api.updateDeadline(id, patch)], `Updated deadline${alarmAt ? `. ${RINGS_ON_PHONE}` : ""}`);
     },
   );
 
@@ -410,7 +437,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       description:
         "Adds a recurring task on chosen weekdays, with an optional if-then cue such as 'after dinner', and an optional time. With a time it can ring an alarm on the phone: plain, or one that only stops after walking or sit-ups (for waking up).",
       inputSchema: {
-        title: z.string().min(1).max(TITLE_MAX),
+        title: z.string().trim().min(1).max(TITLE_MAX),
         weekdays: z.array(z.enum(week as [string, ...string[]])).min(1),
         cue: z.string().max(TITLE_MAX).optional(),
         time: clock.optional(),
@@ -432,7 +459,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       description: "Changes a routine: its title, cue, weekdays, time or alarm. Only the fields given change; its ticks are kept. To change one date only, use skip_ring.",
       inputSchema: {
         id: z.string().max(ID_MAX).describe("A routine id, as shown by `overview`"),
-        title: z.string().min(1).max(TITLE_MAX).optional(),
+        title: z.string().trim().min(1).max(TITLE_MAX).optional(),
         cue: z.string().max(TITLE_MAX).optional(),
         weekdays: z.array(z.enum(week as [string, ...string[]])).min(1).optional(),
         time: clock.nullable().optional().describe("null removes the time (and so the alarm)"),
@@ -454,7 +481,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "skip_ring",
     {
       description:
-        "Stops one date's ring of a routine's alarm or of a recurring alarm, leaving every other date as it is; with instead_at it rings at that time instead, that date only (as a one-off alarm with the same title and kind). Use it to keep an alarm out of an exam or a meeting. restore_ring undoes it.",
+        "Stops one date's ring of a routine's alarm or of a recurring alarm, leaving every other date as it is; with instead_at it rings at that time instead, that date only (as a one-off alarm with the same title and kind). Use it to keep an alarm out of an exam or a meeting. restore_ring undoes it. A date already skipped, or an alarm turned off, is refused.",
       inputSchema: {
         id: z.string().max(ID_MAX).describe("A routine id or a recurring alarm's id, as shown by `overview`"),
         date: date.describe("The date whose ring to skip, YYYY-MM-DD"),
@@ -464,7 +491,10 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     async ({ id, date: day, instead_at }) => {
       const found = await ringOn(id, day);
       if ("problem" in found) return failure(found.problem);
-      const { ring } = found;
+      const { ring, snapshot } = found;
+      if (snapshot.alarms.some((alarm) => alarm.id === id && !alarm.enabled)) return failure(`${ring.title} is turned off, so it doesn't ring on ${day} anyway.`);
+      // A second skip would leave the first's alarm at its new time ringing too
+      if (snapshot.skippedAlarms.some((skip) => skip.key === ring.key)) return failure(`${ring.title} is already skipped on ${day}: restore_ring it first, then skip it again.`);
       if (ring.at(ring.time).getTime() <= Date.now()) return failure(`The ${day} ring at ${ring.time} has already passed.`);
       const moved = instead_at ? ring.at(instead_at) : null;
       if (moved && moved.getTime() <= Date.now()) return failure(`${day} ${instead_at} has passed.`);
@@ -543,7 +573,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "kitchen",
     {
       description:
-        "Shows the kitchen in full: stock items with amounts and targets, the meal plan from 2 days ago to 6 ahead ([x] cooked, [-] cancelled, (default) when it comes from the default week), the default week, and every recipe with its text, tracked ingredients and reminders. Ids in brackets are what the kitchen tools take.",
+        `Shows the kitchen in full: stock items with amounts and targets, the meal plan from ${mealDaysBack} days ago to ${mealDaysAhead} ahead ([x] cooked, [-] cancelled, (default) when it comes from the default week), the default week, and every recipe with its text, tracked ingredients and reminders. Ids in brackets are what the kitchen tools take.`,
       inputSchema: {},
     },
     async () => text(describeKitchen(await readKitchen(db))),
@@ -553,10 +583,10 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "save_recipe",
     {
       description:
-        "Creates a recipe, or replaces one when `id` is given: what you pass replaces that part (title, body, ingredients, reminders); what you leave out stays. `body` is free text for the reader, with any amounts and formatting. `ingredients` are only the tracked bulk staples cooking deducts from stock (rice, beans; never spices), each naming a stock item by id or name, in a unit of the item's kind. `reminders` are alarms rung for a planned meal using the recipe: `offset_minutes` (negative is earlier) from the meal's time, or from another reminder given by its `ref`. A new recipe with no reminders given gets one, 'Start prep', 45 minutes before the meal; pass [] for none.",
+        "Creates a recipe, or replaces one when `id` is given: what you pass replaces that part (title, body, ingredients, reminders); what you leave out stays. `body` is free text for the reader, with any amounts and formatting; for a recipe cooked more than one way, a line `[1: name]` starts text only route 1 shows (the app shows each route as a tab) and `[all]` returns to text every route shows. `ingredients` are only the tracked bulk staples cooking deducts from stock (rice, beans; never spices), each naming a stock item by id or name, in a unit of the item's kind. `reminders` are alarms rung for a planned meal using the recipe: `offset_minutes` (negative is earlier) from the meal's time, or from another reminder given by its `ref`. A new recipe with no reminders given gets one, 'Start prep', 45 minutes before the meal; pass [] for none.",
       inputSchema: {
         id: z.string().optional().describe("Recipe id to replace"),
-        title: z.string().min(1).max(TITLE_MAX).optional().describe("Needed for a new recipe"),
+        title: z.string().trim().min(1).max(TITLE_MAX).optional().describe("Needed for a new recipe"),
         body: z.string().max(BODY_MAX).optional(),
         ingredients: z
           .array(z.object({ item: z.string().max(TITLE_MAX).describe("Stock item id or name"), amount: z.number().positive(), unit, name: z.string().max(TITLE_MAX).optional().describe("Defaults to the item's name") }))
@@ -566,7 +596,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
           .array(
             z.object({
               ref: z.string().max(ID_MAX).describe("Your label for it, unique in this call"),
-              label: z.string().min(1).max(TITLE_MAX),
+              label: z.string().trim().min(1).max(TITLE_MAX),
               offset_minutes: z.number().int(),
               from: z.string().max(ID_MAX).optional().describe("Ref of the reminder this one is timed from; omit to time it from the meal"),
             }),
@@ -583,7 +613,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       const resolved: Recipe["ingredients"] = ingredients ? [] : (existing?.ingredients ?? []);
       for (const ingredient of ingredients ?? []) {
         const item = findItem(kitchen.items, ingredient.item);
-        if (!item) return failure(`No stock item "${ingredient.item}". Add it with add_stock_item first; spices and the like are not tracked.`);
+        if (!item) return failure(`No single stock item "${ingredient.item}". Add it with add_stock_item first (spices and the like are not tracked), or name it by its id if two share the name.`);
         if (!sameKind(item.unit, ingredient.unit)) return failure(`${item.name} is counted in ${item.unit}, so ${ingredient.amount} ${ingredient.unit} cannot be used.`);
         resolved.push({ id: crypto.randomUUID(), itemId: item.id, name: ingredient.name ?? item.name, amount: toBase(ingredient.amount, ingredient.unit), unit: ingredient.unit });
       }
@@ -617,9 +647,11 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     {
       description:
         "Starts tracking a bulk staple (a carbohydrate or protein source: rice, beans, lentils). Never spices or the like. `unit` is how it is shown; `target` (the amount to keep on hand) and `on_hand` are in that unit.",
-      inputSchema: { name: z.string().min(1).max(TITLE_MAX), unit, target: z.number().nonnegative(), on_hand: z.number().nonnegative().optional() },
+      inputSchema: { name: z.string().trim().min(1).max(TITLE_MAX), unit, target: z.number().nonnegative(), on_hand: z.number().nonnegative().optional() },
     },
     async ({ name, unit, target, on_hand }) => {
+      const same = (await readKitchen(db)).items.find((item) => sameName(item.name, name));
+      if (same) return failure(`${same.name} is already tracked [${same.id}]: change it with update_stock_item.`);
       const id = crypto.randomUUID();
       const changes = [() => api.createStockItem({ id, name, unit, target: toBase(target, unit) })];
       if (on_hand) changes.push(() => api.setStock(crypto.randomUUID(), id, toBase(on_hand, unit)));
@@ -631,11 +663,14 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "update_stock_item",
     {
       description: "Renames a stock item, changes its target (in its unit), or its unit to another of the same kind (kg to g).",
-      inputSchema: { id: z.string(), name: z.string().min(1).max(TITLE_MAX).optional(), unit: unit.optional(), target: z.number().nonnegative().optional() },
+      inputSchema: { id: z.string(), name: z.string().trim().min(1).max(TITLE_MAX).optional(), unit: unit.optional(), target: z.number().nonnegative().optional() },
     },
     async ({ id, name, unit, target }) => {
-      const item = (await readKitchen(db)).items.find((candidate) => candidate.id === id);
+      const { items } = await readKitchen(db);
+      const item = items.find((candidate) => candidate.id === id);
       if (!item) return failure(`No stock item ${id}.`);
+      const same = name ? items.find((other) => other.id !== id && sameName(other.name, name)) : undefined;
+      if (same) return failure(`Another item is already called ${same.name} [${same.id}].`);
       return run([() => api.updateStockItem(id, { name, unit, target: target === undefined ? undefined : toBase(target, unit ?? item.unit) })], "Updated");
     },
   );
@@ -724,13 +759,16 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   register(
     "cook_meal",
     {
-      description: "Marks a meal cooked, which deducts its recipes' tracked ingredients from stock. Says which ingredients are no longer tracked. A meal already cooked is refused: unmark it first.",
+      description: "Marks a meal cooked, which deducts its recipes' tracked ingredients from stock. Says which ingredients are no longer tracked. A meal already cooked is refused (unmark it first), and so is a cancelled one (plan it again first).",
       inputSchema: { date, slot },
     },
     async ({ date, slot }) => {
       // As in the app, a cooked meal is unticked before it is cooked again: cooking it twice would take
       // its amounts off a stock counted since the first time
-      if (shownMeal(await readKitchen(db, date), date, slot).status === "cooked") return failure(`The ${slot} of ${date} is already cooked.`);
+      const status = shownMeal(await readKitchen(db, date), date, slot).status;
+      if (status === "cooked") return failure(`The ${slot} of ${date} is already cooked.`);
+      // As in the app, which offers no tick on a cancelled meal: plan it again first
+      if (status === "cancelled") return failure(`The ${slot} of ${date} is cancelled: plan it again (plan_meals) before cooking it.`);
       try {
         await api.cookMeal(date, slot, crypto.randomUUID());
       } catch (error) {
@@ -759,8 +797,13 @@ function planMeal(api: AshbornApi, date: string, slot: (typeof mealSlots)[number
   return api.setMeal({ id: crypto.randomUUID(), date, slot, description, recipeIds, status });
 }
 
-const findItem = (items: StockItem[], idOrName: string) =>
-  items.find((item) => item.id === idOrName) ?? items.find((item) => item.name.toLowerCase() === idOrName.trim().toLowerCase());
+// By id, or by a name only one item has
+const findItem = (items: StockItem[], idOrName: string) => {
+  const byId = items.find((item) => item.id === idOrName);
+  if (byId) return byId;
+  const named = items.filter((item) => sameName(item.name, idOrName));
+  return named.length === 1 ? named[0] : undefined;
+};
 
 // An amount in base units, shown in a unit: "1.5 kg"
 function amount(base: number, unit: StockUnit) {
@@ -777,7 +820,7 @@ function describeKitchen(kitchen: Kitchen, short = false): string {
     "",
     "Meal plan:",
   ];
-  const days = short ? [0, 1, 2] : [-2, -1, 0, 1, 2, 3, 4, 5, 6];
+  const days = short ? [0, 1, 2] : Array.from({ length: mealDaysBack + mealDaysAhead + 1 }, (_, index) => index - mealDaysBack);
   for (const offset of days) {
     const date = addDays(today(), offset);
     for (const each of mealSlots) {
@@ -844,8 +887,11 @@ const movedLabel = (ring: Ring) => `${ring.title} (moved from ${ring.time})`;
 const movedAlarms = (snapshot: Snapshot, ring: Ring, day: string) =>
   snapshot.alarms.filter((alarm) => alarm.at && alarm.label === movedLabel(ring) && ring.dayOf(new Date(alarm.at)) === day);
 
+// How far off a due date is, in words: an open deadline can be past
+const dueIn = (days: number) => (days === 0 ? "today" : days > 0 ? `in ${days} ${days === 1 ? "day" : "days"}` : `overdue by ${-days} ${days === -1 ? "day" : "days"}`);
+
 // The tracker as an indented outline an agent can read. As in the app, a finished box
-// is one line and a finished quest is listed under Completed (or Archived, if hidden); asking for
+// is one line and a finished quest is listed under Completed (or Archived, if shelved); asking for
 // one quest shows it in full.
 function describe(snapshot: Snapshot, questId?: string) {
   const { dayStartHour } = snapshot.settings;
@@ -853,12 +899,12 @@ function describe(snapshot: Snapshot, questId?: string) {
   const model = buildGraphModel(snapshot);
   const folds = (id: string) => !questId && isFinished(model, id);
   const quests = (model.children.get(null) ?? []).filter((quest) => (questId ? quest.id === questId : true));
-  // One quest asked for is shown whether or not it is hidden from the dashboard
-  const inView = (quest: GraphNode) => quest.active || Boolean(questId);
+  // One quest asked for is shown whether or not it is shelved
+  const inView = (quest: GraphNode) => !quest.shelved || Boolean(questId);
   const completed = quests.filter((quest) => inView(quest) && folds(quest.id));
   const shown = inboxLast(quests.filter((quest) => inView(quest) && !folds(quest.id)), snapshot.inboxId);
   const archived = quests.filter((quest) => !inView(quest) && model.finishedAt.has(quest.id));
-  const hidden = quests.filter((quest) => !inView(quest) && !model.finishedAt.has(quest.id));
+  const shelved = quests.filter((quest) => !inView(quest) && !model.finishedAt.has(quest.id));
   const lines: string[] = [];
 
   const shownIds = new Set(shown.map((quest) => quest.id));
@@ -868,7 +914,7 @@ function describe(snapshot: Snapshot, questId?: string) {
   const quiet = goneQuiet(model, snapshot, priorities, today()).filter(({ quest }) => shownIds.has(quest.id));
   const quietIds = new Set(quiet.map(({ quest }) => quest.id));
   const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) =>
-    steps.map((node) => `- P${priority} ${node.title} [${node.id}] (${prioritySource(model, priorities, node.id)})${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`),
+    steps.filter((node) => shownIds.has(questOf(model.byId, node).id)).map((node) => `- P${priority} ${node.title} [${node.id}] (${prioritySource(model, priorities, node.id)})${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`),
   );
   const unprioritised = ready.filter((node) => !priorities.effective.has(node.id) && !quietIds.has(questOf(model.byId, node).id)).map((node) => `- ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet)" : ""}`);
   lines.push("To-do (what the app lists under Now: ready to do now, with a priority, and where the priority comes from):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
@@ -883,13 +929,13 @@ function describe(snapshot: Snapshot, questId?: string) {
     outline(model, snapshot, quest.id, 1, lines, folds);
     lines.push("");
   }
-  const listed = (quest: GraphNode) => `- ${quest.title} [${quest.id}]${quest.shelved ? " (shelved)" : ""}`;
+  const listed = (quest: GraphNode) => `- ${quest.title} [${quest.id}]`;
   if (completed.length) lines.push("Completed quests (every step done; adding a step brings one back):", ...completed.map(listed), "");
-  if (hidden.length) lines.push("Hidden quests:", ...hidden.map(listed), "");
-  if (archived.length) lines.push("Archived quests (finished and hidden):", ...archived.map(listed), "");
+  if (shelved.length) lines.push("Shelved quests (off the graph and the to-do; `unshelve` brings one back):", ...shelved.map(listed), "");
+  if (archived.length) lines.push("Archived quests (finished and shelved):", ...archived.map(listed), "");
 
   const describeDeadline = (deadline: Snapshot["deadlines"][number]) =>
-    `- ${deadline.title} [${deadline.id}]${deadline.nodeId ? `, linked to ${model.byId.get(deadline.nodeId)?.title}` : ""}: due ${deadline.dueDate} (in ${daysBetween(today(), deadline.dueDate)} days)${deadline.alarmTime ? `, alarm at ${deadline.alarmTime}` : ""}`;
+    `- ${deadline.title} [${deadline.id}]${deadline.nodeId ? `, linked to ${model.byId.get(deadline.nodeId)?.title}` : ""}: due ${deadline.dueDate} (${dueIn(daysBetween(today(), deadline.dueDate))})${deadline.alarmTime ? `, alarm at ${deadline.alarmTime}` : ""}`;
   if (questId) {
     const linked = snapshot.deadlines.filter((deadline) => deadline.nodeId && model.byId.has(deadline.nodeId) && questOf(model.byId, model.byId.get(deadline.nodeId)!).id === questId);
     lines.push("Deadlines linked to this quest:", ...(linked.length ? linked.map(describeDeadline) : ["- none"]));

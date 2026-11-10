@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { previewChange } from "../../src/lib/offline";
-import { cooked, emptyKitchen, fromBase, mealDeductions, mealReminders, read, recipeProblems, reminderOffsets, sameKind, shownMeal, toBase, uncooked } from "../../src/shared/kitchen";
+import { cooked, emptyKitchen, fromBase, mealDeductions, mealReminders, read, recipeProblems, recipeRoutes, reminderOffsets, sameKind, shownMeal, toBase, uncooked } from "../../src/shared/kitchen";
 import type { Kitchen, Recipe, RecipeReminder, Snapshot, StockItem } from "../../src/shared/types";
 
 // The Kitchen's rules: units, stock arithmetic, the default week, deductions and reminder times
@@ -37,6 +37,8 @@ test("units convert within a kind only", () => {
   expect(toBase(2, "kg")).toBe(2000);
   expect(fromBase(1500, "kg")).toBe(1.5);
   expect(toBase(0.5, "l")).toBe(500);
+  // Exactly, not 290.00000000000006
+  expect(toBase(0.29, "kg")).toBe(290);
   expect(sameKind("g", "kg")).toBe(true);
   expect(sameKind("ml", "l")).toBe(true);
   expect(sameKind("g", "ml")).toBe(false);
@@ -51,6 +53,17 @@ test("a recipe with a unit of the wrong kind, or a reminder loop, is refused", (
   expect(recipeProblems(loop, [rice, beans])).toEqual(["The reminders are timed from each other in a loop."]);
   const missingAnchor = { ...riceAndBeans, reminders: [reminder("a", 10, "gone")] };
   expect(recipeProblems(missingAnchor, [rice, beans])).toHaveLength(1);
+});
+
+test("a recipe's routes: each tab reads the shared text and its own, in order, without the markers", () => {
+  const { routes, text } = recipeRoutes("Prep\n[2: paste]\nGrind\n[1: chopped]\nChop\n[all]\n\nCook\n[1]\n\n\nStir\n[all]\nServe");
+  expect(routes).toEqual([
+    { key: "1", name: "chopped" },
+    { key: "2", name: "paste" },
+  ]);
+  expect(text("1")).toBe("Prep\nChop\n\nCook\n\nStir\nServe");
+  expect(text("2")).toBe("Prep\nGrind\n\nCook\nServe");
+  expect(recipeRoutes("Plain [1] text").routes).toEqual([]);
 });
 
 test("an untouched date shows the default week; a planned date overrides it for that date only", () => {

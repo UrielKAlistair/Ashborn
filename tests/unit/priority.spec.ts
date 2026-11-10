@@ -11,7 +11,6 @@ const node = (id: string, parentId: string | null, fields: Partial<GraphNode> = 
   parentId,
   title: id,
   statWeights: {},
-  active: true,
   createdAt: "2026-10-20T00:00:00",
   completedAt: null,
   shelved: false,
@@ -95,7 +94,7 @@ test("a quest with a priority and no steps is on the to-do; a finished one and a
     node("finished", null, { priority: 1 }),
     node("doneStep", "finished", { completedAt: today }),
     node("user", null, { priority: 1 }), // the Inbox: its id is the user's
-    node("hidden", null, { priority: 1, active: false }),
+    node("shelved", null, { priority: 1, shelved: true }),
     node("unset", null),
   ]);
   const todo = prioritisedSteps(model, snapshot, priorities);
@@ -104,8 +103,8 @@ test("a quest with a priority and no steps is on the to-do; a finished one and a
   expect(needsFirstStep(model, model.byId.get("finished")!)).toBe(false);
 });
 
-test("a hidden quest's steps stay off the to-do", () => {
-  const { model, snapshot, priorities } = setup([node("quest", null, { active: false }), node("a", "quest", { priority: 1 })]);
+test("a shelved quest's steps stay off the to-do", () => {
+  const { model, snapshot, priorities } = setup([node("quest", null, { shelved: true }), node("a", "quest", { priority: 1 })]);
   expect(prioritisedSteps(model, snapshot, priorities)).toEqual([]);
 });
 

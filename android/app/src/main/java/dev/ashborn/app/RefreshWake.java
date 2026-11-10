@@ -14,7 +14,10 @@ import org.json.JSONException;
 // Wakes the phone every 15 minutes, Doze or not, to run the background alarm refresh, so an alarm set
 // late at night reaches the phone before it is due. The wake is an exact allow-while-idle alarm, not an
 // alarm clock, so Android never shows it as the next alarm. One wake is pending at a time: each run arms
-// the next first, and arming again replaces it.
+// the next first, and arming again replaces it. In Doze, a phone not exempt from battery optimisation
+// has no network, so the wake then only arms the next. A change of time zone runs it too (manifest):
+// the phone holds rings as instants, and a wall-clock alarm's instant moves with the zone; the stored
+// rings move only once a refresh gets through (or the app is opened).
 public class RefreshWake extends BroadcastReceiver {
     static final long INTERVAL_MS = 15 * 60_000L;
     // In Doze one app's allow-while-idle alarms fire at most once per nine minutes, and TimeUp uses one

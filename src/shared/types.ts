@@ -1,7 +1,13 @@
+/**
+ * The data, as every part of Ashborn sees it: the app on desktop and phone, and the agent server.
+ * Quests and steps (GraphNode, GraphEdge), routines, deadlines, alarms and the Kitchen, gathered in a
+ * Snapshot loaded once at start. A change returns a Delta of only the rows it touched, which the
+ * caller merges into its Snapshot. AshbornApi, at the end, is every change there is.
+ */
 export type Weekday = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
-export type ISODate = string; // YYYY-MM-DD, local time
+export type ISODate = string; // YYYY-MM-DD, in the user's time zone
 export type StatKey = "STR" | "DEX" | "INT" | "WIS" | "CHR" | "MND";
-// Positive weights; the stats listed share a quest's XP in proportion to them
+// Absolute multipliers, not shares: each XP earned in the quest adds weight × XP to the stat (design 7)
 export type StatWeights = Partial<Record<StatKey, number>>;
 export type ClockTime = string; // HH:MM, local time
 
@@ -16,10 +22,9 @@ export type GraphNode = {
   parentId: string | null;
   title: string;
   statWeights: StatWeights; // quests only: the stats work in the quest trains; empty trains none
-  active: boolean; // quests only: shown on the dashboard
   createdAt: string;
   completedAt: string | null; // a step is done when this is set
-  shelved: boolean; // greyed, and nothing inside it is ready, until unshelved
+  shelved: boolean; // set aside: off the graph and the to-do, with all inside it, until unshelved
   priority: Priority | null; // null: none
   ownXp: number; // level-ups plus the completion credit
   lastActive: string; // when it was last made, ticked, levelled up or otherwise worked on; layout and looks don't count
@@ -76,8 +81,9 @@ export type Deadline = {
   title: string;
   dueDate: ISODate;
   alarmTime: ClockTime | null; // an alarm on the due day (on the phone)
-  nodeId: string | null; // the quest or step it is for: as it nears, it raises that chain's priority
+  nodeId: string | null; // the quest or step it is for, picked in Today; it never changes a priority
 };
+export type DeadlinePatch = Partial<Omit<Deadline, "id">>;
 
 // Level-ups and completed steps on `date`
 export type ProgressToday = { date: ISODate; count: number };
@@ -202,14 +208,13 @@ export type NodePatch = {
   statWeights?: StatWeights;
   shelved?: boolean;
   priority?: Priority | null;
-  active?: boolean;
   done?: boolean;
 };
 
 // Where the user put a node on the desktop canvas
 export type Placement = { id: string; position: Point };
 
-// Everything the app (and later an agent) can ask of the data store. Reads return data; changes
+// Everything the app and the agent server can ask of the data store. Reads return data; changes
 // return a Delta.
 export type AshbornApi = {
   getSnapshot(userId: string): Promise<Snapshot>;
@@ -227,7 +232,7 @@ export type AshbornApi = {
   deleteRoutine(id: string): Promise<Delta>;
   setRoutineCheck(routineId: string, date: ISODate, checked: boolean): Promise<Delta>;
   createDeadline(deadline: Deadline): Promise<Delta>;
-  linkDeadline(id: string, nodeId: string | null): Promise<Delta>;
+  updateDeadline(id: string, patch: DeadlinePatch): Promise<Delta>;
   completeDeadline(id: string): Promise<Delta>;
   deleteDeadline(id: string): Promise<Delta>;
   createAlarm(alarm: Alarm): Promise<Delta>; // the id is made by the caller, so it works offline

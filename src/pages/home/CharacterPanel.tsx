@@ -16,7 +16,7 @@ export function CharacterPanel({ model, card = false }: { model: GraphModel; car
   const overall = statLevel(model.totalStatXp);
   const tier = portraitTier(overall.level);
 
-  // The portrait stands on a hex cell of the canvas's fabric, the overall level beneath it
+  // The portrait stands on a hexagon, the shape of the canvas's cells, the overall level beneath it
   const portrait = (
     <div className={`flex shrink-0 flex-col items-center ${card ? "w-48" : "w-28"}`}>
       <div className={`relative flex items-end justify-center ${card ? "w-48" : "w-28"}`}>

@@ -1,11 +1,17 @@
+/**
+ * What Now remembers on this device, and the "Time's up" notice of a started step.
+ *
+ * Kept between sittings (localStorage): the steps put off today, and the timer on a started step.
+ * Kept for this sitting only (module state): the step last split, and the one Split is open on.
+ * Where storage refuses (a private window), the first two are forgotten too. Every change raises one
+ * window event, so every reader follows it, wherever it was made (Now, the timer's end, another screen).
+ * Which step Now then shows is decided from this memory by chooseNow (shared/nowStep.ts).
+ */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { alarmsAvailable, setTimeUpNotice } from "../../lib/alarms";
 import type { NowMemory, StartTimer } from "../../shared/nowStep";
 import type { ISODate } from "../../shared/types";
-
-// What Now remembers on this device: the steps put off today and the timer on a started step, kept
-// between sittings; the step last split and the one Split is open on, for this sitting. Where storage
-// refuses (a private window), it is forgotten. Every reader follows a change, wherever it was made: Now, the tray, another screen.
+import { readStored as read, writeStored as write } from "../../lib/storage";
 
 const passedKey = "ashborn-now-passed";
 const timerKey = "ashborn-now-timer";
@@ -32,7 +38,7 @@ export function storePassed(date: ISODate, ids: string[]) {
 
 export const storedTimer = () => read<StartTimer | null>(timerKey, null);
 
-// Set from Now or from the tray's menu
+// Set from Now; cleared too when its step is done, deleted or shelved (App.tsx)
 export function storeTimer(timer: StartTimer | null) {
   write(timerKey, timer);
   changed();
@@ -106,21 +112,4 @@ export function useTimeUpNotice(titleOf: (stepId: string) => string | undefined,
       window.clearTimeout(end);
     };
   }, []);
-}
-
-function read<T>(key: string, fallback: T): T {
-  try {
-    return (JSON.parse(window.localStorage.getItem(key) ?? "null") as T | null) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function write(key: string, value: unknown) {
-  try {
-    if (value === null) window.localStorage.removeItem(key);
-    else window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Forgotten, as in a private window
-  }
 }

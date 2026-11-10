@@ -1,3 +1,7 @@
+/**
+ * Levels: how XP turns into the level and bar shown on a card and on the character sheet.
+ * A card levels linearly (every NODE_LEVEL_XP); a stat levels ever more slowly (level ~ sqrt(xp)).
+ */
 // One press of a node's + button, and the credit for completing a node
 export const PROGRESS_UNIT = 10;
 
@@ -20,6 +24,7 @@ export function nodeLevel(xp: number): Level {
   };
 }
 
+// The largest L with STAT_LEVEL_STEP * L(L - 1) / 2 <= xp, from the quadratic formula; L >= 1
 export function statLevel(xp: number): Level {
   const level = Math.floor((1 + Math.sqrt(1 + (8 * xp) / STAT_LEVEL_STEP)) / 2);
   const reached = (STAT_LEVEL_STEP * level * (level - 1)) / 2;

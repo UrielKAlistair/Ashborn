@@ -1,3 +1,15 @@
+/**
+ * Dates and clock times, read in the user's time zone and with the user's day boundary.
+ *
+ * Two kinds of "day" exist. A calendar date (toISODate) is what a wall clock shows. An app day
+ * (dayOf) starts at the day-start hour, 04:00 by default, so 01:00 still belongs to the day before:
+ * routines, the to-do and progress count app days. Both settings are module state, because nearly
+ * every caller wants the user's and passing them everywhere would thread them through the whole app:
+ * the day-start hour is set whenever the data is shown; the time zone only by the hosted agent server,
+ * since the app runs in the user's own zone.
+ * Calendar arithmetic runs on UTC midnights, where every day is 24 hours; conversion to and from real
+ * moments goes through the time zone, daylight saving included.
+ */
 import type { ISODate, Weekday } from "./types.js";
 
 export const week: Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -34,6 +46,12 @@ export function dayOf(moment: Date, startHour = dayStartHour): ISODate {
   const { year, month, day, hour, minute } = wallClock(moment);
   const shifted = new Date(Date.UTC(year, month - 1, day, hour - startHour, minute));
   return calendarDate(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, shifted.getUTCDate());
+}
+
+// The clock time a moment shows, HH:MM on a 24-hour clock
+export function clockOf(moment: Date): string {
+  const { hour, minute } = wallClock(moment);
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 export function today(): ISODate {

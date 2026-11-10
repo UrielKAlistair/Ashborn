@@ -31,7 +31,12 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-        <receiver android:name=".RefreshWake" android:exported="false" />
+        <!-- Its own wakes, and a change of time zone: the schedule's wall-clock times move with the zone -->
+        <receiver android:name=".RefreshWake" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <!-- The end of Now's timer, said as a notification -->
         <receiver android:name=".TimeUp" android:exported="false" />
         <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback" />

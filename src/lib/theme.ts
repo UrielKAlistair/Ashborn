@@ -1,3 +1,4 @@
+// Priority colours as style classes, for the quest dots, bars and hexes.
 import type { Priority } from "../shared/types";
 
 // A quest's colour is its priority's: the most urgent in it, as on the graph's rail. It colours the

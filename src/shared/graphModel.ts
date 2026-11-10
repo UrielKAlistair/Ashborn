@@ -1,8 +1,24 @@
+/**
+ * The graph model: what every view derives from the user's quests, steps and prerequisites.
+ *
+ * Input: a Snapshot, the rows as stored. A quest is a node with no parent; a step sits inside a quest
+ * or inside another step (that step is then called a box). An edge `from → to` says `from` must be
+ * done before `to`; both ends share a parent.
+ * Output: a GraphModel of lookups (who is inside whom), and four derived facts per node: its XP with
+ * everything that led to it, whether it can be done now (ready), whether it is put away (shelved),
+ * and, for a box that is done with all its contents (a quest: all its contents), when the last tick
+ * was (finished).
+ * The stat totals for the character sheet ride along.
+ *
+ * The model is rebuilt from scratch on every change. That is the simplest correct choice, and fast
+ * enough at today's sizes (hundreds of nodes; totalXp is the costly pass, O(N·(N+E))). The small
+ * queries at the end (doneAround, openInside) work on bare rows instead, because the API, the
+ * offline queue and Undo use them where no model is at hand.
+ */
 import type { GraphEdge, GraphNode, Snapshot, StatKey, StatWeights } from "./types";
 
 export const statKeys: StatKey[] = ["STR", "DEX", "INT", "WIS", "CHR", "MND"];
 
-// Everything the dashboard derives from a snapshot
 export type GraphModel = {
   byId: Map<string, GraphNode>;
   children: Map<string | null, GraphNode[]>; // keyed by parent id; null holds the quests
@@ -16,32 +32,17 @@ export type GraphModel = {
 
 export const isDone = (node: GraphNode) => node.completedAt !== null;
 
-// The done boxes from `id` out to its quest (never the quest, which is never ticked): a step opened or
-// put inside them means they are no longer done
-export function doneAround(nodes: Pick<GraphNode, "id" | "parentId" | "completedAt">[], id: string | null): string[] {
-  const around: string[] = [];
-  for (let node = nodes.find((candidate) => candidate.id === id); node && node.parentId !== null; node = nodes.find((candidate) => candidate.id === node!.parentId)) {
-    if (node.completedAt) around.push(node.id);
-  }
-  return around;
-}
-
-// The open nodes under `id`, at any depth: ticking a box done ticks these too
-export function openInside(nodes: Pick<GraphNode, "id" | "parentId" | "completedAt">[], id: string): string[] {
-  return nodes.filter((node) => node.parentId === id).flatMap((node) => [...(node.completedAt ? [] : [node.id]), ...openInside(nodes, node.id)]);
-}
-
-// A finished box folds: to one line inside a quest, or, for a quest, out of the graph into Completed
-export function isFinished(model: GraphModel, id: string) {
-  return model.finishedAt.has(id);
-}
-
+/**
+ * Builds the model in four passes over the nodes (readiness reads the shelving):
+ * XP (a node is worth its whole subtree, summed over itself and every prerequisite upstream, so a
+ * card's level shows the ground covered to reach it); shelving; readiness; finishing.
+ */
 export function buildGraphModel(snapshot: Snapshot): GraphModel {
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const children = groupBy(snapshot.nodes, (node) => node.parentId);
   const incoming = groupBy(snapshot.edges, (edge: GraphEdge) => edge.to);
 
-  // A node together with all its steps, at any depth
+  // A node together with all its steps, at any depth, memoised
   const subtreeXp = new Map<string, number>();
   const subtree = (id: string): number => {
     const cached = subtreeXp.get(id);
@@ -51,6 +52,7 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
     return sum;
   };
 
+  // The node and every node it waits on, through prerequisite edges, transitively
   const upstreamOf = (id: string) => {
     const seen = new Set<string>([id]);
     const stack = [id];
@@ -72,10 +74,12 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
     totalXp.set(node.id, sum);
   });
 
-  // Shelved: the node or a box it sits in was shelved. It stays on the graph, greyed, but is
-  // never ready
+  // Shelved: the node or a box it sits in was shelved. It is off the graph (unless its quest
+  // shows its shelved steps) and never ready
   const shelved = new Set(snapshot.nodes.filter((node) => isShelved(byId, node)).map((node) => node.id));
 
+  // Ready: open, not put away, every prerequisite done, and every step inside done (a box is done
+  // last, after its contents)
   const ready = new Set(
     snapshot.nodes
       .filter(
@@ -101,6 +105,7 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
     lastTick.set(node.id, latest);
     return latest;
   };
+  // Only a node with contents can finish; a bare step is simply done
   const finishedAt = new Map<string, number>();
   snapshot.nodes.forEach((node) => {
     const tick = lastTickOf(node);
@@ -120,9 +125,15 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
   return { byId, children, totalXp, ready, shelved, finishedAt, statXp, totalStatXp };
 }
 
-// The stats a quest trains with their weights, in statKeys order
-export function trainedStats(weights: StatWeights): [StatKey, number][] {
-  return statKeys.flatMap((key): [StatKey, number][] => ((weights[key] ?? 0) > 0 ? [[key, weights[key]!]] : []));
+function groupBy<T, K>(items: T[], keyOf: (item: T) => K) {
+  const groups = new Map<K, T[]>();
+  for (const item of items) {
+    const key = keyOf(item);
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  return groups;
 }
 
 function isShelved(byId: Map<string, GraphNode>, node: GraphNode): boolean {
@@ -142,13 +153,27 @@ export function questOf(byId: Map<string, GraphNode>, node: GraphNode): GraphNod
   return current;
 }
 
-function groupBy<T, K>(items: T[], keyOf: (item: T) => K) {
-  const groups = new Map<K, T[]>();
-  for (const item of items) {
-    const key = keyOf(item);
-    const group = groups.get(key);
-    if (group) group.push(item);
-    else groups.set(key, [item]);
+// The stats a quest trains with their weights, in statKeys order
+export function trainedStats(weights: StatWeights): [StatKey, number][] {
+  return statKeys.flatMap((key): [StatKey, number][] => ((weights[key] ?? 0) > 0 ? [[key, weights[key]!]] : []));
+}
+
+// A finished box folds: to one line inside a quest, or, for a quest, out of the graph into Completed
+export function isFinished(model: GraphModel, id: string) {
+  return model.finishedAt.has(id);
+}
+
+// The done boxes from `id` out to its quest (never the quest, which is never ticked): a step opened or
+// put inside them means they are no longer done
+export function doneAround(nodes: Pick<GraphNode, "id" | "parentId" | "completedAt">[], id: string | null): string[] {
+  const around: string[] = [];
+  for (let node = nodes.find((candidate) => candidate.id === id); node && node.parentId !== null; node = nodes.find((candidate) => candidate.id === node!.parentId)) {
+    if (node.completedAt) around.push(node.id);
   }
-  return groups;
+  return around;
+}
+
+// The open nodes under `id`, at any depth: ticking a box done ticks these too
+export function openInside(nodes: Pick<GraphNode, "id" | "parentId" | "completedAt">[], id: string): string[] {
+  return nodes.filter((node) => node.parentId === id).flatMap((node) => [...(node.completedAt ? [] : [node.id]), ...openInside(nodes, node.id)]);
 }

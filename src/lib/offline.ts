@@ -1,3 +1,16 @@
+/**
+ * Changes made without a connection: kept in order on the device (localStorage) until it is back.
+ *
+ * queueChange adds a change and returns its preview, how it looks on screen meanwhile, which mirrors
+ * what the server will do (a box ticked ticks its steps, a step opened reopens its boxes); a change the
+ * server could never accept is refused at once. sendQueue sends the queue in order once online, each
+ * change stamped with when it was made, so it still loses to anything made after it elsewhere. A
+ * change the server refuses for good is dropped and reported; one that meets an error that may pass
+ * holds the queue (QueueHeld) until a later try gets through, or it is given up after 20 tries
+ * spread over at least a day.
+ * isConnectionError and mayPass, near the end, sort failures into those two kinds. previewChange
+ * also serves changes made online, for their preview while on their way (useSyncedData).
+ */
 import { dayOf, today } from "../shared/dates";
 import { doneAround, openInside } from "../shared/graphModel";
 import { cooked, read, recipeProblems, shownMeal, uncooked } from "../shared/kitchen";
@@ -18,6 +31,7 @@ import type {
   Placement,
   Recipe,
   Routine,
+  DeadlinePatch,
   RoutinePatch,
   Snapshot,
   StockItem,
@@ -51,7 +65,6 @@ const preview: Record<Mutation, Preview> = {
       parentId,
       title,
       statWeights: {},
-      active: true,
       createdAt: at,
       completedAt: null,
       shelved: false,
@@ -94,9 +107,13 @@ const preview: Record<Mutation, Preview> = {
     return { removedNodeIds: removed, deadlines: held.length ? held.map((deadline) => ({ ...deadline, nodeId: null })) : undefined, progressToday: lost ? countedToday(snapshot, -lost) : undefined };
   },
   moveNode: (snapshot, [id, parentId], at) => {
-    const { around, lost } = reopened(snapshot, parentId);
+    const node = existing(snapshot.nodes, id, "This step");
+    // The server's check, so a move it would refuse never shows
+    if (parentId === id || descendants(snapshot.nodes, id).includes(parentId)) throw new Error("A node cannot move inside itself.");
+    // An open step put into done boxes reopens them; a done one leaves them done
+    const { around, lost } = node.completedAt ? { around: [], lost: 0 } : reopened(snapshot, parentId);
     return {
-      nodes: [{ ...existing(snapshot.nodes, id, "This step"), parentId, position: null, lastActive: at }, ...around],
+      nodes: [{ ...node, parentId, position: null, lastActive: at }, ...around],
       removedEdges: snapshot.edges.filter((edge) => edge.from === id || edge.to === id),
       progressToday: lost ? countedToday(snapshot, -lost) : undefined,
     };
@@ -128,7 +145,7 @@ const preview: Record<Mutation, Preview> = {
   setRoutineCheck: (_snapshot, [routineId, date, checked]) => ({ routineCheck: { routineId, date, checked } }),
   setAlarmSkip: (_snapshot, [key, date, skipped]) => ({ alarmSkip: { key, date, skipped } }),
   createDeadline: (_snapshot, [deadline]) => ({ deadlines: [deadline as Deadline] }),
-  linkDeadline: (snapshot, [id, nodeId]) => ({ deadlines: [{ ...existing(snapshot.deadlines, id, "This deadline"), nodeId: nodeId as string | null }] }),
+  updateDeadline: (snapshot, [id, patch]) => ({ deadlines: [{ ...existing(snapshot.deadlines, id, "This deadline"), ...(patch as DeadlinePatch) }] }),
   completeDeadline: (_snapshot, [id]) => ({ removedDeadlineIds: [id] }),
   deleteDeadline: (_snapshot, [id]) => ({ removedDeadlineIds: [id] }),
   createAlarm: (_snapshot, [alarm]) => ({ alarms: [alarm as Alarm] }),
@@ -341,7 +358,10 @@ export function signInRefused(error: unknown) {
 
 // Supabase reports an unreachable server as a failed fetch, and a request given up on as a timeout
 export function isConnectionError(error: unknown) {
-  return error instanceof QueueHeld || !navigator.onLine || (error as Error)?.name === "TimeoutError" || /fetch|network|timed out/i.test((error as Error)?.message ?? "");
+  if (error instanceof QueueHeld || !navigator.onLine) return true;
+  // The database answered (its errors carry a code): its message may hold the user's text, "Network pasta"
+  if (error instanceof ServerError && error.code !== "") return false;
+  return (error as Error)?.name === "TimeoutError" || /fetch|network|timed out/i.test((error as Error)?.message ?? "");
 }
 
 function loadQueue(): QueuedChange[] {

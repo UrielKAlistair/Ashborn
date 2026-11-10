@@ -48,7 +48,7 @@ test.afterAll(async () => {
 
 const card = (title: string) => page.locator(".react-flow__node").filter({ hasText: title }).last();
 const stock = (name: string) => page.getByRole("group", { name, exact: true });
-const amountLabel = (name: string) => stock(name).locator("p.text-right");
+const amountLabel = (name: string) => stock(name).locator("p.font-mono");
 const meal = (slot: string) => page.getByRole("group", { name: `${slot} on ${today()}` });
 
 async function goOffline() {

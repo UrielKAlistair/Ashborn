@@ -140,6 +140,31 @@ test("undo a tick", async () => {
     await expect.poll(() => priorityOf(ids.only)).toBeNull();
   });
 
+  await test.step("a delete the server refuses leaves the step, and its offer comes back", async () => {
+    await page.route("**/rest/v1/rpc/delete_node*", (route) =>
+      route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ code: "P0001", message: "refused for the test", details: null, hint: null }) }),
+    );
+    await graphTick("Fourth step").click();
+    await expect(toast()).toContainText("Done: Fourth step");
+    await stepCard("Fourth step").getByTitle("Delete").click();
+    await stepCard("Fourth step").getByTitle("Click again to delete").click();
+    await expect(toast()).toContainText("Done: Fourth step");
+    await expect(stepCard("Fourth step")).toBeVisible();
+    await page.unroute("**/rest/v1/rpc/delete_node*");
+    await undo().click();
+    await expect.poll(() => isDone(ids.fourth)).toBe(false);
+  });
+
+  await test.step("deleting the step takes the offer away: there is nothing left to undo", async () => {
+    await graphTick("Fourth step").click();
+    await expect(toast()).toContainText("Done: Fourth step");
+    await stepCard("Fourth step").getByTitle("Delete").click();
+    await stepCard("Fourth step").getByTitle("Click again to delete").click();
+    await expect(stepCard("Fourth step")).toHaveCount(0);
+    // At once, well inside the toast's own 6 s
+    await expect(toast()).toHaveCount(0, { timeout: 1000 });
+  });
+
   await test.step("it reads in every theme, and on the phone it sits above the tabs", async () => {
     await expect(graphTick("First step")).toHaveAttribute("title", "Mark not done");
     for (const theme of ["light"]) {

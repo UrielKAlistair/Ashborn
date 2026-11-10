@@ -1,13 +1,21 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { DayStartSelect } from "../components/DayStartSelect";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { connectBackgroundRefresh, fixPermission, useHeldSchedule, type AlarmPermissions } from "../lib/alarms";
 import { db } from "../lib/client";
 import { currentTimeZone } from "../shared/dates";
 import { setTheme, themeNames, themes, useTheme } from "../lib/useTheme";
 import type { Act } from "./home/HomePage";
 
-// The phone's settings: the theme, the hour the day starts (also set from Today's date), and what the
-// phone must allow for alarms to ring on time, and the alarms it holds (`permissions` is null outside
-// the Android app). `sync` reads the data again and hands the phone its schedule.
+// How long after the background refresh connects a report that it isn't is taken for one asked before
+const CONNECT_SETTLE_MS = 5000;
+
+/**
+ * The phone's Settings screen (the desktop has none: its theme switch is on the rail). Four groups:
+ * the theme; the hour the day starts (also set from Today's date); Alarm reliability, a checklist of
+ * what the phone must allow for alarms to ring on time, each item opening its setting; and Alarms on
+ * this phone, what the phone holds, with Sync now. The two alarm groups show only in the Android app
+ * (`permissions` is null elsewhere). `sync` reads the data again and hands the phone its schedule.
+ */
 export function SettingsPage({ permissions, dayStartHour, act, sync }: { permissions: AlarmPermissions | null; dayStartHour: number; act: Act; sync: () => Promise<void> }) {
   const theme = useTheme();
   return (
@@ -31,17 +39,7 @@ export function SettingsPage({ permissions, dayStartHour, act, sync }: { permiss
       <Group title="Day">
         <label className="flex min-h-11 items-center justify-between gap-3 px-1 text-[13px] text-ink/85">
           The day starts at
-          <select
-            value={dayStartHour}
-            onChange={(event) => void act("updateSettings", { dayStartHour: Number(event.target.value) })}
-            className="min-h-10 rounded-lg border border-ink/10 bg-canvas/70 px-2 font-mono text-[13px] text-ink/85 tabular-nums"
-          >
-            {Array.from({ length: 24 }, (_, hour) => (
-              <option key={hour} value={hour}>
-                {`${hour}`.padStart(2, "0")}:00
-              </option>
-            ))}
-          </select>
+          <DayStartSelect hour={dayStartHour} act={act} className="min-h-11 rounded-lg border border-ink/10 bg-canvas/70 px-2 font-mono text-[13px] text-ink/85 tabular-nums" />
         </label>
         <p className="px-1 text-[12px] text-muted">Until then, ticks and routines count for the day before.</p>
       </Group>
@@ -72,8 +70,14 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 // Xiaomi phones without a tick. The background refresh needs a sign-in of its own, so it asks for
 // the password.
 function Reliability({ permissions }: { permissions: AlarmPermissions }) {
+  // Connected just now, before the phone's next report says so; a report that it isn't wins, unless it
+  // comes so soon after that it may have been asked for before
   const [connected, setConnected] = useState(false);
+  const connectedAt = useRef(0);
   const [asking, setAsking] = useState(false);
+  useEffect(() => {
+    if (Date.now() - connectedAt.current > CONNECT_SETTLE_MS) setConnected(false);
+  }, [permissions]);
   const background = permissions.background || connected;
   const items = [
     { label: "Notifications allowed", done: permissions.notifications, fix: fixPermission.notifications },
@@ -94,8 +98,44 @@ function Reliability({ permissions }: { permissions: AlarmPermissions }) {
           {item.done ? null : <span className="ml-auto text-[12px] text-muted">Open →</span>}
         </button>
       ))}
-      {asking && !background ? <BackgroundSignIn onConnected={() => setConnected(true)} /> : null}
+      {asking && !background ? <BackgroundSignIn
+          onConnected={() => {
+            connectedAt.current = Date.now();
+            setConnected(true);
+          }}
+        /> : null}
     </div>
+  );
+}
+
+// The background refresh signs in separately (alarms.ts connectBackgroundRefresh), with the signed-in
+// user's email and the password typed here
+function BackgroundSignIn({ onConnected }: { onConnected: () => void }) {
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  // While connecting, so a second tap doesn't make a second session
+  const [connecting, setConnecting] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setConnecting(true);
+    setMessage(null);
+    const { data } = await db.auth.getSession();
+    const email = data.session?.user.email;
+    const error = email ? await connectBackgroundRefresh(email, password) : "Not signed in.";
+    setConnecting(false);
+    if (error) setMessage(error);
+    else onConnected();
+  };
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-center gap-2 px-1 pt-1">
+      <input type="password" required autoFocus placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-lg border border-ink/10 bg-canvas/70 px-3 py-2 text-xs text-ink/90 placeholder:text-muted focus:border-ink/30 focus:outline-none" />
+      <button type="submit" disabled={connecting} className="min-h-11 rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50">
+        Connect
+      </button>
+      {message ? <p className="w-full text-[12px] text-ink/60">{message}</p> : null}
+    </form>
   );
 }
 
@@ -149,32 +189,3 @@ function Held({ sync }: { sync: () => Promise<void> }) {
 
 // A moment as its weekday and clock time
 const moment = (at: number) => new Date(at).toLocaleString([], { timeZone: currentTimeZone(), weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-
-function BackgroundSignIn({ onConnected }: { onConnected: () => void }) {
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  // While connecting, so a second tap doesn't make a second session
-  const [connecting, setConnecting] = useState(false);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setConnecting(true);
-    setMessage(null);
-    const { data } = await db.auth.getSession();
-    const email = data.session?.user.email;
-    const error = email ? await connectBackgroundRefresh(email, password) : "Not signed in.";
-    setConnecting(false);
-    if (error) setMessage(error);
-    else onConnected();
-  };
-
-  return (
-    <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-center gap-2 px-1 pt-1">
-      <input type="password" required autoFocus placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-canvas/70 px-3 py-2 text-xs text-ink/90 placeholder:text-muted focus:border-ink/30 focus:outline-none" />
-      <button type="submit" disabled={connecting} className="min-h-11 rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50">
-        Connect
-      </button>
-      {message ? <p className="w-full text-[12px] text-ink/60">{message}</p> : null}
-    </form>
-  );
-}

@@ -1,3 +1,6 @@
+// The backup's content: every table of the user's, read whole (exportAll), and the cleaning a restore
+// needs first (consistentBackup). Writing it to disk is the desktop shell's (backupSchedule.ts,
+// electron/main.ts); restoring is scripts/restore-backup.mjs.
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Every table holding the user's data with its primary key and the rows it refers to, parents before
@@ -50,8 +53,8 @@ async function readAll(db: SupabaseClient, table: string, key: string[]) {
 type Row = Record<string, unknown>;
 
 // A backup as the database would hold it, for a restore that cannot fail halfway on it: the tables
-// are read one after another while the app may be writing, so a backup can hold a row twice (a page
-// boundary moved) or a row whose parent was deleted between two reads. Repeats are dropped, and so is
+// are read side by side, each a page at a time, while the app may be writing, so a backup can hold a
+// row twice (a page boundary moved) or a row whose parent was deleted between two reads. Repeats are dropped, and so is
 // a row whose parent is missing, as the database would cascade it (or its column emptied, where the
 // database does that). Says how many rows of each table were dropped.
 export function consistentBackup(tables: Record<string, Row[]>): { tables: Record<string, Row[]>; dropped: Record<string, number> } {

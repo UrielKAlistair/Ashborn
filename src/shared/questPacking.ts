@@ -1,7 +1,13 @@
+/**
+ * Places the quests on the canvas: quests the user dragged stay where they are, and the rest fill
+ * the region that lets the whole layout fit the screen largest.
+ *
+ * Packing is greedy: each loose quest, in order, takes the topmost then leftmost free spot in a
+ * region of a given width. The desktop tries every width a row of the quests could need and keeps
+ * the best fit (packQuests); the phone fixes the width to the screen and scrolls. The order given is
+ * prerequisites first (prerequisitesFirst).
+ */
 import type { GraphEdge, Point } from "./types";
-
-// Places the quests on the canvas: quests the user dragged stay where they are, and the rest fill
-// the region that lets the whole layout fit the screen largest.
 
 export type Size = { width: number; height: number };
 export type PackedQuest = { id: string; size: Size };

@@ -9,6 +9,17 @@ Only open work is listed here. What is built, and why it is built that way, is i
 
 ## Now: daily use, in this order
 
+- [ ] Check the evening's phone changes of 2026-11-08 after installing (`research/daily-use/phone-checks.md`,
+      last section): recipe tabs and struck steps, Back on a recipe, vibration on vibrate and silent, a ring
+      stopping by itself after 5 minutes with a "Missed" notice, a challenge alarm sounding on silent for 15.
+- [ ] Decide the challenge alarm's emergency stop (design 295): a way out when the challenge can't be done
+      where it rings, discouraged enough not to become the everyday stop.
+- [ ] Trial `trial/pixel-ratio` (design 274): the hex canvas at A 2 / B 1.5 / C 1 device pixels per CSS pixel,
+      switch above the phone's tab bar. Install it with `cd ../Ashborn-trial-pixel-ratio && set -a &&
+      . ../Ashborn/.env && set +a && npm run android:install`; pick the smoothest that still looks right.
+- [ ] Try `try/shopping-list` (design 285): Stocks lists what the week's planned meals would leave in the amber,
+      topped back up to target, with Copy. Worktree `../Ashborn-try-shopping-list`; keep it or drop it, and
+      say whether 7 days, the amber line and top-up-to-target are right.
 - [ ] Still open from the hex trial (design 256): a quest box's edge tinted with its priority, and the
       phone card's menu on a ⋯ or on a tap of its title row. The trial branches are kept in
       `research/branches-2026-11-06.bundle` (`git fetch <bundle> trial/hex-look:trial/hex-look`).
@@ -29,7 +40,8 @@ Only open work is listed here. What is built, and why it is built that way, is i
         screen" and "Open new windows while running in the background" under Other permissions.
         Android never shows a full-screen intent over an unlocked phone in use: tapping the
         notification should open the ringing screen, and doesn't seem to. Log what the phone
-        reports (`adb logcat`, the permission states) before changing code. Settings now flags an Alarms
+        reports (`adb logcat`, the permission states) before changing code. Settings' "Notifications allowed" now reads whether the app's
+        notifications are switched on, not only the permission (design 275): look at it again first. Settings now flags an Alarms
         channel below high importance ("Alarm notifications pop up", design 249). Also check the
         "Alarms" channel's own toggles (Settings > Apps > Ashborn > Notifications > Alarms):
         HyperOS turns "Floating notifications" and "Lock screen notifications" off by default for
@@ -68,14 +80,19 @@ Only open work is listed here. What is built, and why it is built that way, is i
       an account. Row-level security keeps them out of the user's data, but close it in the Supabase
       dashboard: Authentication > Sign In / Providers > "Allow new users to sign up" off.
 
-- [ ] A thorough review of how the data is reached: the per-user access rules, the publishable
-      key, the agent's saved session (`~/.config/ashborn/agent-session.json`), and the sign-in a
-      hosted phone connector would need. Before the connector below.
+- [ ] Decide (design 293): the connector's consent page lets any https redirect host through with a red
+      warning, so a phished consent link is one click from full access. Accept Claude's callback only (other
+      agents then can't connect), or keep the warning?
 
 ## Agent access
 
 - [ ] The hosted connector (design 98) carries the overnight fixes (design 234, 238) only once deployed:
-      `npm run connector:deploy`.
+      `npm run connector:deploy`. Until then its `overview` lists shelved quests as "Hidden quests", and
+      `update_quest` still offers `shown`, which now does nothing (design 55).
+- [ ] Drop `graph_nodes.active` (and from `nodes_with_xp`) once the phone, the desktop app and the hosted
+      connector run a build from after 2026-11-09 (design 55). Until then an old build's "Hide quest" sets
+      a flag the new builds ignore. `reopen_around` returns `nodes_with_xp` rows, so it is dropped and
+      remade with the view (design 296).
 
 ## Atlas
 

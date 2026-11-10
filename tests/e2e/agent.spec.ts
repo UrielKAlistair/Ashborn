@@ -99,6 +99,10 @@ test("agent tools", async () => {
     expect((await call("update_quest", { id: id("dl"), stat_weights: { INT: 0.2, CHR: 0.1, MND: 0 } })).ok).toBe(true);
     expect((await call("level_up", { id: id("dl") })).ok).toBe(true);
     expect((await call("add_deadline", { title: "Submit draft", due_date: "2099-01-01" })).ok).toBe(true);
+    // An alarm on a due day already gone would never ring
+    const late = await call("add_deadline", { title: "Too late", due_date: "2020-01-01", alarm_time: "09:00" });
+    expect(late.ok).toBe(false);
+    expect(late.body).toContain("has passed");
     expect((await call("move", { id: id("svm"), parent_id: id("kpca") })).ok).toBe(true);
 
     const { body } = await call("overview", { quest_id: id("dl") });
@@ -119,7 +123,7 @@ test("agent tools", async () => {
     expect(body).not.toMatch(/Kernel PCA \[[^\]]+\] P/);
   });
 
-  await test.step("a deadline links to a step and raises nothing; unlinking and deleting work, and `delete` refuses it", async () => {
+  await test.step("a deadline links to a step and raises nothing; unlinking, changing and deleting work, and `delete` refuses it", async () => {
     const soon = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
     expect((await call("add_deadline", { title: "Soon", due_date: soon, node_id: id("kernel") })).ok).toBe(true);
     let { body } = await call("overview");
@@ -127,15 +131,19 @@ test("agent tools", async () => {
     expect(body).toContain(", linked to Kernel trick: due");
     expect((await call("overview", { quest_id: id("dl") })).body).toMatch(/^Deadlines linked to this quest:\n- Soon \[/m);
     const deadlineId = /- Soon \[([^\]]+)\]/.exec(body)![1];
-    expect((await call("link_deadline", { id: deadlineId, node_id: null })).ok).toBe(true);
+    expect((await call("update_deadline", { id: deadlineId, node_id: null })).ok).toBe(true);
     ({ body } = await call("overview"));
     expect(body).toMatch(/- Soon \[[^\]]+\]: due/);
+    const later = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    expect((await call("update_deadline", { id: deadlineId, title: "Sooner", due_date: later })).ok).toBe(true);
+    ({ body } = await call("overview"));
+    expect(body).toContain(`- Sooner [${deadlineId}]: due ${later}`);
 
     // `delete` takes only quests and steps; a deadline has its own, which refuses an unknown id
     expect((await call("delete", { id: deadlineId })).ok).toBe(false);
     expect((await call("delete_deadline", { id: deadlineId })).ok).toBe(true);
     expect((await call("delete_deadline", { id: deadlineId })).ok).toBe(false);
-    expect((await call("overview")).body).not.toContain("- Soon [");
+    expect((await call("overview")).body).not.toContain("- Sooner [");
   });
 
   await test.step("a shelved step is marked, and nothing inside it is up next until it is unshelved", async () => {
@@ -222,6 +230,11 @@ test("agent tools", async () => {
     const replacement = (await db.from("alarms").select("label, at, kind").eq("label", "Portal check (moved from 19:00)").single()).data!;
     const at = new Date(replacement.at);
     expect([at.getDate(), at.getHours(), at.getMinutes(), replacement.kind]).toEqual([ahead.getDate(), 20, 30, "plain"]);
+    // A second skip of the same date would leave the first move's alarm ringing too
+    const again = await call("skip_ring", { id: routine, date: day, instead_at: "21:00" });
+    expect(again.ok).toBe(false);
+    expect(again.body).toContain("already skipped");
+    expect((await db.from("alarms").select("id").like("label", "Portal check (moved%")).data).toHaveLength(1);
     expect((await call("restore_ring", { id: routine, date: day })).ok).toBe(true);
     expect((await db.from("alarms").select("id").eq("label", "Portal check (moved from 19:00)")).data).toEqual([]);
 
@@ -277,6 +290,10 @@ test("agent tools", async () => {
     const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
     const added = await call("add_stock_item", { name: "Rice", unit: "kg", target: 2, on_hand: 1.5 });
     const riceId = added.body.match(/Rice \[([^\]]+)\]/)![1];
+    // One item per name, whatever its case or spaces
+    const twice = await call("add_stock_item", { name: " rice ", unit: "g", target: 500 });
+    expect(twice.ok).toBe(false);
+    expect(twice.body).toContain("already tracked");
 
     expect((await call("save_recipe", { title: "Rice and beans", ingredients: [{ item: "rice", amount: 200, unit: "ml" }] })).ok).toBe(false);
     const saved = await call("save_recipe", { title: "Rice and beans", body: "Wash the rice twice.", ingredients: [{ item: "rice", amount: 200, unit: "g" }] });

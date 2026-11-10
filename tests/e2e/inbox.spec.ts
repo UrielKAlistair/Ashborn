@@ -58,14 +58,14 @@ const capture = async (thought: string) => {
   await expect(field()).toHaveValue("");
 };
 const row = async (title: string) => {
-  const { data, error } = await db.from("graph_nodes").select("id, parent_id, active").eq("title", title);
+  const { data, error } = await db.from("graph_nodes").select("id, parent_id, shelved").eq("title", title);
   if (error) throw error;
   return data;
 };
 const parentOf = async (title: string) => (await row(title))[0]?.parent_id;
 const moveTo = (title: string, target: string) => step(title).getByLabel("Move to…").selectOption({ label: target });
 const inboxRows = async () => {
-  const { data, error } = await db.from("graph_nodes").select("id, title, active").eq("id", userId);
+  const { data, error } = await db.from("graph_nodes").select("id, title, shelved").eq("id", userId);
   if (error) throw error;
   return data;
 };
@@ -84,7 +84,7 @@ test("inbox", async () => {
     await expect(quest("Inbox")).toBeVisible();
     await expect(step("Call the bank")).toBeVisible();
     await expect(page.getByRole("button", { name: "Sort 1" })).toBeVisible();
-    await expect.poll(inboxRows).toEqual([{ id: userId, title: "Inbox", active: true }]);
+    await expect.poll(inboxRows).toEqual([{ id: userId, title: "Inbox", shelved: false }]);
     await expect.poll(() => parentOf("Call the bank")).toBe(userId);
   });
 
@@ -126,18 +126,18 @@ test("inbox", async () => {
     await expect(step("Call the bank").getByLabel("Move to…")).toHaveCount(0);
   });
 
-  await test.step("a renamed Inbox is still the Inbox; a hidden, then a deleted one comes back", async () => {
+  await test.step("a renamed Inbox is still the Inbox; a shelved, then a deleted one comes back", async () => {
     await db.from("graph_nodes").update({ title: "Brain dump" }).eq("id", userId);
     await expect(quest("Brain dump")).toBeVisible();
     await capture("After the rename");
     await expect.poll(() => parentOf("After the rename")).toBe(userId);
-    await expect.poll(inboxRows).toEqual([{ id: userId, title: "Brain dump", active: true }]);
+    await expect.poll(inboxRows).toEqual([{ id: userId, title: "Brain dump", shelved: false }]);
 
-    await db.from("graph_nodes").update({ active: false }).eq("id", userId);
+    await db.from("graph_nodes").update({ shelved: true }).eq("id", userId);
     await expect(quest("Brain dump")).toHaveCount(0);
-    await capture("While hidden");
+    await capture("While shelved");
     await expect(quest("Brain dump")).toBeVisible();
-    await expect.poll(inboxRows).toEqual([{ id: userId, title: "Brain dump", active: true }]);
+    await expect.poll(inboxRows).toEqual([{ id: userId, title: "Brain dump", shelved: false }]);
 
     await db.rpc("delete_node", { target: userId });
     await expect(quest("Brain dump")).toHaveCount(0);

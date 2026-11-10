@@ -6,7 +6,8 @@ import path from "node:path";
 import { addDays, today } from "../../src/shared/dates";
 
 // With nothing prioritised, Ready starts open. A deadline linked to a quest only groups it there: due
-// tomorrow, it still raises nothing, so Now waits for a priority the user gives.
+// tomorrow, it still raises nothing, so Now waits for a priority the user gives. A deadline opens to
+// be changed.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
@@ -51,14 +52,22 @@ test("a linked deadline raises nothing; a priority given in Ready reaches Now", 
   await expect(page.getByRole("group", { name: "Priority for Read chapter 2" })).toHaveCount(0);
   await expect.poll(async () => (await db.from("graph_nodes").select("priority").eq("id", quest).single()).data?.priority).toBe(3);
 
-  // Hidden from the dashboard, its quest still shows as the deadline's
-  await db.from("graph_nodes").update({ active: false, changed_at: { active: new Date().toISOString() } }).eq("id", quest);
+  // Shelved, its quest still shows as the deadline's
+  await db.from("graph_nodes").update({ shelved: true, changed_at: { shelved: new Date().toISOString() } }).eq("id", quest);
   await expect(deadlines.getByLabel("Deadline for")).toHaveValue(quest, { timeout: 10_000 });
   await expect(deadlines.getByLabel("Deadline for").locator("option:checked")).toHaveText("Reading");
 
   // One added since the last read takes its place by date, not the end of the list
   await db.from("deadlines").insert([{ title: "Due sooner", due_date: today() }]);
-  await expect(deadlines.locator("p").filter({ hasText: /^(Due sooner|Reading quiz)$/ })).toHaveText(["Due sooner", "Reading quiz"], { timeout: 10_000 });
+  await expect(deadlines.getByRole("button", { name: /^(Due sooner|Reading quiz)$/ })).toHaveText(["Due sooner", "Reading quiz"], { timeout: 10_000 });
+
+  // A deadline's title opens it to change; only what changed is sent
+  await deadlines.getByRole("button", { name: "Reading quiz", exact: true }).click();
+  await deadlines.getByPlaceholder("Deadline").fill("Reading test");
+  await deadlines.locator('input[type="date"]').fill(addDays(today(), 2));
+  await deadlines.getByRole("button", { name: "Save" }).click();
+  await expect(deadlines.getByRole("button", { name: "Reading test", exact: true })).toBeVisible();
+  await expect.poll(async () => (await db.from("deadlines").select("title, due_date, node_id").eq("title", "Reading test").maybeSingle()).data).toEqual({ title: "Reading test", due_date: addDays(today(), 2), node_id: quest });
 
   await app.close();
   rmSync(profile, { recursive: true, force: true });

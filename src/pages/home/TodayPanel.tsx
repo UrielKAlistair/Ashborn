@@ -1,13 +1,15 @@
+import { DayStartSelect } from "../../components/DayStartSelect";
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
 import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
-import { priorities, type AlarmKind, type GraphNode, type Priority, type Snapshot, type Weekday } from "../../shared/types";
+import { priorities as priorityLevels, type AlarmKind, type Deadline, type GraphNode, type ISODate, type Priority, type Snapshot, type Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
-import { Capture, NodePicker } from "./Capture";
+import { Capture } from "./Capture";
+import { NodePicker } from "./nodePickers";
 import { FocusCard } from "./FocusCard";
 import { goneQuiet } from "../../shared/goneQuiet";
 import { inInbox } from "../../shared/inbox";
@@ -26,6 +28,13 @@ type TodayPanelProps = {
   act: Act;
 };
 
+/**
+ * Today: the desktop's right-hand panel, and the phone's To-do screen. Top to bottom: the date (a tap
+ * sets the hour the day starts); the progress made today; deadlines overdue or due within three
+ * weeks; Capture, the Inbox and its sorting; Now, the to-do; the ready steps no priority covers yet, and the quests
+ * gone quiet; and today's routines. While the Inbox is sorted Now steps aside, and while a started
+ * step's timer runs the lists below it wait, so the panel holds one thing at a time.
+ */
 export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const { dayStartHour } = snapshot.settings;
   const date = useToday(dayStartHour);
@@ -50,7 +59,6 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         (node.parentId || needsFirstStep(model, node)) &&
         model.ready.has(node.id) &&
         !priorities.effective.has(node.id) &&
-        questOf(model.byId, node).active &&
         !inInbox(model, node, snapshot.inboxId) &&
         !quietIds.has(questOf(model.byId, node).id),
     );
@@ -58,24 +66,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   }, [model, snapshot, date]);
   const todoCount = todo.reduce((count, { steps }) => count + steps.length, 0);
 
-  // The count is from the last change; once the next day starts it belongs to yesterday until the next one
-  const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
-  // The steps ticked today, latest first, behind the progress line; level-ups count but have no title
-  const [doneOpen, setDoneOpen] = useState(false);
-  const doneToday = snapshot.nodes
-    .filter((node) => node.parentId && node.completedAt && dayOf(new Date(node.completedAt)) === date)
-    .sort((a, b) => b.completedAt!.localeCompare(a.completedAt!));
 
-  const routines = snapshot.routines.filter((routine) => routine.weekdays.includes(weekday)).sort(byTime);
-  // The time column only when some routine today has a time
-  const timed = routines.some((routine) => routine.time);
-  const checked = new Set(
-    snapshot.routineChecks.filter((check) => check.date === date).map((check) => check.routineId),
-  );
-  // Soonest first: one added or moved since the last read sits at the end of the list as held
-  const deadlines = snapshot.deadlines
-    .filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   return (
     <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-ink/8 bg-panel px-4 py-4">
@@ -93,80 +84,14 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
       {dayStartOpen ? (
         <label className="-mt-4 flex items-center justify-end gap-2 px-1 text-[11.5px] text-muted">
           The day starts at
-          <select
-            value={dayStartHour}
-            onChange={(event) => void act("updateSettings", { dayStartHour: Number(event.target.value) })}
-            className="rounded-md border border-ink/10 bg-canvas/70 px-1.5 py-0.5 text-ink/80"
-          >
-            {Array.from({ length: 24 }, (_, hour) => (
-              <option key={hour} value={hour}>
-                {`${hour}`.padStart(2, "0")}:00
-              </option>
-            ))}
-          </select>
+          <DayStartSelect hour={dayStartHour} act={act} className="rounded-md border border-ink/10 bg-canvas/70 px-1.5 py-0.5 text-ink/80" />
         </label>
       ) : null}
-      {/* There before the first tick too, so the cards below don't shift under the finger */}
-      <div className="-mt-5 px-1">
-        <button
-          type="button"
-          onClick={() => setDoneOpen(!doneOpen)}
-          aria-expanded={doneOpen}
-          disabled={doneToday.length === 0}
-          className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85 pointer-coarse:min-h-8"
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${progressToday > 0 ? "bg-ember" : "border border-muted"}`} />
-          {progressToday === 0 ? "No steps of progress yet today" : `${progressToday} ${progressToday === 1 ? "step" : "steps"} of progress today`}
-          {doneToday.length > 0 ? <span className={`inline-block transition-transform ${doneOpen ? "rotate-90" : ""}`}>›</span> : null}
-        </button>
-        {doneOpen ? (
-          <ul aria-label="Done today" className="mt-2 space-y-1 border-l border-ember/30 pl-3 text-[12.5px] text-ink/75">
-            {doneToday.map((step) => (
-              <li key={step.id} className="flex items-baseline gap-2">
-                <Tick done onClick={() => void act("updateNode", step.id, { done: false })} className="translate-y-0.5" />
-                <span className="min-w-0 flex-1">{step.title}</span>
-                <span className="shrink-0 truncate text-[11px] text-muted">{questOf(model.byId, step).title}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
 
-      <Section title="Deadlines" action={<DeadlineForm act={act} model={model} />}>
-        {deadlines.length === 0 ? (
-          <Empty>Nothing due in the next {DEADLINE_HORIZON_DAYS} days.</Empty>
-        ) : (
-          deadlines.map((deadline) => {
-            const days = daysBetween(date, deadline.dueDate);
-            return (
-              <div key={deadline.id} className={`group ${rowClass}`}>
-                <Tick done={false} onClick={() => void act("completeDeadline", deadline.id)} className="mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start gap-2">
-                    <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink/90">{deadline.title}</p>
-                    <span
-                      className={`shrink-0 rounded-md px-1.5 py-px font-mono text-[11px] tabular-nums ${
-                        days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-ink/6 text-muted"
-                      }`}
-                    >
-                      {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
-                    </span>
-                  </div>
-                  {/* The quest it belongs with sits on the date's line: a link only groups (194) */}
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
-                    <span className="shrink-0 font-mono tabular-nums">
-                      {deadline.dueDate}
-                      {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""} ·
-                    </span>
-                    <NodePicker model={model} label="Deadline for" none="No quest" value={deadline.nodeId} onChange={(nodeId) => void act("linkDeadline", deadline.id, nodeId)} className="-mx-1 min-w-0 flex-1 cursor-pointer appearance-none truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6 hover:text-ink/80 pointer-coarse:min-h-8" />
-                  </div>
-                </div>
-                <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
-              </div>
-            );
-          })
-        )}
-      </Section>
+
+      <DoneToday snapshot={snapshot} model={model} act={act} date={date} />
+
+      <Deadlines snapshot={snapshot} model={model} act={act} date={date} />
 
       <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
       {sorting ? null : (
@@ -199,31 +124,135 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         </>
       )}
 
-      <Section title="Routines" action={<RoutineForm act={act} />}>
-        {routines.length === 0 ? (
-          <Empty>No routines on {weekday}.</Empty>
-        ) : (
-          routines.map((routine) => (
-            <div key={routine.id} className={`group ${rowClass}`}>
-              <Tick done={checked.has(routine.id)} onClick={() => void act("setRoutineCheck", routine.id, date, !checked.has(routine.id))} className="mt-0.5" />
-              {timed ? <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-muted tabular-nums">{routine.time}</span> : null}
-              <div className="min-w-0 flex-1">
-                <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-muted line-through decoration-ink/25" : "text-ink/90"}`}>{routine.title}</p>
-                {routine.alarm !== "none" || routine.cue ? (
-                  <p className="mt-0.5 text-[11.5px] text-muted">
-                    {[routine.alarm !== "none" ? alarmLabels[routine.alarm] : null, routine.cue ? `if ${routine.cue}` : null]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                ) : null}
-              </div>
-              <DeleteButton warning="Delete this routine and its ticks?" onDelete={() => void act("deleteRoutine", routine.id)} />
-            </div>
-          ))
-        )}
-      </Section>
-
+      <Routines snapshot={snapshot} act={act} date={date} weekday={weekday} />
     </section>
+  );
+}
+
+// How many steps of progress today, unfolding into the steps ticked, each unticked with a click
+function DoneToday({ snapshot, model, act, date }: { snapshot: Snapshot; model: GraphModel; act: Act; date: ISODate }) {
+  // The count is from the last change; once the next day starts it belongs to yesterday until the next one
+  const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
+  // The steps ticked today, latest first, behind the progress line; level-ups count but have no title
+  const [doneOpen, setDoneOpen] = useState(false);
+  const doneToday = snapshot.nodes
+    .filter((node) => node.parentId && node.completedAt && dayOf(new Date(node.completedAt)) === date)
+    .sort((a, b) => b.completedAt!.localeCompare(a.completedAt!));
+
+  // There before the first tick too, so the cards below don't shift under the finger
+  return (
+    <div className="-mt-5 px-1">
+      <button
+        type="button"
+        onClick={() => setDoneOpen(!doneOpen)}
+        aria-expanded={doneOpen}
+        disabled={doneToday.length === 0}
+        className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85 pointer-coarse:min-h-8"
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${progressToday > 0 ? "bg-ember" : "border border-muted"}`} />
+        {progressToday === 0 ? "No steps of progress yet today" : `${progressToday} ${progressToday === 1 ? "step" : "steps"} of progress today`}
+        {doneToday.length > 0 ? <span className={`inline-block transition-transform ${doneOpen ? "rotate-90" : ""}`}>›</span> : null}
+      </button>
+      {doneOpen ? (
+        <ul aria-label="Done today" className="mt-2 space-y-1 border-l border-ember/30 pl-3 text-[12.5px] text-ink/75">
+          {doneToday.map((step) => (
+            <li key={step.id} className="flex items-baseline gap-2">
+              <Tick done onClick={() => void act("updateNode", step.id, { done: false })} className="translate-y-0.5" />
+              <span className="min-w-0 flex-1">{step.title}</span>
+              <span className="shrink-0 truncate text-[11px] text-muted">{questOf(model.byId, step).title}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+// Open deadlines, overdue or due within DEADLINE_HORIZON_DAYS, soonest first, each with how far off
+// it is and the quest it belongs with
+function Deadlines({ snapshot, model, act, date }: { snapshot: Snapshot; model: GraphModel; act: Act; date: ISODate }) {
+  // The deadline whose title was clicked, edited in a pop-over on its row
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // Soonest first: one added or moved since the last read sits at the end of the list as held
+  const deadlines = snapshot.deadlines
+    .filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  return (
+    <Section title="Deadlines" action={<DeadlineForm act={act} model={model} />}>
+      {deadlines.length === 0 ? (
+        <Empty>Nothing due in the next {DEADLINE_HORIZON_DAYS} days.</Empty>
+      ) : (
+        deadlines.map((deadline) => {
+          const days = daysBetween(date, deadline.dueDate);
+          return (
+            <div key={deadline.id} className={`group relative ${rowClass}`}>
+              <Tick done={false} onClick={() => void act("completeDeadline", deadline.id)} className="mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-2">
+                  <button type="button" onClick={() => setEditingId(deadline.id)} title="Change this deadline" className="min-w-0 flex-1 text-left text-[13px] leading-snug text-ink/90 hover:text-ember">
+                    {deadline.title}
+                  </button>
+                  <span
+                    className={`shrink-0 rounded-md px-1.5 py-px font-mono text-[11px] tabular-nums ${
+                      days < 0 ? "bg-red-500/15 text-red-300" : days <= 2 ? "bg-amber-400/15 text-amber-200" : "bg-ink/6 text-muted"
+                    }`}
+                  >
+                    {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
+                  </span>
+                </div>
+                {/* The quest it belongs with sits on the date's line: a link only groups (194) */}
+                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
+                  <span className="shrink-0 font-mono tabular-nums">
+                    {deadline.dueDate}
+                    {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""} ·
+                  </span>
+                  <NodePicker model={model} label="Deadline for" none="No quest" value={deadline.nodeId} onChange={(nodeId) => void act("updateDeadline", deadline.id, { nodeId })} className="-mx-1 min-w-0 flex-1 cursor-pointer appearance-none truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6 hover:text-ink/80 pointer-coarse:min-h-8" />
+                </div>
+              </div>
+              <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
+              {editingId === deadline.id ? <DeadlineFields deadline={deadline} act={act} model={model} onDone={() => setEditingId(null)} /> : null}
+            </div>
+          );
+        })
+      )}
+    </Section>
+  );
+}
+
+// Today's routines, timed ones first, each ticked for today
+function Routines({ snapshot, act, date, weekday }: { snapshot: Snapshot; act: Act; date: ISODate; weekday: Weekday }) {
+  const routines = snapshot.routines.filter((routine) => routine.weekdays.includes(weekday)).sort(byTime);
+  // The time column only when some routine today has a time
+  const timed = routines.some((routine) => routine.time);
+  const checked = new Set(
+    snapshot.routineChecks.filter((check) => check.date === date).map((check) => check.routineId),
+  );
+
+  return (
+    <Section title="Routines" action={<RoutineForm act={act} />}>
+      {routines.length === 0 ? (
+        <Empty>No routines on {weekday}.</Empty>
+      ) : (
+        routines.map((routine) => (
+          <div key={routine.id} className={`group ${rowClass}`}>
+            <Tick done={checked.has(routine.id)} onClick={() => void act("setRoutineCheck", routine.id, date, !checked.has(routine.id))} className="mt-0.5" />
+            {timed ? <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-muted tabular-nums">{routine.time}</span> : null}
+            <div className="min-w-0 flex-1">
+              <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-muted line-through decoration-ink/25" : "text-ink/90"}`}>{routine.title}</p>
+              {routine.alarm !== "none" || routine.cue ? (
+                <p className="mt-0.5 text-[11.5px] text-muted">
+                  {[routine.alarm !== "none" ? alarmLabels[routine.alarm] : null, routine.cue ? `if ${routine.cue}` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              ) : null}
+            </div>
+            <DeleteButton warning="Delete this routine and its ticks?" onDelete={() => void act("deleteRoutine", routine.id)} />
+          </div>
+        ))
+      )}
+    </Section>
   );
 }
 
@@ -313,7 +342,7 @@ function openSteps(model: GraphModel, id: string): number {
 function PriorityChips({ label, onPick, quiet = false }: { label: string; onPick: (priority: Priority) => void; quiet?: boolean }) {
   return (
     <div className="flex shrink-0 gap-1" role="group" aria-label={label}>
-      {priorities.map((priority) => (
+      {priorityLevels.map((priority) => (
         <button
           key={priority}
           type="button"
@@ -385,36 +414,39 @@ function RoutineForm({ act }: { act: Act }) {
 
 function DeadlineForm({ act, model }: { act: Act; model: GraphModel }) {
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [dueDate, setDueDate] = useState(today());
-  const [alarmTime, setAlarmTime] = useState("");
-  const [nodeId, setNodeId] = useState<string | null>(null);
+  if (!open) return <AddButton onClick={() => setOpen(true)} />;
+  return <DeadlineFields deadline={null} act={act} model={model} onDone={() => setOpen(false)} />;
+}
+
+// A deadline's fields in a pop-over: a new one (due today, as of when it opens: the panel can stay
+// mounted across days) or, with `deadline`, that one, of which only what changed is sent, so a field
+// sent as it was can't win over a change made to it meanwhile on another device
+function DeadlineFields({ deadline, act, model, onDone }: { deadline: Deadline | null; act: Act; model: GraphModel; onDone: () => void }) {
+  const [title, setTitle] = useState(deadline?.title ?? "");
+  const [dueDate, setDueDate] = useState(deadline?.dueDate ?? today());
+  const [alarmTime, setAlarmTime] = useState(deadline?.alarmTime ?? "");
+  const [nodeId, setNodeId] = useState(deadline?.nodeId ?? null);
 
   const submit = () => {
     if (!title.trim() || !dueDate) return;
-    void act("createDeadline", { id: crypto.randomUUID(), title: title.trim(), dueDate, alarmTime: alarmTime || null, nodeId });
-    setTitle("");
-    setAlarmTime("");
-    setNodeId(null);
-    setOpen(false);
+    const fields = { title: title.trim(), dueDate, alarmTime: alarmTime || null, nodeId };
+    if (!deadline) void act("createDeadline", { id: crypto.randomUUID(), ...fields });
+    else {
+      const changed = Object.fromEntries(Object.entries(fields).filter(([key, value]) => value !== deadline[key as keyof typeof fields]));
+      if (Object.keys(changed).length > 0) void act("updateDeadline", deadline.id, changed);
+    }
+    onDone();
   };
-
-  // Due today by default, as of when the form opens: the panel can stay mounted across days
-  const show = () => {
-    setDueDate(today());
-    setOpen(true);
-  };
-  if (!open) return <AddButton onClick={show} />;
 
   return (
-    <div onKeyDown={closeOnEscape(() => setOpen(false))} className={popoverClass}>
+    <div onKeyDown={closeOnEscape(onDone)} className={popoverClass}>
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && submit()} placeholder="Deadline" className={fieldClass} />
       <div className="flex gap-2">
-        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${fieldClass} `} />
-        <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} title="Alarm on the day (optional)" className={`${fieldClass} w-24 `} />
+        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={fieldClass} />
+        <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} title="Alarm on the day (optional)" className={`${fieldClass} w-24`} />
       </div>
       <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={nodeId} onChange={setNodeId} className={fieldClass} />
-      <FormButtons onCancel={() => setOpen(false)} onSubmit={submit} />
+      <FormButtons onCancel={onDone} onSubmit={submit} submitLabel={deadline ? "Save" : "Add"} />
     </div>
   );
 }
@@ -488,14 +520,14 @@ function DeleteButton({ warning, onDelete }: { warning: string; onDelete: () => 
   );
 }
 
-function FormButtons({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: () => void }) {
+function FormButtons({ onCancel, onSubmit, submitLabel = "Add" }: { onCancel: () => void; onSubmit: () => void; submitLabel?: string }) {
   return (
     <div className="flex justify-end gap-2 pt-1 text-[12.5px]">
       <button type="button" onClick={onCancel} className="rounded-lg border border-ink/12 px-3 py-1 text-ink/70 hover:bg-ink/6">
         Cancel
       </button>
       <button type="button" onClick={onSubmit} className="rounded-lg bg-ember px-3 py-1 font-medium text-canvas hover:brightness-110">
-        Add
+        {submitLabel}
       </button>
     </div>
   );

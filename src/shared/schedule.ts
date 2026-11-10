@@ -1,3 +1,10 @@
+/**
+ * The alarm schedule: every ring due in the next few days, worked out from the snapshot alone, so the
+ * app, the phone's background refresh (a Java mirror in Schedule.java) and the tests agree on it.
+ * Sources are standalone alarms (recurring and one-off), timed routines, deadlines with an alarm
+ * time, and recipe reminders of planned meals. Each ring has a stable key, which is how a skip, a
+ * snooze and the phone's stored schedule name it.
+ */
 import { addDays, atTime, dayOf, startOfDay, toISODate, weekdayOf } from "./dates.js";
 import { mealReminders } from "./kitchen.js";
 import type { AlarmKind, ISODate, Routine, Snapshot } from "./types.js";

@@ -31,8 +31,9 @@ import org.json.JSONObject;
 // Refills the phone's alarm clock while the app is closed, so a change made on the desktop or by
 // the agent reaches the alarms: reads the rows the schedule needs from Supabase, computes the next
 // week's alarms (Schedule) and hands them to AlarmScheduler. It runs from an exact wake every 15
-// minutes (RefreshWake), which Doze lets through, and from this hourly job, which Doze defers, as a
-// fallback for when exact alarms are refused. It signs in with a session of its own, made by the app
+// minutes (RefreshWake), which Doze lets through (though in Doze it reaches the network only with the
+// battery exemption), and from this hourly job, which Doze defers, as a fallback for when exact
+// alarms are refused. It signs in with a session of its own, made by the app
 // at sign-in, because Supabase refresh tokens are single-use and sharing the app's would sign the app out.
 public class AlarmRefreshWorker extends Worker {
     private static final String NAME = "alarm-refresh";

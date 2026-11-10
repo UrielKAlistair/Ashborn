@@ -1,3 +1,5 @@
+// The app's one connection to Supabase, and the API built on it. Requests give up after 15 s and
+// Supabase's own retries are off, because the offline queue (offline.ts) owns resending.
 import { createClient } from "@supabase/supabase-js";
 import { createApi } from "./api";
 

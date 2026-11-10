@@ -1,5 +1,14 @@
+/**
+ * Live sync: changes made anywhere (another device, the agent) streamed into the app as Deltas, over
+ * one Supabase Realtime channel with a handler per table.
+ *
+ * Three facts about Realtime shape it. The app's own changes come back too, so every Delta is
+ * idempotent. A deleted row arrives with only its key. And changes can arrive out of order or be
+ * dropped, so a row not on screen is read again before it is shown (see watchChanges). Rows that a
+ * change message can't carry whole (a node's XP, the Kitchen's many tables) are re-read instead.
+ */
 import type { RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/supabase-js";
-import { today } from "../shared/dates";
+import { addDays, today } from "../shared/dates";
 import { PROGRESS_UNIT } from "../shared/progression";
 import type { Delta, Snapshot } from "../shared/types";
 import { readKitchen, readProgressToday, readSettings, toAlarm, toDeadline, toEdge, toNode, toRoutine, type AlarmRow, type DeadlineRow, type NodeRow, type RoutineRow } from "./api";
@@ -13,10 +22,8 @@ type EdgeRow = { from_id: string; to_id: string };
 const kitchenTables = ["stock_items", "stock_changes", "recipes", "recipe_ingredients", "recipe_reminders", "meals", "meal_recipes", "default_meals", "default_meal_recipes"];
 const KITCHEN_SETTLE_MS = 300;
 
-// Streams changes made anywhere (another device, an agent) into the app as Deltas. The app's own
-// changes come back here too, so every Delta is idempotent: merging it twice changes nothing.
-// Deleted rows arrive with only their primary key. Returns a function that stops the stream.
-// Changes do not always arrive in the order they were made: a delete can come before the insert or
+// Starts the stream; returns a function that stops it. onSubscribed fires each time the server starts
+// listening, when the caller should read everything again. Changes do not always arrive in the order they were made: a delete can come before the insert or
 // update it followed (Realtime checks access on those first), and that insert can be dropped. So an
 // insert or update of a row not on screen is read again first, and shown only if the row exists,
 // lest it bring back a row already deleted.
@@ -108,8 +115,8 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     on("routine_checks", (change) => {
       // A routine deleted takes its ticks with it; otherwise the row says whether it is ticked
       const row = (change.eventType === "DELETE" ? change.old : change.new) as { routine_id: string; date: string; checked?: boolean };
-      // The app holds only today's checks
-      if (row.date === today()) {
+      // The app holds the checks from yesterday on, as the load reads them: a routine's day can run past midnight
+      if (row.date >= addDays(today(), -1)) {
         emit({ routineCheck: { routineId: row.routine_id, date: row.date, checked: change.eventType !== "DELETE" && row.checked !== false } });
       }
     }),

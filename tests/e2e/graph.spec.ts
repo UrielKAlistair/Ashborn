@@ -277,13 +277,22 @@ test("home graph", async () => {
     await expect(nodes().filter({ hasText: "MLP" })).toHaveCount(0);
   });
 
-  await test.step("a hidden quest comes back from Quests after a reload", async () => {
+  await test.step("a shelved step leaves the graph; its quest's count shows it again, to unshelve", async () => {
+    await card("Added by an agent").getByTitle("Shelve: keep it, but not now").click();
+    await expect(card("Added by an agent")).toHaveCount(0);
+    await card("Deep Learning II").getByRole("button", { name: "1 shelved" }).click();
+    await card("Added by an agent").getByTitle("Unshelve: pursue it again").click();
+    await expect(card("Deep Learning II").getByRole("button", { name: /shelved/ })).toHaveCount(0);
+    await expect(card("Added by an agent")).toBeVisible();
+  });
+
+  await test.step("a shelved quest leaves the graph, and comes back from Quests after a reload", async () => {
     await card("Deep Learning II").getByTitle("Options").click();
-    await page.getByRole("button", { name: "Hide quest" }).click();
-    await expect(page.getByText("All quests are hidden")).toBeVisible();
-    await expect.poll(async () => (await db.from("graph_nodes").select("active").eq("title", "Deep Learning II").single()).data?.active).toBe(false);
+    await page.getByRole("button", { name: "Shelve", exact: true }).click();
+    await expect(page.getByText("All quests are shelved")).toBeVisible();
+    await expect.poll(async () => (await db.from("graph_nodes").select("shelved").eq("title", "Deep Learning II").single()).data?.shelved).toBe(true);
     await page.reload();
-    await expect(page.getByText("All quests are hidden")).toBeVisible();
+    await expect(page.getByText("All quests are shelved")).toBeVisible();
     await page.getByRole("button", { name: /Quests/ }).click();
     await page.locator("label", { hasText: "Deep Learning" }).locator("input").click();
     await expect(card("Deep Learning II")).toBeVisible();
@@ -354,10 +363,12 @@ test("home graph", async () => {
     const dialog = page.getByRole("dialog", { name: "New alarm" });
     await dialog.locator('input[type="time"]').fill("06:00");
     await dialog.getByPlaceholder("Label (optional)").fill("Wake up");
-    for (const day of ["Mo", "Tu"]) await dialog.getByRole("button", { name: day, exact: true }).click();
+    for (const day of ["Mon", "Tue"]) await dialog.getByRole("button", { name: day, exact: true }).click();
     await dialog.locator("select").selectOption("situps");
     await dialog.getByRole("button", { name: /^Set/ }).click();
-    await expect(page.getByText("Mon Tue · 15 sit-ups")).toBeVisible();
+    const wakeRow = page.getByRole("group", { name: "Wake up", exact: true });
+    await expect(wakeRow.getByLabel("Mon Tue", { exact: true })).toBeVisible();
+    await expect(wakeRow.getByText("15 sit-ups", { exact: true })).toBeVisible();
 
     const wake = page.getByRole("switch", { name: "Wake up on" });
     await wake.click();

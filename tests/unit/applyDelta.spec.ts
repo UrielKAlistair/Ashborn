@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { applyDelta, keepUnchanged } from "../../src/lib/api";
+import { applyDelta, keepUnchanged } from "../../src/lib/snapshotMerge";
 import { emptyKitchen } from "../../src/shared/kitchen";
 import { PROGRESS_UNIT } from "../../src/shared/progression";
 import type { GraphNode, Snapshot } from "../../src/shared/types";
@@ -12,7 +12,6 @@ const node = (id: string, overrides: Partial<GraphNode> = {}): GraphNode => ({
   parentId: null,
   title: id,
   statWeights: {},
-  active: true,
   createdAt: "2026-10-20T00:00:00Z",
   completedAt: null,
   shelved: false,

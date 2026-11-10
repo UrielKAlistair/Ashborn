@@ -16,7 +16,6 @@ const node = (id: string, parentId: string | null, completedAt: string | null = 
   parentId,
   title: id,
   statWeights: {},
-  active: true,
   createdAt: "2026-10-20T00:00:00.000Z",
   completedAt,
   shelved: false,

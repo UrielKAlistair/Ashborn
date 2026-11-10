@@ -5,6 +5,7 @@ import android.app.AlarmManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -13,6 +14,7 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -25,9 +27,10 @@ import java.util.List;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-// The web app's handle on alarms (src/lib/alarms.ts): hand over the schedule, ask which alarm
-// is ringing, stop or snooze it, read back what is scheduled, check the permissions alarms need, hand over the session
-// the background refresh signs in with, and set the notice for the end of Now's timer
+// The web app's handle on alarms (src/lib/alarms.ts): hand over the schedule, ask which alarm is
+// ringing, stop or snooze it, read back what is scheduled, check the permissions alarms need, hand
+// over the session the background refresh signs in with, set the notice for the end of Now's timer,
+// and keep the screen on
 @CapacitorPlugin(name = "AshbornAlarm")
 public class AlarmPlugin extends Plugin {
     // How many of the stored alarms `held` reports
@@ -133,8 +136,8 @@ public class AlarmPlugin extends Plugin {
     // the app is closed needs the session the app hands over at sign-in.
     @PluginMethod
     public void permissions(PluginCall call) {
-        boolean notifications = Build.VERSION.SDK_INT < 33
-            || ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        // Off when the permission is refused (13+) or the app's notifications are switched off (any version)
+        boolean notifications = NotificationManagerCompat.from(getContext()).areNotificationsEnabled();
         boolean fullScreen = Build.VERSION.SDK_INT < 34 || getContext().getSystemService(NotificationManager.class).canUseFullScreenIntent();
         JSObject result = new JSObject();
         result.put("notifications", notifications);
@@ -157,8 +160,19 @@ public class AlarmPlugin extends Plugin {
     @PluginMethod
     public void requestBatteryExemption(PluginCall call) {
         Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getContext().getPackageName()));
-        getActivity().startActivity(intent);
+        // Some builds lack the request dialog: the list of apps to exempt instead, or nothing if that is missing too
+        if (!open(intent)) open(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
         call.resolve();
+    }
+
+    // Opens a settings screen; false where the phone has none to answer it
+    private boolean open(Intent intent) {
+        try {
+            getActivity().startActivity(intent);
+            return true;
+        } catch (ActivityNotFoundException e) {
+            return false;
+        }
     }
 
     // Xiaomi's own Autostart list; on other builds, the app's settings page
@@ -178,7 +192,12 @@ public class AlarmPlugin extends Plugin {
     // from "refused for good" only by whether the app has asked before, so that is remembered.
     @PluginMethod
     public void requestNotifications(PluginCall call) {
-        if (Build.VERSION.SDK_INT >= 33) {
+        boolean granted = Build.VERSION.SDK_INT < 33
+            || ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        if (granted) {
+            // Allowed, but switched off in the app's notification settings
+            open(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName()));
+        } else {
             android.content.SharedPreferences prefs = getContext().getSharedPreferences("ashborn-permissions", android.content.Context.MODE_PRIVATE);
             boolean asked = prefs.getBoolean("notificationsAsked", false);
             if (asked && !ActivityCompat.shouldShowRequestPermissionRationale(getActivity(), Manifest.permission.POST_NOTIFICATIONS)) {
@@ -195,6 +214,14 @@ public class AlarmPlugin extends Plugin {
     @PluginMethod
     public void timeUp(PluginCall call) {
         TimeUp.set(getContext(), call.getLong("at", 0L), call.getString("title", ""));
+        call.resolve();
+    }
+
+    // Keeps the screen on, or lets it sleep again (MainActivity.keepAwake)
+    @PluginMethod
+    public void keepAwake(PluginCall call) {
+        boolean on = call.getBoolean("on", false);
+        getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).keepAwake(on));
         call.resolve();
     }
 

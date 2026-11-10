@@ -1,10 +1,11 @@
 import type { Hue } from "../../../lib/theme";
 import { hexCentre, hexColumnWidth, hexRowHeight } from "./hexgrid";
 
-// Territories on the hex grid, as on the homepage's trail. Every cell asks one question: which
-// quest am I closest to? The answer depends only on where the quests are right now, so any
-// arrangement, overlaps included, always draws the same way and fully reverts when things move.
-// A territory takes its quest's colour.
+// Territories on the hex grid, as on the trail of the user's own homepage, where the look came from
+// (design 38). Every cell asks one question: which quest's box is its centre closest to, within reach?
+// The answer depends only on where the quests are right now, so any arrangement, overlaps included,
+// always draws the same way and fully reverts when things move. A territory takes its quest's colour;
+// how bright each pixel of it is, the renderer works out from the owner's box.
 
 export const territoryCellRadius = 22; // circumradius of a flat-topped hex cell, in flow units
 export const territoryReach = 52; // how far a territory extends beyond its quest's edge
@@ -20,27 +21,13 @@ const gridBlock = 8; // the grid grows in blocks of cells, so dragging rarely re
 
 const cellCentre = (col: number, row: number) => hexCentre(col, row, radius);
 
-// The six neighbours of a flat-topped cell in "odd columns shifted down" offset coordinates
-const neighbours = (col: number, row: number): [number, number][] => {
-  const shifted = Math.abs(col) % 2 === 1;
-  return [
-    [col, row - 1],
-    [col, row + 1],
-    [col - 1, shifted ? row : row - 1],
-    [col - 1, shifted ? row + 1 : row],
-    [col + 1, shifted ? row : row - 1],
-    [col + 1, shifted ? row + 1 : row],
-  ];
-};
-
 const distanceToRect = (x: number, y: number, r: Rect) => {
   const dx = Math.max(r.x - x, 0, x - (r.x + r.width));
   const dy = Math.max(r.y - y, 0, y - (r.y + r.height));
   return Math.hypot(dx, dy);
 };
 
-// `neighbours` holds the indices, in `cells`, of the neighbouring cells that are in the grid
-export type GridCell = { key: string; col: number; row: number; x: number; y: number; neighbours: number[] };
+export type GridCell = { key: string; col: number; row: number; x: number; y: number };
 export type Grid = { cols: [number, number]; rows: [number, number]; cells: GridCell[] };
 
 // Covers the quests plus reach, rounded out to whole blocks
@@ -58,24 +45,18 @@ export function gridExtent(quests: TerritoryQuest[]) {
 }
 
 export function buildGrid({ cols, rows }: { cols: [number, number]; rows: [number, number] }): Grid {
-  const height = rows[1] - rows[0] + 1;
-  const indexOf = (col: number, row: number) =>
-    col < cols[0] || col > cols[1] || row < rows[0] || row > rows[1] ? -1 : (col - cols[0]) * height + (row - rows[0]);
   const cells: GridCell[] = [];
   for (let col = cols[0]; col <= cols[1]; col++) {
-    for (let row = rows[0]; row <= rows[1]; row++) {
-      const around = neighbours(col, row).map(([c, r]) => indexOf(c, r)).filter((index) => index >= 0);
-      cells.push({ key: `${col},${row}`, col, row, ...cellCentre(col, row), neighbours: around });
-    }
+    for (let row = rows[0]; row <= rows[1]; row++) cells.push({ key: `${col},${row}`, col, row, ...cellCentre(col, row) });
   }
   return { cols, rows, cells };
 }
 
-export type CellLook = { color?: Hue; owner?: string; distance: number; level: number; frontier: boolean };
+export type CellLook = { color?: Hue; owner?: string };
 
 // One look per cell, in the order of grid.cells
 export function computeOwners(grid: Grid, quests: TerritoryQuest[]): CellLook[] {
-  const looks = grid.cells.map((cell): CellLook => {
+  return grid.cells.map((cell): CellLook => {
     let best: TerritoryQuest | undefined;
     let bestDistance = Infinity;
     for (const quest of quests) {
@@ -87,16 +68,8 @@ export function computeOwners(grid: Grid, quests: TerritoryQuest[]): CellLook[] 
       }
     }
     const owned = best && bestDistance <= reach;
-    // Three strength levels: under or beside a quest, nearby, at the edge of reach
-    const level = !owned ? 0 : bestDistance < reach / 3 ? 3 : bestDistance < (reach * 2) / 3 ? 2 : 1;
-    return { color: owned ? best!.color : undefined, owner: owned ? best!.id : undefined, distance: bestDistance, level, frontier: false };
+    return { color: owned ? best!.color : undefined, owner: owned ? best!.id : undefined };
   });
-  // Cells beyond the grid's edge count as unowned
-  grid.cells.forEach((cell, i) => {
-    const look = looks[i];
-    if (look.color) look.frontier = cell.neighbours.length < 6 || cell.neighbours.some((n) => looks[n].color !== look.color);
-  });
-  return looks;
 }
 
 // The bare fabric fades out when zoomed far out, where the cells would shrink to a few pixels and

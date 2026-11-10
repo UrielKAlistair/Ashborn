@@ -6,8 +6,9 @@ import { CharacterPanel } from "./CharacterPanel";
 import { QuestGraph } from "./LazyQuestGraph";
 import { TodayPanel } from "./TodayPanel";
 
-// Runs a change in the main process and merges what it returns into the data on screen; resolves
-// to whether it was saved (or queued offline)
+// Makes a change: shows it at once, sends it to the database (or, offline, queues it) and merges what
+// comes back into the data on screen (App.tsx). Resolves to whether it was saved or queued; false when
+// it was refused, with the reason shown.
 export type Act = <K extends Mutation>(name: K, ...args: Parameters<AshbornApi[K]>) => Promise<boolean>;
 
 type HomePageProps = {
@@ -15,6 +16,8 @@ type HomePageProps = {
   act: Act;
 };
 
+// The desktop's Home: the quest graph, and beside it the character sheet and Today (Now, routines,
+// deadlines). The phone shows the same parts one screen at a time (PhoneHome.tsx).
 export function HomePage({ snapshot, act }: HomePageProps) {
   // The model reads only nodes and edges, so a routine, deadline or Kitchen change leaves it, and
   // everything the graph derives from it, as it was

@@ -19,10 +19,10 @@ export function PhoneHome({ snapshot, act, screen, away }: { snapshot: Snapshot;
   const model = useMemo(() => buildGraphModel(snapshot), [snapshot.nodes, snapshot.edges]);
 
   // The graph is built ahead, hidden, once the app has been idle a moment, or when first opened,
-  // and the character's portrait is read then too. The graph then stays mounted, so opening it shows it rather than building it anew. While hidden it
-  // keeps the data it last showed, so a change made on another screen re-renders nothing here; it
-  // catches up in the render that shows it again. (requestIdleCallback: the app runs only
-  // in Chromium, the desktop's Electron and Android's WebView.)
+  // and the character's portrait is read then too. The graph then stays mounted, so opening it shows
+  // it rather than building it anew. While hidden it keeps the data it last showed, so a change made
+  // on another screen re-renders nothing here; it catches up in the render that shows it again.
+  // (requestIdleCallback: the app runs only in Chromium, the desktop's Electron and Android's WebView.)
   const [graphOpened, setGraphOpened] = useState(screen === "graph");
   useEffect(() => {
     if (screen === "graph") setGraphOpened(true);

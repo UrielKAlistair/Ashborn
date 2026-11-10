@@ -80,6 +80,15 @@ test("alarms", async () => {
     await expect.poll(alarmRow).toBeNull();
   });
 
+  await test.step("an open alarm needs a time to save, and closes when it is deleted elsewhere", async () => {
+    await ring("Dentist, bring the form").getByRole("button", { name: "Edit Dentist, bring the form" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit alarm" });
+    await dialog.getByLabel("Time").fill("");
+    await expect(dialog.getByRole("button", { name: "Save" })).toBeDisabled();
+    await db.from("alarms").delete().eq("id", later);
+    await expect(dialog).toHaveCount(0, { timeout: 10_000 });
+  });
+
   await test.step("the + pop-up sets a quick alarm, which rings today", async () => {
     await page.getByRole("button", { name: "‹ Today" }).click();
     const count = async () => (await db.from("alarms").select("id")).data?.length;

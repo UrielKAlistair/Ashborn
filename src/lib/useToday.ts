@@ -1,3 +1,4 @@
+// The app's "today", kept current while the app stays open for days.
 import { useEffect, useState } from "react";
 import { addDays, startOfDay, today } from "../shared/dates";
 

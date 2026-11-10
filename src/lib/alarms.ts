@@ -1,3 +1,17 @@
+/**
+ * The app's side of the phone's alarms: alarms ring on Android only, from a native plugin
+ * (AlarmPlugin.java), so they ring with the app closed. This file wraps that plugin.
+ *
+ * - useAlarmSchedule hands the phone the next week's rings whenever they change; the phone stores
+ *   them and arms Android's alarm clock (a background refresh keeps them current while the app is shut).
+ * - useRingingAlarm shows a ring going off and stops or snoozes it.
+ * - useAlarmPermissions and fixPermission report and open the settings rings depend on.
+ * - useHeldSchedule reads back what the phone holds, for Settings.
+ * - connectBackgroundRefresh gives that background refresh a session of its own.
+ * - setTimeUpNotice and keepScreenAwake ask the phone for the end-of-timer notice and a screen kept on
+ *   (let go when the module loads, in case a reloaded page held it).
+ * Off the phone every hook returns null or does nothing.
+ */
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { createClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -9,9 +23,16 @@ import type { AlarmKind, Snapshot } from "../shared/types";
 const SCHEDULE_DAYS = 7;
 // How often the open app checks whether an alarm has started ringing
 const RINGING_POLL_MS = 2000;
+// How long a stopped ring the phone still reports is taken for its stop not yet handled
+const STOP_SETTLE_MS = 5000;
 
+// notifications: the app may notify (permission given, notifications not switched off);
+// exactAlarms: alarms can be set at all (Android 12 lets the user take that away);
+// fullScreen: a ring may open the ringing screen over the lock screen (a grant of its own from Android 14);
 // alarmChannel: the Alarms notification channel is of high importance, so a ring pops up and shows over the lock screen;
-// exactAlarms: alarms can be set at all (Android 12 lets the user take that away)
+// battery: exempt from battery optimisation, so the background refresh can reach the network in Doze;
+// xiaomi: a Xiaomi phone, whose Autostart list must also allow the app;
+// background: the background refresh has a session (connectBackgroundRefresh)
 export type AlarmPermissions = { notifications: boolean; exactAlarms: boolean; fullScreen: boolean; alarmChannel: boolean; battery: boolean; xiaomi: boolean; background: boolean };
 
 export type RingingAlarm = { key: string; at: number; title: string; kind: Exclude<AlarmKind, "none"> };
@@ -44,14 +65,23 @@ type AlarmPlugin = {
   connectBackground(options: { url: string; publishableKey: string; refreshToken: string }): Promise<void>;
   // `at` (epoch ms) the end of Now's timer on the step `title`, 0 when none runs; replaces the last
   timeUp(options: { at: number; title: string }): Promise<void>;
+  keepAwake(options: { on: boolean }): Promise<void>;
 };
 
 // Alarms exist only in the Android app
 export const alarmsAvailable = Capacitor.isNativePlatform();
 const plugin = registerPlugin<AlarmPlugin>("AshbornAlarm");
 
-// Has the phone say "Time's up" at `at` (epoch ms) about `title`, as a notification; 0 clears it
+// Has the phone say "Time's up" at `at` (epoch ms) about `title`, as a notification; 0 clears it.
+// Phone only: the caller checks alarmsAvailable.
 export const setTimeUpNotice = (at: number, title: string) => void plugin.timeUp({ at, title });
+
+// Keeps the phone's screen on, or lets it sleep again; nothing off the phone
+export const keepScreenAwake = (on: boolean) => {
+  if (alarmsAvailable) void plugin.keepAwake({ on });
+};
+// A page that reloaded with a recipe open never let go: it starts let go
+keepScreenAwake(false);
 
 // Told each time the app has handed the phone its schedule
 const handedOver = new Set<() => void>();
@@ -83,9 +113,6 @@ export function useAlarmSchedule(snapshot: Snapshot | null, syncs: number) {
   }, []);
 }
 
-// Reads the alarm ringing now
-const readRinging = (setAlarm: (alarm: RingingAlarm | null) => void) => void plugin.ringing().then((result) => setAlarm(result.alarm));
-
 // The alarm ringing now, if any, and ways to stop or snooze it. A stop the phone refuses (another ring
 // took its place, or a harder one joined, after this one was shown) leaves the screen up and reads
 // the ring again.
@@ -93,23 +120,44 @@ export function useRingingAlarm() {
   const [alarm, setAlarm] = useState<RingingAlarm | null>(null);
   const shown = useRef(alarm);
   shown.current = alarm;
+  // Counts stops and snoozes asked for: a read begun before one is answered after it, with the ring
+  // as it was, and is dropped
+  const asks = useRef(0);
+  // The ring just stopped: the phone reports it until its service has handled the stop, a moment later
+  const ended = useRef<{ ring: string; until: number } | null>(null);
+  const read = useCallback(() => {
+    const askedAt = asks.current;
+    void plugin.ringing().then(({ alarm }) => {
+      if (askedAt !== asks.current) return;
+      if (alarm && ended.current && `${alarm.key}:${alarm.kind}` === ended.current.ring && Date.now() < ended.current.until) return;
+      setAlarm(alarm);
+    });
+  }, []);
 
   useEffect(() => {
     if (!alarmsAvailable) return;
-    const check = () => readRinging(setAlarm);
-    check();
-    const interval = window.setInterval(() => document.visibilityState === "visible" && check(), RINGING_POLL_MS);
-    document.addEventListener("visibilitychange", check);
+    read();
+    const interval = window.setInterval(() => document.visibilityState === "visible" && read(), RINGING_POLL_MS);
+    document.addEventListener("visibilitychange", read);
     return () => {
       window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", check);
+      document.removeEventListener("visibilitychange", read);
     };
-  }, []);
+  }, [read]);
 
   const end = useCallback((ask: typeof plugin.stop) => {
     if (!shown.current) return;
-    void ask({ key: shown.current.key, kind: shown.current.kind }).then(({ stopped }) => (stopped ? setAlarm(null) : readRinging(setAlarm)));
-  }, []);
+    asks.current += 1;
+    const ring = `${shown.current.key}:${shown.current.kind}`;
+    void ask({ key: shown.current.key, kind: shown.current.kind }).then(
+      ({ stopped }) => {
+        if (!stopped) return read();
+        ended.current = { ring, until: Date.now() + STOP_SETTLE_MS };
+        setAlarm(null);
+      },
+      () => read(),
+    );
+  }, [read]);
   const stop = useCallback(() => end((options) => plugin.stop(options)), [end]);
   // The native side rings a plain alarm again ten minutes on
   const snooze = useCallback(() => end((options) => plugin.snooze(options)), [end]);
@@ -118,7 +166,8 @@ export function useRingingAlarm() {
 }
 
 // What alarms need from the phone, re-checked whenever the app comes back to the front (the
-// user may have just changed a setting); null off the phone
+// user may have just changed a setting) or the window gets focus back (Android's permission
+// dialogs only pause the app, so it never goes hidden); null off the phone
 export function useAlarmPermissions() {
   const [permissions, setPermissions] = useState<AlarmPermissions | null>(null);
 
@@ -127,7 +176,11 @@ export function useAlarmPermissions() {
     const check = () => void plugin.permissions().then(setPermissions);
     check();
     document.addEventListener("visibilitychange", check);
-    return () => document.removeEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
   }, []);
 
   return permissions;

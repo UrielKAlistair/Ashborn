@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AtlasSidebarSection } from "../components/atlas/AtlasSidebar";
 import { HexMark } from "../components/HexTile";
-import { CognitiveOffloadingPage } from "./atlas/Design/CognitveOffloading";
+import { CognitiveOffloadingPage } from "./atlas/Design/CognitiveOffloading";
 import { ProgressPage } from "./atlas/Design/Progress";
 
 type AtlasPageProps = {

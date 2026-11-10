@@ -1,3 +1,4 @@
+// The colour theme: which one is on, switching it, and the colours the hex canvas draws with.
 import { useSyncExternalStore } from "react";
 
 import type { CanvasStyle, RGB } from "../pages/home/territory/territoryRenderer";
@@ -55,7 +56,8 @@ export function canvasStyle(theme: Theme): CanvasStyle {
   return { ink, fabricAlpha: dark ? 0.045 : 0.09, dark, hues };
 }
 
-// A colour variable of the theme (a #rrggbb) as RGB (0-255), for drawing outside CSS
+// A colour variable of the theme as RGB (0-255), for drawing outside CSS. The theme writes them as
+// #rrggbb, the only form read; anything else draws white.
 function cssRgb(name: string): RGB {
   const hex = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const value = Number.parseInt(hex.slice(1), 16);

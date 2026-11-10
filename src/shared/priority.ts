@@ -1,8 +1,14 @@
-import { isDone, questOf, type GraphModel } from "./graphModel";
-import type { GraphNode, Priority, Snapshot } from "./types";
-
-// A priority belongs to a chain: set on a node, it covers the node's open prerequisites,
-// transitively, and the steps inside it. Only the user sets one; a deadline raises nothing.
+/**
+ * Priorities and the to-do list they make.
+ *
+ * A priority (1 most urgent to 4) belongs to a chain: set on a node, it covers the node's open
+ * prerequisites, transitively, and the steps inside it, because finishing the node needs all of them.
+ * Only the user sets one; a deadline raises nothing. Where two chains meet, the more urgent covers.
+ * The to-do is then every ready step that some priority covers, grouped by priority, with the quests
+ * that need a first step.
+ */
+import { isDone, type GraphModel } from "./graphModel";
+import { priorities, type GraphNode, type Priority, type Snapshot } from "./types";
 
 export type Priorities = {
   effective: Map<string, Priority>; // what covers the node; absent: nothing does
@@ -11,6 +17,8 @@ export type Priorities = {
   origin: Map<string, string>; // the node a covered node's priority was set on
 };
 
+// Spreads each set priority down its chain (effective), then reads off, per box, the most urgent
+// thing inside it (best) and which covered nodes the graph should mark
 export function derivePriorities(model: GraphModel, snapshot: Snapshot): Priorities {
   const prerequisites = new Map<string, string[]>();
   for (const { from, to } of snapshot.edges) prerequisites.set(to, [...(prerequisites.get(to) ?? []), from]);
@@ -30,6 +38,7 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot): Priorit
   };
   [...set].sort((a, b) => a.priority - b.priority).forEach(({ id, priority }) => cover(id, priority, id));
 
+  // Bottom-up from every quest
   const best = new Map<string, Priority>();
   const bestIn = (node: GraphNode): Priority | undefined => {
     const inside = (model.children.get(node.id) ?? []).map(bestIn);
@@ -39,6 +48,7 @@ export function derivePriorities(model: GraphModel, snapshot: Snapshot): Priorit
   };
   (model.children.get(null) ?? []).forEach(bestIn);
 
+  // A node covered only because its box holds the priority is not marked: the box already says so
   const inside = (id: string, boxId: string) => {
     for (let parent = model.byId.get(id)?.parentId; parent; parent = model.byId.get(parent)?.parentId) if (parent === boxId) return true;
     return false;
@@ -58,7 +68,7 @@ export function linkPriority({ effective, marked, origin }: Priorities, from: st
 
 // Most urgent first, the given order kept among equals; no priority comes last
 export function byPriority<T extends { id: string }>(nodes: T[], { best }: Priorities): T[] {
-  const rank = (node: T) => best.get(node.id) ?? 5;
+  const rank = (node: T) => best.get(node.id) ?? priorities.length + 1;
   return [...nodes].sort((a, b) => rank(a) - rank(b));
 }
 
@@ -74,10 +84,9 @@ export function prioritisedSteps(model: GraphModel, snapshot: Snapshot, { effect
     (node) =>
       (node.parentId || (needsFirstStep(model, node) && node.id !== snapshot.inboxId)) &&
       model.ready.has(node.id) &&
-      effective.has(node.id) &&
-      questOf(model.byId, node).active,
+      effective.has(node.id),
   );
-  return ([1, 2, 3, 4] as const).flatMap((priority) => {
+  return priorities.flatMap((priority) => {
     const inGroup = steps.filter((step) => effective.get(step.id) === priority);
     return inGroup.length ? [{ priority, steps: inGroup }] : [];
   });

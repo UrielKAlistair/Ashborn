@@ -81,3 +81,14 @@ test("a tick replayed on a step already done keeps the day it was done on", asyn
   expect(Date.parse(data!.completed_at)).toBe(ticked.getTime());
   expect(Date.parse(nodes![0].completedAt!)).toBe(ticked.getTime());
 });
+
+test("a deadline done on another device leaves when changed or its create is replayed, never comes back as open", async () => {
+  const [deadline, quest] = [crypto.randomUUID(), crypto.randomUUID()];
+  const create = { id: deadline, title: "Hand in the form", dueDate: "2099-01-01", alarmTime: null, nodeId: null };
+  await deviceAt(hoursAgo(3)).createNode("Quest", null, quest);
+  await deviceAt(hoursAgo(3)).createDeadline(create);
+  await deviceAt(hoursAgo(2)).completeDeadline(deadline);
+  expect(await deviceAt(hoursAgo(1)).updateDeadline(deadline, { nodeId: quest })).toEqual({ removedDeadlineIds: [deadline] });
+  expect(await deviceAt(hoursAgo(3)).createDeadline(create)).toEqual({ removedDeadlineIds: [deadline] });
+  await db.from("deadlines").delete().eq("id", deadline);
+});

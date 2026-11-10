@@ -1,3 +1,4 @@
+// Whether the page is laid out for a phone.
 import { useEffect, useLayoutEffect, useState } from "react";
 import { alarmsAvailable as onAndroid } from "./alarms";
 

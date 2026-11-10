@@ -1,3 +1,17 @@
+/**
+ * The Kitchen's rules, shared by the screens, the offline previews, the alarm schedule and the agent
+ * server.
+ *
+ * Stock is kept as readings plus events. A reading says how much of an item is on hand at a moment;
+ * cooking a meal adds events (negative amounts) for its recipes' ingredients. On hand is the latest
+ * reading plus the events made after it, so a count taken after cooking is never cooked down twice.
+ * The database computes the same (stock_on_hand, cook_meal, uncook_meal); cooked, uncooked and read
+ * here mirror it, so the app can show the result before the server answers, or offline.
+ *
+ * Meals: a date's slot shows its own meal, or else the default week's for that weekday. A recipe's
+ * reminders ring relative to the meal's time, or to each other; mealReminders lists them for the
+ * schedule. Recipe bodies may hold alternative routes ("[1: oven]", "[2: pan]"), read by recipeRoutes.
+ */
 import { addDays, atTime, toISODate, weekdayOf } from "./dates.js";
 import {
   mealSlots,
@@ -14,16 +28,19 @@ import {
   type StockUnit,
 } from "./types.js";
 
-// The Kitchen's rules, shared by the screens, the offline previews, the alarms and the agent server
-
 export const emptyKitchen: Kitchen = { items: [], recipes: [], defaultWeek: [], meals: [], mealChanges: [] };
 
 // A new recipe's one reminder, which the user may edit or delete
 export const DEFAULT_REMINDER = { label: "Start prep", offsetMinutes: -45 };
 
-export const toBase = (amount: number, unit: StockUnit) => amount * units[unit].base;
+// Rounded to a millionth of the base unit, so 0.29 kg is 290 g, not 290.00000000000006
+export const toBase = (amount: number, unit: StockUnit) => Math.round(amount * units[unit].base * 1e6) / 1e6;
 export const fromBase = (amount: number, unit: StockUnit) => amount / units[unit].base;
+// An amount as shown, to a thousandth of its unit, so 4 g in a kg item reads 0.004 kg, not 0 kg
+export const roundShown = (value: number) => Math.round(value * 1000) / 1000;
 export const sameKind = (a: StockUnit, b: StockUnit) => units[a].kind === units[b].kind;
+// One stock item per name: names compare without case or surrounding space ("Rice " and "rice" are one)
+export const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 // A shown meal: the date's own, or else the default week's for its weekday
 export type ShownMeal = Meal & { fromDefault: boolean };
@@ -100,6 +117,37 @@ function withEvents(kitchen: Kitchen, changes: StockChange[]): Kitchen {
       return counted.length ? { ...item, onHand: counted.reduce((sum, change) => sum + change.amount, item.onHand) } : item;
     }),
   };
+}
+
+// A recipe body's routes. A line "[1: name]" starts text only route 1 shows, "[all]" returns to text
+// every route shows; the name is optional and the first one given is kept. `text` is the body as one
+// route reads it, markers removed; with no routes it is the whole body.
+export type RecipeRoute = { key: string; name: string };
+const routeMark = /^\s*\[(?:(\d+)(?::\s*(.*?))?|all)\]\s*$/i;
+export function recipeRoutes(body: string): { routes: RecipeRoute[]; text: (route: string | null) => string } {
+  const routes: RecipeRoute[] = [];
+  const lines: { route: string | null; line: string }[] = [];
+  let current: string | null = null;
+  for (const line of body.split("\n")) {
+    const mark = routeMark.exec(line);
+    if (!mark) {
+      lines.push({ route: current, line });
+      continue;
+    }
+    current = mark[1] ?? null;
+    const known = routes.find((route) => route.key === current);
+    if (current && !known) routes.push({ key: current, name: mark[2] ?? "" });
+    else if (known && !known.name) known.name = mark[2] ?? "";
+  }
+  routes.sort((a, b) => Number(a.key) - Number(b.key));
+  const text = (route: string | null) =>
+    lines
+      .filter((line) => line.route === null || line.route === route)
+      .map(({ line }) => line)
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  return { routes, text };
 }
 
 // What is wrong with a recipe before it can be saved; empty when nothing is

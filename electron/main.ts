@@ -1,3 +1,22 @@
+/**
+ * The desktop shell: Electron's main process, which hosts the app's page in one frameless window and
+ * keeps it alive in the tray.
+ *
+ * Its jobs, in the order this file tells them:
+ * 1. One instance only: a second launch shows the first (with --capture, at the capture field) and
+ *    exits.
+ * 2. The window: maximised, or phone-sized for checking the phone layout. Closing or minimising it
+ *    hides it to the tray; only Quit ends the app. It shows only the app's own page; links to the web
+ *    open in the system browser.
+ * 3. The tray: its menu names the step Now shows and opens the window.
+ * 4. Capture from anywhere: a launch with --capture (dependable, bound to a key in GNOME), or the
+ *    Ctrl+Alt+Space grab (heard only over X11 windows on a Wayland desktop).
+ * 5. What the page asks of the desktop over IPC (see preload.cts): the window controls, Now's step for
+ *    the tray, unsaved work, and the daily backups to disk.
+ * 6. Quitting with unsaved work asks first: Save, Discard or Cancel.
+ *
+ * Flags: --hidden (started at login: tray only), --capture, --phone (`npm run phone`).
+ */
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Tray, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,20 +33,25 @@ const startPhone = process.argv.includes("--phone");
 // The phone view's window size: narrow enough for the phone layout (under 640 px wide)
 const PHONE_VIEW_WIDTH = 400;
 const PHONE_VIEW_HEIGHT = 860;
-// The nightly backups the page writes (src/lib/backupSchedule.ts): one file a day, the newest kept.
+// The daily backups the page writes (src/lib/backupSchedule.ts): one file a day, the newest
+// BACKUPS_KEPT kept.
 // Tests point ASHBORN_BACKUP_DIR elsewhere, so their data stays out of the real backups.
 const BACKUP_DIR = process.env.ASHBORN_BACKUP_DIR ?? path.join(os.homedir(), ".local", "share", "ashborn", "backups");
 const BACKUPS_KEPT = 30;
 // How long Save at quit waits for the page to answer before the app stays open (a page reloading or
 // crashed never answers): longer than a request's own timeout (15 s), so a slow save can finish
 const SAVE_FOR_QUIT_MS = 30_000;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const CAPTURE_SHORTCUT = "CommandOrControl+Alt+Space";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-// The step in the app's Now, mirrored in the tray so it can be seen and ticked without the window
-type NowStep = { id: string; title: string; endsAt: number | null; canTick: boolean } | null;
+// The step in the app's Now, named in the tray's menu
+type NowStep = { id: string; title: string } | null;
 let nowStep: NowStep = null;
+// A capture asked for before the page could hear it (a first launch with --capture, or a page still
+// loading): the page takes it once it starts (app:take-capture)
+let captureAtStart = startCapture;
 // Set once the app is really quitting, so closing the window no longer just hides it
 let quitting = false;
 // Work the page holds unsaved (a recipe being edited), named for the question asked at quit; null when none
@@ -36,102 +60,26 @@ let askingToQuit = false;
 // Numbers each Save at quit, so a late answer to one given up on isn't taken for the next's
 let saveRequest = 0;
 
-function resolveAppPath(...segments: string[]) {
-  return path.join(app.getAppPath(), ...segments);
-}
-
-function createTrayImage() {
-  const trayIconPath = resolveAppPath("src", "assets", "ashborn-tray.png");
-
-  if (!fs.existsSync(trayIconPath)) {
-    throw new Error(`Tray icon not found at ${trayIconPath}`);
-  }
-
-  return nativeImage.createFromPath(trayIconPath);
-}
-
-function showMainWindow() {
-  if (!mainWindow) {
-    return;
-  }
-
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore();
-  }
-
-  mainWindow.show();
-  mainWindow.focus();
-}
-
-function hideMainWindowToTray() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return;
-  }
-
-  mainWindow.hide();
-}
-
-function handleTrayActivation() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return;
-  }
-
-  if (mainWindow.isVisible() && mainWindow.isFocused()) {
-    hideMainWindowToTray();
-    return;
-  }
-
-  showMainWindow();
-}
-
-function createTray() {
-  tray = new Tray(createTrayImage());
-  updateTrayMenu();
-
-  tray.on("click", () => {
-    handleTrayActivation();
+// A second launch focuses the running window instead of opening another window and tray icon
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  // With --capture, at the capture field. On a Wayland desktop that is the dependable way to a
+  // desktop-wide key, since the key grab below hears keys only over X11 windows.
+  app.on("second-instance", (_event, argv) => (argv.includes("--capture") ? captureThought() : showMainWindow()));
+  app.whenReady().then(() => {
+    listenToPage();
+    createWindow();
+    createTray();
+    // From anywhere on the desktop: the window, with its capture field ready for a thought. A key
+    // another app already holds is left to it.
+    globalShortcut.register(CAPTURE_SHORTCUT, captureThought);
   });
-
-  tray.on("double-click", () => {
-    handleTrayActivation();
-  });
+  app.on("before-quit", askIfUnsaved);
+  app.on("will-quit", () => globalShortcut.unregisterAll());
 }
 
-// GNOME's AppIndicator extension sends a click only on a double-click; a single click opens this menu
-function updateTrayMenu() {
-  if (!tray) return;
-  const now = nowStep;
-  const title = now && now.title.length > 60 ? `${now.title.slice(0, 59)}…` : now?.title;
-  const nowItems: Electron.MenuItemConstructorOptions[] = now
-    ? [
-        { label: `Now: ${title}`, click: showMainWindow },
-        ...(now.endsAt ? [{ label: `Timer until ${new Date(now.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`, enabled: false }] : []),
-        ...(now.canTick
-          ? [
-              { label: "Done", click: () => mainWindow?.webContents.send("now:done", now.id) },
-              now.endsAt
-                ? { label: "Stop the timer", click: () => mainWindow?.webContents.send("now:timer", now.id, false) }
-                : { label: "Start the timer", click: () => mainWindow?.webContents.send("now:timer", now.id, true) },
-            ]
-          : []),
-        { type: "separator" },
-      ]
-    : [];
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      ...nowItems,
-      { label: "Capture a thought", click: captureThought },
-      { label: "Show Ashborn", click: showMainWindow },
-      { label: "Quit Ashborn", click: () => app.quit() },
-    ]),
-  );
-  tray.setToolTip(now ? `Ashborn · Now: ${title}` : "Ashborn");
-}
-
-function captureThought() {
-  showMainWindow();
-  mainWindow?.webContents.send("app:capture");
-}
+// --- The window ---
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -156,36 +104,28 @@ function createWindow() {
     event.preventDefault();
     hideMainWindowToTray();
   });
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 
   // The page's maximise button shows the restore glyph while the window is maximised
   mainWindow.on("maximize", () => mainWindow?.webContents.send("app:maximised", true));
   mainWindow.on("unmaximize", () => mainWindow?.webContents.send("app:maximised", false));
 
-  mainWindow.on("closed", () => {
-    mainWindow = null;
-  });
-
   if (startPhone) showPhoneView();
   else if (startHidden) mainWindow.once("show", () => mainWindow?.maximize());
   else mainWindow.maximize();
 
-  // The window shows only the app. Links to the web (the Atlas's sources) open in the system
-  // browser, so no other site is loaded with the preload's access to the desktop.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) void shell.openExternal(url);
-    return { action: "deny" };
-  });
-  // A page loaded afresh, or gone, holds no unsaved work, whatever it said before
-  mainWindow.webContents.on("did-start-loading", () => (unsaved = null));
-  mainWindow.webContents.on("render-process-gone", () => (unsaved = null));
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    // Every file's origin is "null", so a file must also be the app's own page
-    // ("data:" and the like share that origin too)
-    const [to, from] = [new URL(url), new URL(mainWindow!.webContents.getURL())];
-    if (to.protocol === from.protocol && to.origin === from.origin && (to.protocol !== "file:" || to.pathname === from.pathname)) return;
-    event.preventDefault();
-    if (/^https?:/.test(url)) void shell.openExternal(url);
-  });
+  keepToTheApp(mainWindow);
+
+  // A page loaded afresh, or gone, holds no unsaved work and shows no Now step, whatever it said before
+  const pageGone = () => {
+    unsaved = null;
+    nowStep = null;
+    updateTrayMenu();
+  };
+  mainWindow.webContents.on("did-start-loading", pageGone);
+  mainWindow.webContents.on("render-process-gone", pageGone);
 
   // Ctrl+Shift+M switches between the full window and a phone-sized one, which the page lays
   // out as the phone app
@@ -195,11 +135,37 @@ function createWindow() {
     togglePhoneView();
   });
 
-  if (isDev) {
-    void mainWindow.loadURL("http://127.0.0.1:1420");
-  } else {
-    void mainWindow.loadFile(resolveAppPath("dist", "index.html"));
-  }
+  if (isDev) void mainWindow.loadURL("http://127.0.0.1:1420");
+  else void mainWindow.loadFile(resolveAppPath("dist", "index.html"));
+}
+
+// The window shows only the app. Links to the web (the Atlas's sources) open in the system browser,
+// so no other site is loaded with the preload's access to the desktop.
+function keepToTheApp(window: BrowserWindow) {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  window.webContents.on("will-navigate", (event, url) => {
+    // Every file's origin is "null", so a file must also be the app's own page
+    // ("data:" and the like share that origin too)
+    const [to, from] = [new URL(url), new URL(window.webContents.getURL())];
+    if (to.protocol === from.protocol && to.origin === from.origin && (to.protocol !== "file:" || to.pathname === from.pathname)) return;
+    event.preventDefault();
+    if (/^https?:/.test(url)) void shell.openExternal(url);
+  });
+}
+
+function showMainWindow() {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function hideMainWindowToTray() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.hide();
 }
 
 function togglePhoneView() {
@@ -214,40 +180,78 @@ function showPhoneView() {
   mainWindow?.center();
 }
 
-ipcMain.on("app:hide-to-tray", () => {
-  hideMainWindowToTray();
-});
+function resolveAppPath(...segments: string[]) {
+  return path.join(app.getAppPath(), ...segments);
+}
 
-ipcMain.on("app:toggle-maximise", () => {
-  if (mainWindow?.isMaximized()) mainWindow.unmaximize();
-  else mainWindow?.maximize();
-});
+// --- The tray ---
 
-ipcMain.handle("app:is-maximised", () => mainWindow?.isMaximized() ?? false);
-
-// A first launch with --capture: the page asks once it can take it, as a message sent on load is missed
-let captureAtStart = startCapture;
-ipcMain.handle("app:take-capture", () => {
-  const take = captureAtStart;
-  captureAtStart = false;
-  return take;
-});
-
-ipcMain.on("now:update", (_event, step: NowStep) => {
-  nowStep = step;
+function createTray() {
+  const iconPath = resolveAppPath("src", "assets", "ashborn-tray.png");
+  if (!fs.existsSync(iconPath)) throw new Error(`Tray icon not found at ${iconPath}`);
+  tray = new Tray(nativeImage.createFromPath(iconPath));
   updateTrayMenu();
-});
+  // Activating the icon only ever opens the window: hiding it is the window's own close or minimise
+  tray.on("click", showMainWindow);
+}
 
-ipcMain.on("app:unsaved", (_event, what: string | null) => {
-  unsaved = what;
-});
+// GNOME's AppIndicator extension activates the icon (the click above) on a double-click; a single click
+// opens this menu
+function updateTrayMenu() {
+  if (!tray) return;
+  const title = nowStep && nowStep.title.length > 60 ? `${nowStep.title.slice(0, 59)}…` : nowStep?.title;
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      ...(title ? [{ label: `Now: ${title}`, click: showMainWindow }, { type: "separator" as const }] : []),
+      { label: "Show Ashborn", click: showMainWindow },
+      { label: "Quit Ashborn", click: () => app.quit() },
+    ]),
+  );
+  tray.setToolTip(title ? `Ashborn · Now: ${title}` : "Ashborn");
+}
 
-ipcMain.on("app:quit", () => {
-  app.quit();
-});
+// --- Capture ---
 
-ipcMain.handle("backup:newest", () => {
-  // A file gone between listing and reading (pruned meanwhile) counts for nothing
+function captureThought() {
+  showMainWindow();
+  // A page still loading has no listener yet: it asks once it starts
+  if (!mainWindow || mainWindow.webContents.isLoading()) captureAtStart = true;
+  else mainWindow.webContents.send("app:capture");
+}
+
+// --- What the page asks of the desktop (the other ends are in preload.cts) ---
+
+function listenToPage() {
+  ipcMain.on("app:hide-to-tray", hideMainWindowToTray);
+  ipcMain.on("app:toggle-maximise", () => {
+    if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+    else mainWindow?.maximize();
+  });
+  ipcMain.handle("app:is-maximised", () => mainWindow?.isMaximized() ?? false);
+  ipcMain.on("app:quit", () => app.quit());
+
+  ipcMain.handle("app:take-capture", () => {
+    const take = captureAtStart;
+    captureAtStart = false;
+    return take;
+  });
+  ipcMain.on("now:update", (_event, step: NowStep) => {
+    nowStep = step;
+    updateTrayMenu();
+  });
+  ipcMain.on("app:unsaved", (_event, what: string | null) => {
+    unsaved = what;
+  });
+
+  ipcMain.handle("backup:newest", newestBackup);
+  ipcMain.handle("backup:write", (_event, json: string) => writeBackup(json));
+}
+
+// --- Backups ---
+
+// When the newest backup was written (ms), or null if there is none. A file gone between listing and
+// reading (pruned meanwhile) counts for nothing.
+function newestBackup() {
   const times = backupFiles().flatMap((name) => {
     try {
       return [fs.statSync(path.join(BACKUP_DIR, name)).mtimeMs];
@@ -256,19 +260,25 @@ ipcMain.handle("backup:newest", () => {
     }
   });
   return times.length > 0 ? Math.max(...times) : null;
-});
+}
 
 // Writes today's backup (replacing one written earlier today), then drops all but the newest.
 // The backups hold all the user's data, so only the user can read them.
-ipcMain.handle("backup:write", (_event, json: string) => {
+function writeBackup(json: string) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
   fs.chmodSync(BACKUP_DIR, 0o700);
   const now = new Date();
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const file = path.join(BACKUP_DIR, `${date}.json`);
-  // Written whole beside it, then put in its place, so a crash mid-write leaves the last good one
-  fs.writeFileSync(`${file}.partial`, json, { mode: 0o600 });
-  fs.renameSync(`${file}.partial`, file);
+  // Written whole beside it, then put in its place, so a crash mid-write leaves the last good one; a write
+  // that fails (a full disk) takes its partial file with it
+  try {
+    fs.writeFileSync(`${file}.partial`, json, { mode: 0o600 });
+    fs.renameSync(`${file}.partial`, file);
+  } catch (error) {
+    fs.rmSync(`${file}.partial`, { force: true });
+    throw error;
+  }
   // Today's is in place: an old one that can't be removed is left, and isn't a failed backup
   for (const name of backupFiles().sort().slice(0, -BACKUPS_KEPT)) {
     try {
@@ -277,48 +287,24 @@ ipcMain.handle("backup:write", (_event, json: string) => {
       console.error(`Could not remove the old backup ${name}`, error);
     }
   }
-});
+}
 
 function backupFiles() {
   if (!fs.existsSync(BACKUP_DIR)) return [];
   return fs.readdirSync(BACKUP_DIR).filter((name) => /^\d{4}-\d{2}-\d{2}\.json$/.test(name));
 }
 
-// A second launch focuses the running window instead of opening another window and tray icon
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-} else {
-  // A second launch shows this one; with --capture, at the capture field. On a Wayland desktop that is
-  // the dependable way to a desktop-wide key, since the key grab below hears keys only over X11 windows.
-  app.on("second-instance", (_event, argv) => (argv.includes("--capture") ? captureThought() : showMainWindow()));
-  app.whenReady().then(() => {
-    createWindow();
-    createTray();
-
-    // From anywhere on the desktop: the window, with its capture field ready for a thought. A key
-    // another app already holds is left to it.
-    globalShortcut.register("CommandOrControl+Alt+Space", captureThought);
-  });
-}
-
-app.on("activate", () => {
-  if (!mainWindow) {
-    createWindow();
-    return;
-  }
-
-  showMainWindow();
-});
+// --- Quitting ---
 
 // Quitting with work unsaved asks first, as an editor does: Save, Discard or Cancel
-app.on("before-quit", (event) => {
+function askIfUnsaved(event: Electron.Event) {
   if (unsaved && mainWindow) {
     event.preventDefault();
     void askBeforeQuit();
     return;
   }
   quitting = true;
-});
+}
 
 async function askBeforeQuit() {
   if (askingToQuit || !mainWindow) return;
@@ -357,9 +343,3 @@ function saveInPage() {
     mainWindow!.webContents.send("app:save-for-quit", request);
   });
 }
-
-app.on("will-quit", () => globalShortcut.unregisterAll());
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});

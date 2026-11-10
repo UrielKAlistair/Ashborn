@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { phoneWindow } from "../phoneWindow";
 
-// The tray mirrors Now: the app sends the step, its timer and whether it can be ticked, and Done
-// chosen in the tray ticks it. The menu itself is the desktop's; the test reads what it is given.
-// Then on the phone, Now's title opens the graph tab on its step.
+// The tray names Now's step: the app sends it, and sends the next one once it is ticked. The menu
+// itself is the desktop's; the test reads what it is given. Then on the phone, Now's title opens the
+// graph tab on its step.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
@@ -42,31 +42,9 @@ test("the tray's Now", async () => {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(now).toContainText("Draft the intro", { timeout: 15_000 });
 
-  await test.step("Now's step, then its timer, reach the tray", async () => {
-    await expect.poll(trayNow).toEqual({ id: id.draft, title: "Draft the intro", endsAt: null, canTick: true });
-    await now.getByRole("button", { name: "Actions for Draft the intro" }).click();
-    await now.getByRole("menuitem", { name: "Start (15 min)" }).click();
-    await expect.poll(async () => ((await trayNow()) as { endsAt: number | null }).endsAt).toBeGreaterThan(Date.now());
-  });
-
-  await test.step("the tray's Stop and Start set the timer, from another screen too", async () => {
-    const send = (start: boolean) => app.evaluate(({ BrowserWindow }, [stepId, on]) => BrowserWindow.getAllWindows()[0].webContents.send("now:timer", stepId, on), [id.draft, start] as const);
-    await send(false);
-    await expect(now.getByRole("timer")).toHaveCount(0);
-    await expect.poll(async () => ((await trayNow()) as { endsAt: number | null }).endsAt).toBeNull();
-    await page.getByRole("button", { name: "Alarms", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Now" })).toHaveCount(0); // off Home for real
-    await send(true);
-    // The tray hears it from there too
-    await expect.poll(async () => ((await trayNow()) as { endsAt: number | null }).endsAt).toBeGreaterThan(Date.now());
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await expect(now.getByRole("timer", { name: "Time left" })).toContainText(/1[45]:\d\d/);
-  });
-
-  await test.step("Done in the tray ticks it, and the tray moves on", async () => {
-    await app.evaluate(({ BrowserWindow }, stepId) => BrowserWindow.getAllWindows()[0].webContents.send("now:done", stepId), id.draft);
-    await expect(now.getByRole("listitem").first()).toContainText("Email the professor");
-    await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("id", id.draft).single()).data?.completed_at).toBeTruthy();
+  await test.step("Now's step reaches the tray, and the next one once it is ticked", async () => {
+    await expect.poll(trayNow).toEqual({ id: id.draft, title: "Draft the intro" });
+    await now.getByRole("listitem").filter({ hasText: "Draft the intro" }).getByTitle("Mark done").click();
     await expect.poll(async () => ((await trayNow()) as { title: string }).title).toBe("Email the professor");
   });
 

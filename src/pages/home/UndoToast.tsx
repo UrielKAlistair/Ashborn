@@ -16,9 +16,13 @@ export function useUndoableChanges(act: Act, snapshot: Snapshot | null) {
   const [undoable, setUndoable] = useState<Undoable | null>(null);
   const latest = useRef(snapshot);
   latest.current = snapshot;
+  // The offer on screen, read when a delete takes it away
+  const shown = useRef(undoable);
+  shown.current = undoable;
 
   const acting = useCallback<Act>(
     (name, ...args) => {
+      let offer: Undoable | null = null;
       if (name === "updateNode") {
         const [id, patch] = args as [string, NodePatch];
         const node = latest.current?.nodes.find((candidate) => candidate.id === id);
@@ -26,12 +30,35 @@ export function useUndoableChanges(act: Act, snapshot: Snapshot | null) {
           const inside = openInside(latest.current!.nodes, id);
           const label = `Done: ${node.title}${inside.length ? ` and ${inside.length} ${inside.length === 1 ? "step" : "steps"} in it` : ""}`;
           const ids = [...(node.completedAt ? [] : [id]), ...inside];
-          if (ids.length) setUndoable({ subject: id, ids, label, undo: { done: false } });
-        } else if (node && patch.priority && patch.priority !== node.priority) setUndoable({ subject: id, ids: [id], label: `P${patch.priority}: ${node.title}`, undo: { priority: node.priority } });
-        else if (node && patch.shelved) setUndoable({ subject: id, ids: [id], label: `Shelved: ${node.title}`, undo: { shelved: false } });
+          if (ids.length) offer = { subject: id, ids, label, undo: { done: false } };
+        } else if (node && patch.priority && patch.priority !== node.priority) offer = { subject: id, ids: [id], label: `P${patch.priority}: ${node.title}`, undo: { priority: node.priority } };
+        else if (node && patch.shelved) offer = { subject: id, ids: [id], label: `Shelved: ${node.title}`, undo: { shelved: false } };
         else if (patch.done === false || patch.priority === null || patch.shelved === false) setUndoable((current) => (current?.subject === id ? null : current));
       }
-      return act(name, ...args);
+      // A deleted node, and every node inside it, has nothing left to undo; a delete the server refuses
+      // leaves them, and the offer comes back
+      let retired: Undoable | null = null;
+      if (name === "deleteNode") {
+        const [id] = args as [string];
+        const nodes = latest.current?.nodes ?? [];
+        const parentOf = new Map(nodes.map((node) => [node.id, node.parentId]));
+        const gone = (nodeId: string) => {
+          for (let at: string | null | undefined = nodeId; at; at = parentOf.get(at)) if (at === id) return true;
+          return false;
+        };
+        const current = shown.current;
+        if (current && (gone(current.subject) || current.ids.some(gone))) {
+          retired = current;
+          setUndoable((now) => (now === current ? null : now));
+        }
+      }
+      if (offer) setUndoable(offer);
+      return act(name, ...args).then((saved) => {
+        // A change the server refused offers no undo
+        if (!saved && offer) setUndoable((current) => (current === offer ? null : current));
+        if (!saved && retired) setUndoable((current) => current ?? retired);
+        return saved;
+      });
     },
     [act],
   );
@@ -58,7 +85,7 @@ export function UndoToast({ undoable, act, onDismiss, phone }: { undoable: Undoa
             for (const id of undoable.ids) void act("updateNode", id, undoable.undo);
             onDismiss();
           }}
-          className="pointer-events-auto min-h-9 shrink-0 rounded-lg px-2.5 font-medium text-ember hover:bg-ink/6"
+          className="pointer-events-auto min-h-9 phone:min-h-11 shrink-0 rounded-lg px-2.5 font-medium text-ember hover:bg-ink/6"
         >
           Undo
         </button>

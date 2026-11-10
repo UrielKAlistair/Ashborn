@@ -8,7 +8,7 @@ import type { CellLook, Grid, TerritoryQuest } from "./territoryGrid";
 // pixel's own distance from that box, so a territory's light falls off smoothly from its card rather
 // than in steps per cell; the theme decides how that light is drawn. Each frame
 // the page sends only the camera. A cell changing owner fades from its old paint to its new one;
-// that fade is computed here and the (small) textures re-uploaded each frame while it runs. Nothing
+// that fade is computed here and the (small) paint texture re-uploaded each frame while it runs. Nothing
 // is drawn while nothing changes.
 
 const paintFadeMs = 200;
@@ -34,7 +34,7 @@ uniform float u_radius;     // a cell's circumradius, map units
 uniform vec4 u_fabric;      // rgb, alpha
 uniform vec4 u_grid;        // first column, first row, columns, rows
 uniform sampler2D u_paint;  // per cell: hue rgb, presence (fades in and out)
-uniform sampler2D u_owner;  // per cell: owner's index + 1 (0: none) as 16 bits in r and b, frontier in g
+uniform sampler2D u_owner;  // per cell: owner's index + 1 (0: none) as 16 bits in r and b
 uniform sampler2D u_rects;  // per quest, a column: row 0 its box's corner, row 1 its size, 16 bits each
 uniform vec3 u_rectInfo;    // quests, and the map point the corners are measured from
 uniform float u_reach;      // how far a territory's light runs past its quest's edge, map units
@@ -174,12 +174,13 @@ export class TerritoryRenderer {
   private fading = new Set<number>();
   // The quest each texel's light comes from: its owner, or while fading out its last owner
   private ownerOf: Array<string | undefined> = [];
-  private frontierOf = new Uint8Array(0);
   private paintBytes = new Uint8Array(0);
   private ownerBytes = new Uint8Array(0);
   private rectBytes = new Uint8Array(8);
   private rectOrigin: [number, number] = [0, 0];
   private uploaded = false; // the textures hold the current bytes
+  private paintOnly = false; // of those bytes only the paint has changed since (a fade's step)
+  private corners: WebGLBuffer | null = null;
 
   // Null when WebGL isn't available
   static create(canvas: HTMLCanvasElement) {
@@ -210,6 +211,7 @@ export class TerritoryRenderer {
     const { gl } = this;
     if (this.textures) Object.values(this.textures).forEach((texture) => gl.deleteTexture(texture));
     if (this.program) gl.deleteProgram(this.program);
+    if (this.corners) gl.deleteBuffer(this.corners);
   }
 
   // No quests: no territory, only the bare fabric
@@ -264,7 +266,6 @@ export class TerritoryRenderer {
       const t = this.texelOf[i];
       const look = looks[i];
       const at = t * paintSize;
-      this.frontierOf[t] = look.frontier ? 255 : 0;
       if (look.color) {
         this.ownerOf[t] = look.owner;
         target.set([...this.style.hues[look.color], 1]);
@@ -304,7 +305,6 @@ export class TerritoryRenderer {
     this.fadeStart = new Float64Array(count);
     this.fading.clear();
     this.ownerOf = new Array(count);
-    this.frontierOf = new Uint8Array(count);
     this.paintBytes = new Uint8Array(count * 4);
     this.ownerBytes = new Uint8Array(count * 4);
   }
@@ -331,7 +331,6 @@ export class TerritoryRenderer {
       const index = owner ? (indexOf.get(owner) ?? 0) : 0;
       this.ownerBytes[t * 4] = index >> 8;
       this.ownerBytes[t * 4 + 2] = index & 255;
-      this.ownerBytes[t * 4 + 1] = this.frontierOf[t];
     }
   }
 
@@ -353,7 +352,7 @@ export class TerritoryRenderer {
       this.write(t, this.shown(t, now));
       if (now - this.fadeStart[t] >= paintFadeMs) this.fading.delete(t);
     }
-    this.uploaded = false;
+    if (this.uploaded) this.paintOnly = true;
   }
 
   private invalidate() {
@@ -387,13 +386,16 @@ export class TerritoryRenderer {
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.useProgram(this.program);
 
-    if (!this.uploaded && this.grid) {
+    if ((!this.uploaded || this.paintOnly) && this.grid) {
       const width = this.grid.cols[1] - this.grid.cols[0] + 1;
       const height = this.grid.rows[1] - this.grid.rows[0] + 1;
       this.upload(0, this.textures.paint, width, height, this.paintBytes);
-      this.upload(1, this.textures.owner, width, height, this.ownerBytes);
-      this.upload(2, this.textures.rects, this.rectBytes.length / 8, 2, this.rectBytes);
+      if (!this.uploaded) {
+        this.upload(1, this.textures.owner, width, height, this.ownerBytes);
+        this.upload(2, this.textures.rects, this.rectBytes.length / 8, 2, this.rectBytes);
+      }
       this.uploaded = true;
+      this.paintOnly = false;
     }
 
     gl.uniform2f(u.size, canvas.clientWidth, canvas.clientHeight);
@@ -442,7 +444,8 @@ export class TerritoryRenderer {
     gl.useProgram(program);
 
     // One triangle covering the whole canvas
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    this.corners = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.corners);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const corner = gl.getAttribLocation(program, "a_corner");
     gl.enableVertexAttribArray(corner);

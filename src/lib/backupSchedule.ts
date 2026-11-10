@@ -1,3 +1,4 @@
+// When the desktop app backs up: a check every hour writes a backup if the newest is a day old.
 import { useEffect, useRef } from "react";
 import { exportAll } from "./backup";
 import { db } from "./client";
@@ -10,7 +11,7 @@ const CHECK_EVERY_MS = 60 * 60 * 1000;
 // Begins the notice of a failed backup
 export const BACKUP_NOT_MADE = "Backup not made: ";
 
-// The desktop app's nightly backup of every table, written by the main process
+// The desktop app's daily backup of every table, written by the main process
 // (electron/main.ts) to ~/.local/share/ashborn/backups. Runs only in the desktop app, once signed in.
 // `onFailed` hears of a failure other than a lost connection, which would otherwise recur unseen.
 export function useBackupSchedule(userId: string | null | undefined, onFailed: (message: string) => void) {

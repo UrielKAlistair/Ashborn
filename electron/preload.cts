@@ -1,3 +1,6 @@
+// The bridge between the page and the desktop shell (main.ts): window.ashborn, the only desktop access
+// the page has. Each entry sends one IPC message or listens for one; listeners return their unsubscribe.
+// Its type for the page is in src/global.d.ts.
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("ashborn", {
@@ -16,17 +19,7 @@ contextBridge.exposeInMainWorld("ashborn", {
     return () => ipcRenderer.removeListener("app:capture", handle);
   },
   takeCaptureAtStart: () => ipcRenderer.invoke("app:take-capture"),
-  setNow: (step: { id: string; title: string; endsAt: number | null; canTick: boolean } | null) => ipcRenderer.send("now:update", step),
-  onNowDone: (listener: (id: string) => void) => {
-    const handle = (_event: unknown, id: string) => listener(id);
-    ipcRenderer.on("now:done", handle);
-    return () => ipcRenderer.removeListener("now:done", handle);
-  },
-  onNowTimer: (listener: (id: string, start: boolean) => void) => {
-    const handle = (_event: unknown, id: string, start: boolean) => listener(id, start);
-    ipcRenderer.on("now:timer", handle);
-    return () => ipcRenderer.removeListener("now:timer", handle);
-  },
+  setNow: (step: { id: string; title: string } | null) => ipcRenderer.send("now:update", step),
   newestBackup: () => ipcRenderer.invoke("backup:newest"),
   setUnsaved: (what: string | null) => ipcRenderer.send("app:unsaved", what),
   onSaveForQuit: (save: () => Promise<boolean>) => {

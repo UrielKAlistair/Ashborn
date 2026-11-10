@@ -44,7 +44,7 @@ function figureOf(tier: number) {
 }
 
 type Prepared = { image: HTMLImageElement } & ReturnType<typeof readSheet>;
-// Each image is loaded and read once per run of the app
+// Each image is loaded and read once per run of the app; a load that failed is tried again next time
 const prepared = new Map<string, Promise<Prepared>>();
 
 function prepare(src: string, cell: number | null): Promise<Prepared> {
@@ -53,6 +53,7 @@ function prepare(src: string, cell: number | null): Promise<Prepared> {
     const image = new Image();
     image.src = src;
     figure = image.decode().then(() => ({ image, ...readSheet(image, cell ?? image.width, cell ?? image.height) }));
+    figure.catch(() => prepared.delete(src));
     prepared.set(src, figure);
   }
   return figure;
@@ -66,6 +67,7 @@ function Figure({ src, cell, scale }: { src: string; cell: number | null; scale:
     let frameRequest = 0;
     let timer = 0;
     let gone = false;
+    // A figure that can't be loaded leaves the canvas empty
     void prepare(src, cell).then(({ image, frames, crop, centre }) => {
       if (gone) return;
       // Wide enough on both sides of the body's centre that the centre is the canvas's middle
@@ -94,7 +96,7 @@ function Figure({ src, cell, scale }: { src: string; cell: number | null; scale:
         if (frames.length > 1) timer = window.setTimeout(() => (frameRequest = requestAnimationFrame(draw)), frameMs - (elapsed % frameMs));
       };
       frameRequest = requestAnimationFrame(draw);
-    });
+    }, () => undefined);
     return () => {
       gone = true;
       window.clearTimeout(timer);

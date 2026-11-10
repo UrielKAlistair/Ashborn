@@ -11,9 +11,13 @@ const DESKTOP_DAYS = 5;
 
 type MealPlanProps = { kitchen: Kitchen; dayStartHour: number; act: Act; phone: boolean; onOpenRecipe: (id: string) => void };
 
-// The days' meals, rolling with today: 2 days back to 6 ahead. The desktop shows five days and
-// shifts with arrows; the phone shows one day per card, swiped sideways. A toggle swaps in the
-// default week, which fills any day not planned.
+/**
+ * The meal plan: each day's breakfast, lunch and dinner, rolling with today, from mealDaysBack days
+ * back to mealDaysAhead ahead (the days the app holds). The desktop shows five days and shifts with
+ * arrows; the phone shows one day per card, swiped sideways. A meal is ticked when cooked, which
+ * takes its recipes' ingredients off the stocks; cancelled, which silences its reminders; or edited
+ * (which plans a cancelled meal again, design 273). A switch swaps in the default week, which fills any day not planned.
+ */
 export function MealPlan({ kitchen, dayStartHour, act, phone, onOpenRecipe }: MealPlanProps) {
   const [defaults, setDefaults] = useState(false);
   const date = useToday(dayStartHour);
@@ -73,11 +77,11 @@ function PhoneDays({ kitchen, act, date, onOpenRecipe }: DaysProps) {
   const strip = useRef<HTMLDivElement>(null);
   const days = Array.from({ length: mealDaysBack + mealDaysAhead + 1 }, (_, index) => addDays(date, index - mealDaysBack));
 
-  // Open on today's card
+  // Open on today's card, and go back to it when the day turns (the strip then starts a day later)
   useEffect(() => {
     const element = strip.current;
     if (element) element.scrollLeft = mealDaysBack * element.clientWidth;
-  }, []);
+  }, [date]);
 
   return (
     <div ref={strip} className="flex min-h-0 flex-1 snap-x py-px snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
@@ -122,9 +126,13 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
   const id = () => meal.id || crypto.randomUUID();
 
   const tick = () => {
-    if (cooked) return void act("uncookMeal", meal.date, meal.slot);
+    if (cooked) {
+      setUntracked([]);
+      return void act("uncookMeal", meal.date, meal.slot);
+    }
     setUntracked(mealDeductions(kitchen, meal).untracked);
-    void act("cookMeal", meal.date, meal.slot, id());
+    // A cook refused deducted nothing, so the note about what it couldn't deduct goes too
+    void act("cookMeal", meal.date, meal.slot, id()).then((saved) => saved || setUntracked([]));
   };
 
   if (editing) {
@@ -199,7 +207,7 @@ function RecipeLinks({ kitchen, recipeIds, onOpenRecipe }: { kitchen: Kitchen; r
           key={recipe.id}
           type="button"
           onClick={() => onOpenRecipe(recipe.id)}
-          className="rounded-md bg-ink/8 px-1.5 py-0.5 text-[11px] text-ink/75 hover:bg-ink/12 phone:px-2 phone:py-1"
+          className="rounded-md bg-ink/8 px-1.5 py-0.5 text-[11px] text-ink/75 hover:bg-ink/12 phone:px-2 phone:py-1 relative before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-['']"
         >
           {recipe.title}
         </button>
@@ -230,6 +238,12 @@ function MealEditor({
   return (
     <form
       className="space-y-2 rounded-xl border border-ink/10 bg-card p-2.5 shadow-[var(--card-shadow)]"
+      // Escape anywhere in the editor cancels; marked handled so the navbar doesn't also hide the window
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        onCancel();
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         onSave(text.trim(), chosen);
@@ -240,7 +254,6 @@ function MealEditor({
         autoFocus
         value={text}
         onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => event.key === "Escape" && onCancel()}
         placeholder="Rice with butter beans"
         aria-label={`${slot} description`}
         className="w-full rounded-lg border border-ink/10 bg-canvas/60 text-[13px] text-ink/85 placeholder:text-ink/30 focus:border-ember/60 focus:outline-none px-2 py-1"
@@ -255,7 +268,7 @@ function MealEditor({
                 type="button"
                 aria-pressed={on}
                 onClick={() => setChosen(on ? chosen.filter((other) => other !== recipe.id) : [...chosen, recipe.id])}
-                className={`rounded-md border px-1.5 py-0.5 text-[11px] phone:px-2 phone:py-1 ${on ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
+                className={`rounded-md border px-1.5 py-0.5 text-[11px] phone:px-2 phone:py-1 relative before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-[''] ${on ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
               >
                 {recipe.title}
               </button>

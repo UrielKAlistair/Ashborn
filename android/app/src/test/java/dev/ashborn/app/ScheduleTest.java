@@ -8,6 +8,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Scanner;
 import java.util.TimeZone;
 import org.json.JSONArray;
@@ -17,6 +18,19 @@ import org.junit.Test;
 // Schedule against the cases upcomingAlarms wrote (tests/unit/scheduleFixtures.spec.ts), so the
 // phone rings what the app would have scheduled
 public class ScheduleTest {
+    // The keys are the app's ISO dates whatever the phone's language: one written in Arabic-Indic digits
+    // would match no tick or skip
+    @Test
+    public void matchesUnderALocaleWithOtherDigits() throws Exception {
+        Locale before = Locale.getDefault();
+        Locale.setDefault(Locale.forLanguageTag("ar-EG"));
+        try {
+            matchesTheAppsSchedule();
+        } finally {
+            Locale.setDefault(before);
+        }
+    }
+
     @Test
     public void matchesTheAppsSchedule() throws Exception {
         JSONObject fixtures;
@@ -25,7 +39,7 @@ public class ScheduleTest {
             fixtures = new JSONObject(scanner.next());
         }
         TimeZone.setDefault(TimeZone.getTimeZone(fixtures.getString("timeZone")));
-        SimpleDateFormat local = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+        SimpleDateFormat local = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.ROOT);
 
         JSONArray cases = fixtures.getJSONArray("cases");
         for (int i = 0; i < cases.length(); i++) {

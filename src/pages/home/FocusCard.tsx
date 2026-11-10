@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { RowMenu } from "../../components/RowMenu";
+import { readStored, writeStored } from "../../lib/storage";
 import { requestCapture } from "./Capture";
 import { keyNotForPage } from "../../lib/shortcuts";
 import { paletteOf } from "../../lib/theme";
@@ -139,7 +141,7 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, empty
                   onClick={() => split(row)}
                   title="Add a first step"
                   aria-label="Add a first step"
-                  className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-dashed border-ink/35 text-[11px] leading-none text-muted hover:border-ember hover:text-ember"
+                  className="relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-dashed pointer-coarse:before:absolute pointer-coarse:before:-inset-2 pointer-coarse:before:content-[''] border-ink/35 text-[11px] leading-none text-muted hover:border-ember hover:text-ember"
                 >
                   +
                 </button>
@@ -184,11 +186,11 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, empty
           )}
           <div className="mt-2 flex items-center gap-2 text-[12.5px]">
             {timeLeft === 0 ? (
-              <button type="button" onClick={more} className="rounded-lg border border-ink/12 px-2.5 py-1 text-ink/75 hover:bg-ink/6">
+              <button type="button" onClick={more} className="rounded-lg border border-ink/12 px-2.5 py-1 text-ink/75 hover:bg-ink/6 pointer-coarse:min-h-11">
                 {MORE_MINUTES} more minutes
               </button>
             ) : null}
-            <button type="button" onClick={stop} title="Stop the timer (T)" className="rounded-lg px-2 py-1 text-muted hover:bg-ink/6 hover:text-ink/85">
+            <button type="button" onClick={stop} title="Stop the timer (T)" className="rounded-lg px-2 py-1 text-muted hover:bg-ink/6 hover:text-ink/85 pointer-coarse:min-h-11">
               Stop
             </button>
           </div>
@@ -210,71 +212,13 @@ export function FocusCard({ steps, priorities, snapshot, model, act, date, empty
   );
 }
 
-// A row's ⋯ menu; it closes on a choice, on Escape and when focus leaves it
-function RowMenu({ title, items }: { title: string; items: { label: string; onClick: () => void }[] }) {
-  const [open, setOpen] = useState(false);
-  if (items.length === 0) return <span className="w-6 shrink-0" />;
-  const leave = (event: FocusEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-  };
-
-  return (
-    <div
-      onBlur={leave}
-      onKeyDown={(event) => {
-        // Escape closes an open menu before the navbar's hide-to-tray handler sees it
-        if (event.key !== "Escape" || !open) return;
-        event.preventDefault();
-        setOpen(false);
-      }}
-      className="relative shrink-0"
-    >
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-label={`Actions for ${title}`}
-        aria-expanded={open}
-        className="relative flex h-6 w-6 items-center justify-center rounded-md text-base leading-none text-muted before:absolute before:-inset-1.5 before:content-[''] hover:bg-ink/8 hover:text-ink/85 pointer-coarse:h-8 pointer-coarse:w-8"
-      >
-        ⋯
-      </button>
-      {open ? (
-        <div role="menu" aria-label={`Actions for ${title}`} className="absolute right-0 top-7 z-10 w-40 rounded-lg border border-ink/10 bg-card p-1 shadow-[var(--card-shadow)]">
-          {items.map(({ label, onClick }) => (
-            <button
-              key={label}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onClick();
-              }}
-              className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink/85 hover:bg-ink/6 pointer-coarse:min-h-10"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 // Whether Now lists the whole to-do, kept on this device
 const showAllStorageKey = "ashborn-show-all-todo";
 
 function loadShowAll() {
-  try {
-    return window.localStorage.getItem(showAllStorageKey) === "1";
-  } catch {
-    return false;
-  }
+  return Boolean(readStored<boolean | number>(showAllStorageKey, false));
 }
 
 function saveShowAll(show: boolean) {
-  try {
-    window.localStorage.setItem(showAllStorageKey, show ? "1" : "0");
-  } catch {
-    // Storage blocked: the list folds again next time
-  }
+  writeStored(showAllStorageKey, show);
 }

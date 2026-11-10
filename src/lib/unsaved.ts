@@ -1,8 +1,16 @@
+/**
+ * Unsaved work, and the question asked before leaving it.
+ *
+ * An editor with changes (today only the recipe editor) holds its work here while it is dirty. Anything
+ * that would leave it (a tab, Back, the desktop's Quit) first calls askToLeave, which shows
+ * LeaveDialog: Save, Discard, or stay. One question is on screen at a time; a second ask while it is
+ * up is refused, and callers that should wait for the answer instead check `asking` first (App's Back).
+ * The desktop shell hears of the work too (setUnsaved), so its Quit can ask, and calls saveForQuit.
+ */
 import { useSyncExternalStore } from "react";
 
-// Work not yet saved (a recipe being edited), so leaving its screen or quitting the desktop app asks
-// first: Save, Discard, or stay. One holder at a time; `save` resolves true once saved, false if it
-// couldn't be (the editor then shows why); `discard` closes the editor, which may stay on screen.
+// One holder at a time; `save` resolves true once saved, false if it couldn't be (the editor then
+// shows why); `discard` closes the editor, which may stay on screen.
 export type Unsaved = { what: string; save: () => Promise<boolean>; discard: () => void };
 // The question on screen: leave (true) or stay (false)
 type Question = { what: string; answer: (leave: boolean) => void };
@@ -39,6 +47,9 @@ export function askToLeave(): Promise<boolean> {
     changed();
   });
 }
+
+// Whether the question is on screen now
+export const asking = () => question !== null;
 
 // The answers the dialog offers
 export async function saveAndLeave() {

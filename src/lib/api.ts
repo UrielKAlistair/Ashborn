@@ -1,3 +1,15 @@
+/**
+ * The data store over Supabase: every read and change the app and the agent make (AshbornApi).
+ *
+ * createApi builds it. Each change returns a Delta of the rows it touched, read back after it (nodes
+ * through the nodes_with_xp view, so a node comes with its XP; an update in the same request). Each
+ * write of a field is stamped with when the change was made, so a later change wins whatever order
+ * changes reach the server; links and deletes carry no stamp, having no field to compete over.
+ * Changes to the same row are sent one after another (inRowOrder), so an earlier one can't land last.
+ * Below it: the readers (the Kitchen, today's progress, settings), the row converters (to*), and
+ * the error type the offline queue reads (ServerError). Merging a Delta into the data on screen is in
+ * snapshotMerge.ts.
+ */
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { addDays, dayOf, DEFAULT_DAY_START_HOUR, startOfDay, today } from "../shared/dates";
 import { openInside } from "../shared/graphModel";
@@ -20,7 +32,6 @@ import {
   type Priority,
   type ProgressToday,
   type Routine,
-  type Snapshot,
   type StatWeights,
   type StockUnit,
   type Settings,
@@ -47,7 +58,6 @@ export type NodeRow = {
   parent_id: string | null;
   title: string;
   stat_weights: StatWeights;
-  active: boolean;
   created_at: string;
   completed_at: string | null;
   shelved: boolean;
@@ -110,7 +120,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         db.from("deadlines").select().is("done_at", null).order("due_date"),
         db.from("alarms").select().or(`at.is.null,at.gt.${new Date(Date.now() - RING_LOOKBACK_MS).toISOString()}`).order("created_at"),
         // From yesterday: a routine's day can run past midnight
-        db.from("alarm_skips").select("key, date").eq("skipped", true).gte("date", addDays(today(), -1)),
+        date.then((day) => db.from("alarm_skips").select("key, date").eq("skipped", true).gte("date", addDays(day, -1))),
         settings.then(({ dayStartHour }) => readProgressToday(db, dayStartHour)),
         date.then((day) => readKitchen(db, day)),
         settings,
@@ -140,11 +150,11 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { nodes: [node, ...reopened], progressToday: reopened.length ? await readProgressToday(db) : undefined };
     },
 
-    async updateNode(id, { title, statWeights, active, done, shelved, priority }) {
+    async updateNode(id, { title, statWeights, done, shelved, priority }) {
       const at = clock().toISOString();
       const completed_at = done === undefined ? undefined : done ? at : null;
       const stat_weights = statWeights && positiveWeights(statWeights);
-      const fields = { title, stat_weights, active, completed_at, shelved, priority };
+      const fields = { title, stat_weights, completed_at, shelved, priority };
       // A bare tick on a step already done changes nothing, so it keeps the day it was done on (a tick
       // replayed from another device's queue would otherwise move it, and its progress, to today)
       const bareTick = done === true && Object.values({ ...fields, completed_at: undefined }).every((value) => value === undefined);
@@ -184,10 +194,13 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const removed = must(await db.rpc("move_node", { target: id, new_parent: parentId, at })) as Array<{ from_id: string; to_id: string }>;
       // A move that stood: its place in the old box means nothing in the new one, and an open step
       // put into done boxes reopens them
-      const moved = (await readNode(id)).parentId === parentId;
+      const after = await readNode(id);
+      const moved = after.parentId === parentId;
       const unplace = async () => void must(await nodes().update({ x: null, y: null, changed_at: stamps({ x: null, y: null }, at) }).eq("id", id));
-      // The reopen touches only the boxes above the step, so it runs beside clearing the step's place
-      const [, reopened] = moved ? await Promise.all([unplace(), reopenAround(parentId, at)]) : [undefined, []];
+      // The reopen touches only the boxes above the step, so it runs beside clearing the step's place.
+      // A done step leaves done boxes done.
+      const reopen = async () => (after.completedAt ? [] : reopenAround(parentId, at));
+      const [, reopened] = moved ? await Promise.all([unplace(), reopen()]) : [undefined, []];
 
       return { nodes: [await readNode(id), ...reopened], removedEdges: removed.map(toEdge), progressToday: reopened.length ? await readProgressToday(db) : undefined };
     },
@@ -196,7 +209,11 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const rows = places.map(({ id, position }) => ({ id, ...position }));
       const placed = must(await db.rpc("place_nodes", { places: rows, at: clock().toISOString() })) as string[];
 
-      return { nodes: (must(await nodes().select().in("id", placed)) as NodeRow[]).map(toNode) };
+      const read: NodeRow[] = [];
+      for (let from = 0; from < placed.length; from += IDS_PER_REQUEST) {
+        read.push(...(must(await nodes().select().in("id", placed.slice(from, from + IDS_PER_REQUEST))) as NodeRow[]));
+      }
+      return { nodes: read.map(toNode) };
     },
 
     async resetLayout(ids) {
@@ -261,14 +278,18 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
 
     async createDeadline({ id, title, dueDate, alarmTime, nodeId }) {
       must(await db.from("deadlines").upsert({ id, title, due_date: dueDate, alarm_time: alarmTime, node_id: nodeId }, { onConflict: "id", ignoreDuplicates: true }));
-      return { deadlines: [toDeadline(must(await db.from("deadlines").select().eq("id", id).single()))] };
+      // A replayed create can find the deadline already done on another device: the app holds open ones only
+      const row = must(await db.from("deadlines").select().eq("id", id).single()) as DeadlineRow;
+      return row.done_at ? { removedDeadlineIds: [id] } : { deadlines: [toDeadline(row)] };
     },
 
-    async linkDeadline(id, nodeId) {
-      const fields = { node_id: nodeId };
+    async updateDeadline(id, { title, dueDate, alarmTime, nodeId }) {
+      // A field left undefined is neither sent nor stamped
+      const fields = { title, due_date: dueDate, alarm_time: alarmTime, node_id: nodeId };
       const row = must(await db.from("deadlines").update({ ...fields, changed_at: stamps(fields, clock().toISOString()) }).eq("id", id).select().maybeSingle());
       if (!row) throw new Error("This deadline was deleted on another device.");
-      return { deadlines: [toDeadline(row as DeadlineRow)] };
+      // Done on another device meanwhile: it leaves, as the open list holds no done deadline
+      return (row as DeadlineRow).done_at ? { removedDeadlineIds: [id] } : { deadlines: [toDeadline(row as DeadlineRow)] };
     },
 
     async completeDeadline(id) {
@@ -416,7 +437,7 @@ const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string
   deleteRoutine: (id) => [`routine:${id}`],
   setRoutineCheck: (routineId, date) => [`routine:${routineId}@${date}`, `routine:${routineId}`],
   createDeadline: (deadline) => [`deadline:${deadline.id}`],
-  linkDeadline: (id) => [`deadline:${id}`],
+  updateDeadline: (id) => [`deadline:${id}`],
   completeDeadline: (id) => [`deadline:${id}`],
   deleteDeadline: (id) => [`deadline:${id}`],
   createAlarm: (alarm) => [`alarm:${alarm.id}`],
@@ -539,7 +560,6 @@ export function toNode(row: NodeRow): GraphNode {
     parentId: row.parent_id,
     title: row.title,
     statWeights: row.stat_weights,
-    active: row.active,
     createdAt: row.created_at,
     completedAt: row.completed_at,
     shelved: row.shelved,
@@ -552,7 +572,7 @@ export function toNode(row: NodeRow): GraphNode {
 }
 
 // The changes that count as working on a node: making, ticking, renaming or moving it (and a level-up,
-// read separately). Moving it on the canvas, recolouring, a priority, shelving or hiding it doesn't,
+// read separately). Moving it on the canvas, a priority or shelving it doesn't,
 // so an undone slip leaves a quiet quest quiet. Deleting a step or changing a link leaves no date.
 const ACTIVITY_FIELDS = ["title", "parent_id", "completed_at"];
 
@@ -636,128 +656,4 @@ function must<T>(result: Result & { data: T }): NonNullable<T> {
 function countOf(result: Result & { count: number | null }) {
   if (result.error) fail(result);
   return result.count ?? 0;
-}
-
-// Merges a change into the data on screen. Whatever the change leaves as it was keeps its
-// identity, down to the rows, and a change that alters nothing (the echo of our own) returns the
-// snapshot itself, so nothing on screen renders again.
-export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
-  const removedNodes = new Set(delta.removedNodeIds);
-  const removedEdges = new Set(delta.removedEdges?.map(edgeKey));
-  snapshot.edges.forEach((edge) => (removedNodes.has(edge.from) || removedNodes.has(edge.to)) && removedEdges.add(edgeKey(edge)));
-  const check = delta.routineCheck;
-  const wasChecked = check && snapshot.routineChecks.some((c) => c.routineId === check.routineId && c.date === check.date);
-  const skip = delta.alarmSkip;
-  const wasSkipped = skip && snapshot.skippedAlarms.some((s) => s.key === skip.key);
-
-  const next: Snapshot = {
-    nodes: merge(snapshot.nodes, (node) => node.id, delta.nodes?.map((node) => latestFields(snapshot.nodes.find(({ id }) => id === node.id), node)), removedNodes),
-    edges: merge(snapshot.edges, edgeKey, delta.edges, removedEdges),
-    routines: merge(snapshot.routines, (routine) => routine.id, delta.routines, new Set(delta.removedRoutineIds)),
-    routineChecks:
-      check && check.checked !== wasChecked
-        ? [
-            ...snapshot.routineChecks.filter((c) => c.routineId !== check.routineId || c.date !== check.date),
-            ...(check.checked ? [{ routineId: check.routineId, date: check.date }] : []),
-          ]
-        : snapshot.routineChecks,
-    deadlines: merge(snapshot.deadlines, (deadline) => deadline.id, delta.deadlines, new Set(delta.removedDeadlineIds)),
-    alarms: merge(snapshot.alarms, (alarm) => alarm.id, delta.alarms, new Set(delta.removedAlarmIds)),
-    skippedAlarms:
-      skip && skip.skipped !== wasSkipped
-        ? [...snapshot.skippedAlarms.filter((s) => s.key !== skip.key), ...(skip.skipped ? [{ key: skip.key, date: skip.date }] : [])]
-        : snapshot.skippedAlarms,
-    progressToday: delta.progressToday && !same(delta.progressToday, snapshot.progressToday) ? delta.progressToday : snapshot.progressToday,
-    kitchen: delta.kitchen && !same(delta.kitchen, snapshot.kitchen) ? delta.kitchen : snapshot.kitchen,
-    settings: delta.settings && !same(delta.settings, snapshot.settings) ? delta.settings : snapshot.settings,
-    inboxId: snapshot.inboxId,
-  };
-
-  return (Object.keys(next) as (keyof Snapshot)[]).every((key) => next[key] === snapshot[key]) ? snapshot : next;
-}
-
-// The columns behind each of a node's fields that the server stamps
-const STAMPED_FIELDS = [
-  ["title", ["title"]],
-  ["statWeights", ["stat_weights"]],
-  ["active", ["active"]],
-  ["completedAt", ["completed_at"]],
-  ["shelved", ["shelved"]],
-  ["priority", ["priority"]],
-  ["parentId", ["parent_id"]],
-  ["position", ["x", "y"]],
-] as const;
-
-// A node as it arrived, except for fields where what is shown was changed later on the server: changes
-// don't always arrive in the order they were made, and the older one must not overwrite the newer.
-// Equal stamps are the same write, so what arrived stands. Activity only moves forward.
-function latestFields(shown: GraphNode | undefined, arrived: GraphNode): GraphNode {
-  if (!shown) return arrived;
-  const later = { ...arrived, lastActive: shown.lastActive > arrived.lastActive ? shown.lastActive : arrived.lastActive };
-  for (const [field, columns] of STAMPED_FIELDS) {
-    if (!columns.some((column) => isOlder(arrived.stamps[column], shown.stamps[column]))) continue;
-    Object.assign(later, { [field]: shown[field], stamps: { ...later.stamps, ...Object.fromEntries(columns.map((column) => [column, shown.stamps[column]])) } });
-  }
-  const logged = arrived.ownXp - (arrived.completedAt ? PROGRESS_UNIT : 0);
-  return { ...later, ownXp: logged + (later.completedAt ? PROGRESS_UNIT : 0) };
-}
-
-function isOlder(stamp: string | undefined, than: string | undefined) {
-  return than !== undefined && (stamp === undefined || Date.parse(stamp) < Date.parse(than));
-}
-
-function edgeKey(edge: { from: string; to: string }) {
-  return `${edge.from}->${edge.to}`;
-}
-
-// Rows are built by the to* readers (or spread from one), so equal rows list their keys in the
-// same order and compare equal as JSON
-function same(a: unknown, b: unknown) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-// A snapshot read again, keeping the objects of `current` wherever a row (or a field holding no
-// rows) is unchanged, so memoised views of unchanged rows draw nothing; all unchanged returns `current`
-export function keepUnchanged(current: Snapshot, loaded: Snapshot): Snapshot {
-  const keyOf = (row: unknown) => (row as { id?: string }).id ?? JSON.stringify(row);
-  let changed = false;
-  const kept = Object.fromEntries(
-    (Object.keys(loaded) as Array<keyof Snapshot>).map((field) => {
-      const before = current[field];
-      const after = loaded[field];
-      if (!Array.isArray(before) || !Array.isArray(after)) {
-        if (same(before, after)) return [field, before];
-        changed = true;
-        return [field, after];
-      }
-      const byKey = new Map(before.map((row) => [keyOf(row), row]));
-      const rows = after.map((row) => {
-        const old = byKey.get(keyOf(row));
-        return old !== undefined && same(old, row) ? old : row;
-      });
-      if (rows.length === before.length && rows.every((row, i) => row === before[i])) return [field, before];
-      changed = true;
-      return [field, rows];
-    }),
-  ) as Snapshot;
-  return changed ? kept : current;
-}
-
-// Upserts keep their place if present and append if new; removals drop by key. An upsert equal to
-// the row it replaces keeps the row, and a merge that changes nothing returns `rows` itself.
-function merge<T>(rows: T[], keyOf: (row: T) => string, upserts: T[] = [], removed = new Set<string>()): T[] {
-  if (upserts.length === 0 && removed.size === 0) return rows;
-
-  const byKey = new Map(rows.map((row) => [keyOf(row), row]));
-  let changed = false;
-  removed.forEach((key) => (changed = byKey.delete(key) || changed));
-  upserts.forEach((row) => {
-    const key = keyOf(row);
-    const before = byKey.get(key);
-    if (before !== undefined && same(before, row)) return;
-    byKey.set(key, row);
-    changed = true;
-  });
-
-  return changed ? [...byKey.values()] : rows;
 }

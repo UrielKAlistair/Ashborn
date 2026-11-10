@@ -14,7 +14,6 @@ const node = (id: string, parentId: string | null, lastActive: string, extra: Pa
   parentId,
   title: id,
   statWeights: {},
-  active: true,
   createdAt: daysAgo(90),
   completedAt: null,
   shelved: false,
@@ -68,7 +67,6 @@ test("nothing to pick up, or put away already: no open steps, shelved, hidden, d
   expect(quiet([node("finished", null, old), node("a", "finished", old, { completedAt: old })])).toEqual([]);
   expect(quiet([node("shelved", null, old, { shelved: true }), node("a", "shelved", old)])).toEqual([]);
   expect(quiet([node("onlyShelved", null, old), node("a", "onlyShelved", old, { shelved: true })])).toEqual([]);
-  expect(quiet([node("hidden", null, old, { active: false }), node("a", "hidden", old)])).toEqual([]);
   expect(quiet([node("done", null, old, { completedAt: old }), node("a", "done", old)])).toEqual([]);
   expect(quiet([node("inbox", null, old), node("a", "inbox", old)])).toEqual([]);
 });

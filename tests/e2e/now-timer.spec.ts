@@ -79,6 +79,21 @@ test("start timer and passing over", async () => {
     await expect(now.getByRole("timer")).toHaveCount(0);
   });
 
+  await test.step("a step that leaves the to-do another way (its quest shelved) ends its timer too", async () => {
+    await choose("Start (15 min)");
+    await expect(now.getByRole("timer", { name: "Time left" })).toBeVisible();
+    const shelve = async (shelved: boolean) => {
+      const at = new Date().toISOString();
+      const { error: updateError } = await db.from("graph_nodes").update({ shelved, changed_at: { shelved: at } }).eq("id", id.quest);
+      if (updateError) throw updateError;
+    };
+    await shelve(true);
+    await expect.poll(() => storage("ashborn-now-timer"), { timeout: 10_000 }).toBeNull();
+    await shelve(false);
+    await expect(now.getByRole("listitem")).toHaveCount(3, { timeout: 10_000 });
+    await expect(now.getByRole("timer")).toHaveCount(0);
+  });
+
   await test.step("when the time is up: Done, or keep going", async () => {
     await page.evaluate((stepId) => localStorage.setItem("ashborn-now-timer", JSON.stringify({ stepId, startedAt: Date.now() - 60_000, endsAt: Date.now() - 1 })), id.email);
     await page.reload();

@@ -12,7 +12,7 @@ export type QuietQuest = { quest: GraphNode; days: number; openSteps: number; pr
 
 // Longest quiet first
 export function goneQuiet(model: GraphModel, snapshot: Snapshot, { effective, best }: Priorities, date: ISODate): QuietQuest[] {
-  const quests = (model.children.get(null) ?? []).filter((quest) => quest.active && !isDone(quest) && !model.shelved.has(quest.id) && quest.id !== snapshot.inboxId);
+  const quests = (model.children.get(null) ?? []).filter((quest) => !isDone(quest) && !model.shelved.has(quest.id) && quest.id !== snapshot.inboxId);
   return quests
     .flatMap((quest) => {
       const inside = stepsInside(model, quest.id);

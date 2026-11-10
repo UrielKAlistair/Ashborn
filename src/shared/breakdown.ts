@@ -1,8 +1,12 @@
+/**
+ * The "Break down" request: a prompt the user copies into any Claude chat to split a step into next
+ * actions. It carries what a stranger would need: the step, where it sits, what it unlocks, when it is
+ * due and what it already holds. The reply, one action per line, pastes straight into Split
+ * (parseStepList in splitList.ts reads it).
+ */
 import { isDone, questOf, type GraphModel } from "./graphModel";
 import type { Snapshot } from "./types";
 
-// A request to give any Claude chat, asking it to break a node down into next actions. Its answer,
-// one action per line, pastes straight into Split.
 export function breakdownPrompt(model: GraphModel, snapshot: Snapshot, nodeId: string): string {
   const node = model.byId.get(nodeId);
   if (!node) return "";

@@ -51,7 +51,11 @@ function dayFromToday(days: number) {
 const today = dayFromToday(0);
 const meal = (slot: string, date = today) => page.getByRole("group", { name: `${slot} on ${date}` });
 const stock = (name: string) => page.getByRole("group", { name, exact: true });
-const amountLabel = (name: string) => stock(name).locator("p.text-right");
+const editRecipe = async (title: string) => {
+  await page.getByRole("button", { name: `Actions for ${title}` }).click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+};
+const amountLabel = (name: string) => stock(name).locator("p.font-mono");
 
 async function openScreen(section: string, screen: string) {
   await page.getByRole("button", { name: section, exact: true }).click();
@@ -90,19 +94,27 @@ test("kitchen", async () => {
       await page.getByRole("button", { name: "Add" }).click();
       await expect(amountLabel(name)).toHaveText(`0 kg / ${keep} kg`);
     }
+    // One item per name, whatever its case or spaces
+    await page.getByRole("button", { name: "+ Track a staple" }).click();
+    await page.getByLabel("Staple").fill(" rice ");
+    await page.getByLabel("Amount to keep").fill("1");
+    await expect(page.getByText("Rice is already tracked.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add" })).toBeDisabled();
+    await page.getByLabel("Staple").fill("");
+    await page.getByRole("button", { name: "×" }).last().click();
 
     await setStock("Rice", "5");
     await expect(amountLabel("Rice")).toHaveText("5 kg / 2 kg");
     await expect(stock("Rice").getByTitle("More than you usually keep")).toBeVisible();
     await expect.poll(() => onHand("Rice")).toBe(5000);
 
-    // Amber below half the target, red below a fifth; empty is red too, its whole track tinted
+    // Low below half the target, Very low below a fifth, Out at none
     await setStock("Butter beans", "0.4");
-    await expect(stock("Butter beans").locator(".bg-amber-300\\/85")).toHaveCount(1);
+    await expect(stock("Butter beans").getByText("Low", { exact: true })).toBeVisible();
     await setStock("Butter beans", "0.1");
-    await expect(stock("Butter beans").locator(".bg-red-400\\/85")).toHaveCount(1);
+    await expect(stock("Butter beans").getByText("Very low", { exact: true })).toBeVisible();
     await setStock("Butter beans", "0");
-    await expect(stock("Butter beans").getByTitle("Running out")).toBeVisible();
+    await expect(stock("Butter beans").getByText("Out", { exact: true })).toBeVisible();
     await setStock("Butter beans", "1");
   });
 
@@ -158,7 +170,7 @@ test("kitchen", async () => {
 
   await test.step("unticking restores exactly what was taken, even after the recipe changed", async () => {
     await meal("lunch").getByRole("button", { name: "Rice and beans" }).click();
-    await page.getByRole("button", { name: "Edit" }).click();
+    await editRecipe("Rice and beans");
     await page.getByLabel("Rice amount").fill("300");
     // A change isn't thrown away without asking
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -168,18 +180,18 @@ test("kitchen", async () => {
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("300 g")).toBeVisible();
     // Discarded when the user says so; with nothing changed, Cancel closes at once
-    await page.getByRole("button", { name: "Edit" }).click();
+    await editRecipe("Rice and beans");
     await page.getByLabel("Rice amount").fill("999");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("button", { name: "Discard" }).click();
     await expect(page.getByText("300 g")).toBeVisible();
-    await page.getByRole("button", { name: "Edit" }).click();
+    await editRecipe("Rice and beans");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
     await expect(page.getByText("300 g")).toBeVisible();
 
     // Leaving the screen with an edit open asks too, and so does quitting the app
-    await page.getByRole("button", { name: "Edit" }).click();
+    await editRecipe("Rice and beans");
     await page.getByLabel("Rice amount").fill("999");
     await openScreen("Kitchen", "Planning");
     await expect(page.getByRole("alertdialog", { name: "Discard changes?" })).toBeVisible();
@@ -250,7 +262,7 @@ test("kitchen", async () => {
     const asked = page.getByRole("alertdialog", { name: "Discard changes?" });
     await openScreen("Kitchen", "Cookbook");
     await page.getByRole("button", { name: "Rice and beans" }).click();
-    await page.getByRole("button", { name: "Edit" }).click();
+    await editRecipe("Rice and beans");
     await page.getByLabel("Rice amount").fill("999");
     await page.goBack();
     await asked.getByRole("button", { name: "Discard" }).click();
@@ -265,6 +277,39 @@ test("kitchen", async () => {
     expect(new URL(page.url()).pathname).toBe(`/kitchen/recipes/${(data as { id: string }).id}`);
   });
 
+  await test.step("a recipe with routes reads one route at a time, by tabs beside its title; Delete is behind ⋯", async () => {
+    await editRecipe("Backed out");
+    await page.getByLabel("Method").fill("• Cut the onion\n[1: chopped]\n• Chop the ginger\n[2: paste]\n• Grind the ginger\n[all]\n• Fry it all");
+    await page.getByRole("button", { name: "Save" }).click();
+    const method = page.getByRole("group", { name: "Method" });
+    await expect(page.getByRole("tab", { name: "1", selected: true })).toBeVisible();
+    await expect(method).toContainText("Chop the ginger");
+    await expect(method).not.toContainText("Grind");
+    await expect(method).not.toContainText("[");
+    await page.getByRole("tab", { name: "2" }).click();
+    await expect(page.getByText("paste", { exact: true })).toBeVisible();
+    await expect(method).toContainText("Grind the ginger");
+    await expect(method).toContainText("Fry it all");
+    await expect(method).not.toContainText("Chop");
+    // A tap strikes a step through while cooking, and another takes it back
+    const step = method.getByRole("checkbox", { name: "Grind the ginger" });
+    await step.click();
+    await expect(step).toHaveAttribute("aria-checked", "true");
+    await step.click();
+    await expect(step).toHaveAttribute("aria-checked", "false");
+    await step.click();
+    // The route last read is the one shown next time, its struck steps still struck
+    await page.getByRole("button", { name: "Rice and beans" }).click();
+    await page.getByRole("button", { name: "Backed out" }).click();
+    await expect(page.getByRole("tab", { name: "2", selected: true })).toBeVisible();
+    await expect(step).toHaveAttribute("aria-checked", "true");
+
+    await page.getByRole("button", { name: "Actions for Backed out" }).click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await page.getByRole("button", { name: "Really delete?" }).click();
+    await expect(page.getByRole("button", { name: "Backed out" })).toHaveCount(0);
+  });
+
   await test.step("on a phone-sized window the Kitchen is three screens", async () => {
     await phoneWindow(app, page);
     await openScreen("Kitchen", "Stocks");
@@ -274,6 +319,11 @@ test("kitchen", async () => {
     await openScreen("Kitchen", "Recipes");
     await page.getByRole("button", { name: "Rice and beans" }).click();
     await expect(page.getByRole("heading", { name: "Rice and beans" })).toBeVisible();
+    // The phone's Back button (MainActivity) asks the page first: an open recipe goes back to the list
+    expect(await page.evaluate(() => window.ashbornBack?.())).toBe(true);
+    await expect(page.getByRole("heading", { name: "Rice and beans" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Rice and beans" })).toBeVisible();
+    expect(await page.evaluate(() => window.ashbornBack === undefined)).toBe(true);
   });
 
   expect(pageErrors).toEqual([]);

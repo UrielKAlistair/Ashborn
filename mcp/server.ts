@@ -1,5 +1,7 @@
-// Ashborn's MCP server: lets an agent read and edit your quests, steps, links, routines and
-// deadlines, signed in as you. Changes show up live in the app.
+// Ashborn's MCP server on this computer: lets an agent (Claude Code) read and edit your quests, steps,
+// links, routines, deadlines, alarms and Kitchen, signed in as you, with the tools in tools.ts (the
+// hosted connector, connector.ts, serves the same tools). Changes show up live in the app. Dates are
+// read in this computer's time zone.
 //
 //   npm run agent:login   sign in once (the session is kept in ~/.config/ashborn/agent-session.json)
 //   npm run -s agent      start the server on stdio (what an MCP client runs, see .mcp.json)
