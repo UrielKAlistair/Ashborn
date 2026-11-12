@@ -19,7 +19,6 @@ import { addDays, atTime, currentTimeZone, dayOf, daysBetween, setDayStartHour, 
 import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, sameName, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
 import { byTime, nextOccurrence, onDayAt } from "../src/shared/schedule";
-import { inboxLast, inInbox } from "../src/shared/inbox";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../src/shared/priority";
 import { goneQuiet } from "../src/shared/goneQuiet";
 import { mealDaysAhead, mealDaysBack, mealSlots, stockUnits, type Alarm, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type DeadlinePatch, type RoutinePatch, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
@@ -34,11 +33,11 @@ const LIST_MAX = 300;
 // Ends every reply that sets something to ring (run adds the full stop): the phone learns of it when Ashborn is opened there or
 // on its background refresh, which Android can hold back for hours while the phone sleeps
 const RINGS_ON_PHONE =
-  "The phone picks this up when Ashborn is opened there, or on its background refresh, which can lag while the phone sleeps: ask the user to open Ashborn on the phone (Settings > Sync now shows what it holds) to be sure it rings";
+  "The phone is pushed the change at once; asleep, it gets it at once if a ring is due within 20 minutes, else within about 15 minutes (Settings > Sync now on the phone shows what it holds)";
 
-// The tools, acting as whoever `db` is signed in as, `userId`. `blocked` gives a reason every tool refuses
+// The tools, acting as whoever `db` is signed in as. `blocked` gives a reason every tool refuses
 // with, or null.
-export function registerTools(server: McpServer, db: SupabaseClient, userId: string, blocked: () => string | null = () => null) {
+export function registerTools(server: McpServer, db: SupabaseClient, blocked: () => string | null = () => null) {
   const api = createApi(db);
   const register = ((name: string, config: unknown, handler: (...args: unknown[]) => unknown) =>
     server.registerTool(name, config as never, ((...args: unknown[]) => {
@@ -116,7 +115,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
   // Each node's priority as it now stands and where it comes from, read after a change, so a reply
   // shows what the change did
   const prioritiesNow = async (nodeIds: string[]) => {
-    const snapshot = await api.getSnapshot(userId);
+    const snapshot = await api.getSnapshot();
     setDayStartHour(snapshot.settings.dayStartHour);
     const model = buildGraphModel(snapshot);
     const priorities = derivePriorities(model, snapshot);
@@ -130,11 +129,11 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
     "overview",
     {
       description:
-        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list, the Inbox of unsorted thoughts last (done steps marked [x], prerequisites shown as 'after'), shelved quests, every routine with its weekdays (today's ticked or not), alarms, skipped rings ahead, open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
+        "Shows the user's tracker: steps ready to do now, every quest with its steps nested as an indented list (done steps marked [x], prerequisites shown as 'after'), shelved quests, every routine with its weekdays (today's ticked or not), alarms, skipped rings ahead, open deadlines, and the kitchen in short (stock, the next three days' meals, recipe titles). Ids in brackets are what the other tools take. Call this first.",
       inputSchema: { quest_id: z.string().optional().describe("Show only this quest") },
     },
     async ({ quest_id }) => {
-      const snapshot = await api.getSnapshot(userId);
+      const snapshot = await api.getSnapshot();
       if (quest_id && !snapshot.nodes.some((node) => node.id === quest_id && node.parentId === null)) return failure(`${quest_id} is not a quest; give a quest's id, or none for everything.`);
       return text(describe(snapshot, quest_id));
     },
@@ -424,9 +423,29 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
               time: recurring ? time! : null,
               weekdays: recurring ? (weekdays as typeof week) : [],
               enabled: true,
+              sound: "default",
             }),
         ],
         `${at ? `Alarm set for ${at.toLocaleString(undefined, { timeZone: currentTimeZone() })}` : "Recurring alarm set"}. ${RINGS_ON_PHONE}`,
+      );
+    },
+  );
+
+  register(
+    "call_user",
+    {
+      description:
+        "Calls the user's phone: a ring with Ashborn's call tune, at once, that plays its tune once (about 22 seconds) and obeys the phone's silent mode. If unanswered it leaves a \"Missed call from Claude\" notification showing `message`. Use only when work is blocked on the user (see the ring-user skill). Delete the call with delete_alarm once the user has answered.",
+      inputSchema: {
+        message: z.string().trim().min(1).max(TITLE_MAX).describe("Who is calling and what is needed, readable on the lock screen"),
+      },
+    },
+    async ({ message }) => {
+      const id = crypto.randomUUID();
+      const at = new Date();
+      return run(
+        [() => api.createAlarm({ id, label: message, kind: "plain", at: at.toISOString(), time: null, weekdays: [], enabled: true, sound: "call" })],
+        `Calling now [${id}]. The phone rings as the push reaches it, within seconds even asleep; if the phone is offline the call is dropped after 2 minutes`,
       );
     },
   );
@@ -467,7 +486,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       },
     },
     async ({ id, title, cue, weekdays, time, alarm }) => {
-      const current = (await api.getSnapshot(userId)).routines.find((routine) => routine.id === id);
+      const current = (await api.getSnapshot()).routines.find((routine) => routine.id === id);
       if (!current) return failure(`No routine ${id}.`);
       const patch = Object.fromEntries(Object.entries({ title, cue, weekdays, time, alarm }).filter(([, value]) => value !== undefined)) as RoutinePatch;
       if (time === null && alarm === undefined) patch.alarm = "none";
@@ -500,7 +519,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
       if (moved && moved.getTime() <= Date.now()) return failure(`${day} ${instead_at} has passed.`);
       const alarmId = crypto.randomUUID();
       const changes = [() => api.setAlarmSkip(ring.key, day, true)];
-      if (moved) changes.push(() => api.createAlarm({ id: alarmId, label: movedLabel(ring), kind: ring.kind, at: moved.toISOString(), time: null, weekdays: [], enabled: true }));
+      if (moved) changes.push(() => api.createAlarm({ id: alarmId, label: movedLabel(ring), kind: ring.kind, at: moved.toISOString(), time: null, weekdays: [], enabled: true, sound: "default" }));
       const when = (at: Date) => at.toLocaleString(undefined, { timeZone: currentTimeZone() });
       return run(
         changes,
@@ -531,7 +550,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, userId: str
 
   // The ring a routine or a recurring alarm makes on `day`, or why it makes none
   const ringOn = async (ringId: string, day: string): Promise<{ problem: string } | { ring: Ring & { kind: Alarm["kind"] }; snapshot: Snapshot }> => {
-    const snapshot = await api.getSnapshot(userId);
+    const snapshot = await api.getSnapshot();
     setDayStartHour(snapshot.settings.dayStartHour);
     const routine = snapshot.routines.find((candidate) => candidate.id === ringId);
     const alarm = snapshot.alarms.find((candidate) => candidate.id === ringId);
@@ -902,16 +921,16 @@ function describe(snapshot: Snapshot, questId?: string) {
   // One quest asked for is shown whether or not it is shelved
   const inView = (quest: GraphNode) => !quest.shelved || Boolean(questId);
   const completed = quests.filter((quest) => inView(quest) && folds(quest.id));
-  const shown = inboxLast(quests.filter((quest) => inView(quest) && !folds(quest.id)), snapshot.inboxId);
+  const shown = quests.filter((quest) => inView(quest) && !folds(quest.id));
   const archived = quests.filter((quest) => !inView(quest) && model.finishedAt.has(quest.id));
   const shelved = quests.filter((quest) => !inView(quest) && !model.finishedAt.has(quest.id));
   const lines: string[] = [];
 
   const shownIds = new Set(shown.map((quest) => quest.id));
-  const ready = snapshot.nodes.filter((node) => (node.parentId || needsFirstStep(model, node)) && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id) && !inInbox(model, node, snapshot.inboxId));
+  const ready = snapshot.nodes.filter((node) => (node.parentId || needsFirstStep(model, node)) && model.ready.has(node.id) && shownIds.has(questOf(model.byId, node).id));
   const priorities = derivePriorities(model, snapshot);
   // As in the app: a quiet quest's steps are listed with it, not again under Also ready
-  const quiet = goneQuiet(model, snapshot, priorities, today()).filter(({ quest }) => shownIds.has(quest.id));
+  const quiet = goneQuiet(model, priorities, today()).filter(({ quest }) => shownIds.has(quest.id));
   const quietIds = new Set(quiet.map(({ quest }) => quest.id));
   const prioritised = prioritisedSteps(model, snapshot, priorities).flatMap(({ priority, steps }) =>
     steps.filter((node) => shownIds.has(questOf(model.byId, node).id)).map((node) => `- P${priority} ${node.title} [${node.id}] (${prioritySource(model, priorities, node.id)})${needsFirstStep(model, node) ? " (a quest with no steps yet: it needs a first step)" : ""}`),
@@ -919,12 +938,11 @@ function describe(snapshot: Snapshot, questId?: string) {
   const unprioritised = ready.filter((node) => !priorities.effective.has(node.id) && !quietIds.has(questOf(model.byId, node).id)).map((node) => `- ${node.title} [${node.id}]${needsFirstStep(model, node) ? " (a quest with no steps yet)" : ""}`);
   lines.push("To-do (what the app lists under Now: ready to do now, with a priority, and where the priority comes from):", ...(prioritised.length ? prioritised : ["- nothing"]), "");
   lines.push("Also ready, no priority (not on the user's to-do):", ...(unprioritised.length ? unprioritised : ["- nothing"]), "");
-  if (quiet.length) lines.push("Gone quiet (open steps, nothing done for a week or more; the user may want to prioritise, add a next step, or shelve):", ...quiet.map(({ quest, days, openSteps }) => `- ${quest.title} [${quest.id}]: quiet ${days} days, ${openSteps} open ${openSteps === 1 ? "step" : "steps"}`), "");
+  if (quiet.length) lines.push("Gone quiet (open steps, nothing done for 3 days on a P1 quest or a week on any other, on the to-do or not; the user may want to act on it, change its priority, or shelve it):", ...quiet.map(({ quest, days, openSteps, priority }) => `- ${quest.title} [${quest.id}]${priority ? ` (P${priority})` : ""}: quiet ${days} days, ${openSteps} open ${openSteps === 1 ? "step" : "steps"}`), "");
 
   for (const quest of shown) {
     const level = nodeLevel(model.totalXp.get(quest.id) ?? 0);
     const trains = trainedStats(quest.statWeights).map(([key, weight]) => `${key} ${weight}`);
-    if (quest.id === snapshot.inboxId) lines.push("The Inbox: thoughts the user captured and hasn't sorted. To sort them, `move` each into a quest, or use `add_plan` and delete the original.");
     lines.push(`# ${quest.title} [${quest.id}] Lv ${level.level}${trains.length ? `, trains ${trains.join(", ")}` : ""}${quest.priority ? `, P${quest.priority}` : ""}${quest.shelved ? " (shelved)" : ""}`);
     outline(model, snapshot, quest.id, 1, lines, folds);
     lines.push("");

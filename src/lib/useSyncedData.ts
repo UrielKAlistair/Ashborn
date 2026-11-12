@@ -72,7 +72,7 @@ export function useSyncedData(userId: string | null | undefined) {
 
   // Once signed in, follow the server (followServer below)
   useEffect(
-    () => (userId ? followServer(userId, { loadsRunning, dataRef, offlineRef, readAgainRef, confirm, setOffline, setQueued, setError }) : undefined),
+    () => (userId ? followServer({ loadsRunning, dataRef, offlineRef, readAgainRef, confirm, setOffline, setQueued, setError }) : undefined),
     [userId],
   );
 
@@ -187,9 +187,7 @@ export function useSyncedData(userId: string | null | undefined) {
   }, [Boolean(snapshot), storedZone, deviceZone]);
 
   const readAgain = useCallback(() => readAgainRef.current(), []);
-  // The data the server last confirmed, as of now rather than the last render
-  const latest = useCallback(() => dataRef.current.confirmed, []);
-  return { snapshot, act, offline, queued, error, setError, readAgain, latest };
+  return { snapshot, act, offline, queued, error, setError, readAgain };
 }
 
 // What followServer works through: the hook's refs and setters
@@ -208,7 +206,7 @@ type ServerLink = {
 // elsewhere, and do it again when the connection comes back (the "online" event, or a retry
 // while offline). Without a connection, keep what is on screen, or the last data seen.
 // Returns a function that stops it all.
-function followServer(userId: string, { loadsRunning, dataRef, offlineRef, readAgainRef, confirm, setOffline, setQueued, setError }: ServerLink) {
+function followServer({ loadsRunning, dataRef, offlineRef, readAgainRef, confirm, setOffline, setQueued, setError }: ServerLink) {
 
   // One load at a time, so two never send the same queued change. Changes streamed in or answered
   // while it runs may be missing from what it reads, so they are kept and replayed onto it in order.
@@ -228,7 +226,7 @@ function followServer(userId: string, { loadsRunning, dataRef, offlineRef, readA
     let refused: string[] = [];
     try {
       refused = await sendQueue((at) => createApi(db, () => at));
-      const loaded = replay(await api.getSnapshot(userId));
+      const loaded = replay(await api.getSnapshot());
       // Unchanged rows keep their objects, so reading the same data again draws nothing, and a
       // change redraws only what it touched
       confirm((current) => (current ? keepUnchanged(current, loaded) : loaded));
@@ -255,7 +253,7 @@ function followServer(userId: string, { loadsRunning, dataRef, offlineRef, readA
         readRetry = window.setTimeout(() => void load(), READ_RETRY_MS);
         return;
       }
-      const fallback = dataRef.current.confirmed ?? loadCachedSnapshot(userId);
+      const fallback = dataRef.current.confirmed ?? loadCachedSnapshot();
       if (!fallback) {
         // Nothing to show meanwhile, and no offline state to retry from: tried again on the same beat
         window.clearTimeout(readRetry);
@@ -333,11 +331,11 @@ function withPreview(shown: Snapshot, change: Pending): Snapshot {
   }
 }
 
-function loadCachedSnapshot(userId: string): Snapshot | null {
+function loadCachedSnapshot(): Snapshot | null {
   try {
     const cached = JSON.parse(window.localStorage.getItem(snapshotStorageKey) ?? "null") as Snapshot | null;
-    // Saved before the Kitchen, the settings or skipped alarms existed
-    return cached && { ...cached, nodes: cached.nodes.map((node) => ({ ...node, stamps: node.stamps ?? {} })), kitchen: cached.kitchen ?? emptyKitchen, skippedAlarms: cached.skippedAlarms ?? [], settings: cached.settings ?? { dayStartHour: DEFAULT_DAY_START_HOUR, timeZone: null }, inboxId: userId };
+    // Saved before the Kitchen, the settings, skipped alarms or alarm sounds existed
+    return cached && { ...cached, nodes: cached.nodes.map((node) => ({ ...node, stamps: node.stamps ?? {} })), kitchen: cached.kitchen ?? emptyKitchen, skippedAlarms: cached.skippedAlarms ?? [], alarms: cached.alarms.map((alarm) => ({ ...alarm, sound: alarm.sound ?? "default" })), settings: cached.settings ?? { dayStartHour: DEFAULT_DAY_START_HOUR, timeZone: null } };
   } catch {
     return null;
   }

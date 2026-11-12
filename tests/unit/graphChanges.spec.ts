@@ -47,7 +47,6 @@ const snapshot: Snapshot = {
   progressToday: { date: today(), count: 2 },
   kitchen: emptyKitchen,
   settings: { dayStartHour: 4, timeZone: null },
-  inboxId: "inbox",
 };
 
 test("the open nodes inside a box, at any depth, shelved ones included, done ones and outsiders not", () => {

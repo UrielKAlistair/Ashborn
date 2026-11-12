@@ -48,11 +48,11 @@ public class ScheduleTest {
             JSONArray alarms = fixture.getJSONArray("expected");
             for (int j = 0; j < alarms.length(); j++) {
                 JSONObject alarm = alarms.getJSONObject(j);
-                expected.add(alarm.getString("at") + " " + alarm.getString("key") + " | " + alarm.getString("title") + " | " + alarm.getString("kind"));
+                expected.add(alarm.getString("at") + " " + alarm.getString("key") + " | " + alarm.getString("title") + " | " + alarm.getString("kind") + " | " + alarm.getString("sound"));
             }
             List<String> actual = new ArrayList<>();
             for (Alarm alarm : Schedule.upcoming(fixture.getJSONObject("input"), Schedule.instant(fixture.getString("from")), fixture.getInt("days"))) {
-                actual.add(local.format(new Date(alarm.at)) + " " + alarm.key + " | " + alarm.title + " | " + alarm.kind);
+                actual.add(local.format(new Date(alarm.at)) + " " + alarm.key + " | " + alarm.title + " | " + alarm.kind + " | " + alarm.sound);
             }
             assertEquals(fixture.getString("name"), expected, actual);
         }

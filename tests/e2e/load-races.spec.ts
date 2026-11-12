@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-// What a read of the whole graph must not do: move steps made together, lose the order a list was
-// typed in, drop a change queued while it ran, or call the app offline because one read failed.
+// What a read of the whole graph must not do: move steps made together, drop a change queued while it
+// ran, or call the app offline because one read failed.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 const uuid = () => crypto.randomUUID();
@@ -56,28 +56,6 @@ test("reads of the whole graph", async () => {
     await expect(now).toBeVisible({ timeout: 20_000 });
     await page.waitForTimeout(3000); // the first frame is from the device's copy: past the read
     expect(await nowTitle()).toBe("Step 1");
-  });
-
-  await test.step("a list stays in the order it was typed, through a reload", async () => {
-    await now.getByRole("listitem").first().getByRole("button", { name: /^Actions for/ }).click();
-    await now.getByRole("menuitem", { name: "Split it" }).click();
-    await page.getByLabel(/In this order/).uncheck(); // not chained: only their order says which comes first
-    const typed = ["Zebra", "Mango", "Apple", "Kiwi", "Banana", "Cherry"];
-    await page.locator("textarea").fill(typed.join("\n"));
-    await now.getByRole("button", { name: /^Add/ }).click();
-    // Each step takes a few sequential requests to the server (about 0.35 s each from here), so six take seconds
-    await expect.poll(async () => (await db.from("graph_nodes").select("id").in("title", typed)).data?.length, { timeout: 20_000 }).toBe(typed.length);
-    const stored = async () => (await db.from("graph_nodes").select("title").in("title", typed).order("created_at").order("id")).data?.map(({ title }) => title);
-    expect(await stored()).toEqual(typed);
-    await page.reload();
-    await expect(now).toBeVisible({ timeout: 20_000 });
-    await page.waitForTimeout(3000);
-    await page.getByRole("button", { name: /Show all \d+ ready/ }).click();
-    const list = await now.innerText();
-    const places = typed.map((title) => list.indexOf(title));
-    expect(places).toEqual([...places].sort((x, y) => x - y));
-    expect(places[0]).toBeGreaterThanOrEqual(0);
-    await page.getByRole("button", { name: "Show fewer" }).click();
   });
 
   await test.step("a change queued while a read runs stays shown, and is sent", async () => {

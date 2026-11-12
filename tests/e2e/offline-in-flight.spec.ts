@@ -11,12 +11,12 @@ import path from "node:path";
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
 test("a change on its way as the connection goes keeps its place in the queue", async () => {
-  const { data: auth, error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
+  const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
   for (const table of ["graph_nodes", "deadlines"]) await db.from(table).delete().not("id", "is", null);
   const work = crypto.randomUUID();
   for (const rows of [
-    [{ id: auth.user.id, title: "Inbox", parent_id: null }, { id: work, title: "Work", parent_id: null }],
+    [{ id: work, title: "Work", parent_id: null }],
     [{ title: "Old step", parent_id: work }],
   ]) {
     const { error: insertError } = await db.from("graph_nodes").insert(rows);
@@ -38,7 +38,7 @@ test("a change on its way as the connection goes keeps its place in the queue", 
   // would mark the app online again for a moment
   await page.waitForTimeout(3000);
 
-  // The capture's create is held on its way, then lost with the connection
+  // A new step's create is held on its way, then lost with the connection
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
   let holding = true;
@@ -48,8 +48,9 @@ test("a change on its way as the connection goes keeps its place in the queue", 
     await held;
     await route.abort("internetdisconnected");
   });
-  await page.getByLabel("Capture a thought").fill("Fresh thought");
-  await page.getByLabel("Capture a thought").press("Enter");
+  await page.locator(".react-flow__node", { hasText: "Work" }).first().getByTitle("Add a step inside").click();
+  await page.getByPlaceholder("Step name, Enter to add").fill("Fresh thought");
+  await page.getByPlaceholder("Step name, Enter to add").press("Enter");
   await expect(step("Fresh thought")).toBeVisible();
 
   await page.context().setOffline(true);

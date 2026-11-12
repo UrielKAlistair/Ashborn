@@ -12,8 +12,6 @@ declare global {
       isMaximised: () => Promise<boolean>;
       onMaximisedChange: (listener: (maximised: boolean) => void) => () => void; // returns the unsubscribe
       quit: () => void;
-      onCapture: (listener: () => void) => () => void; // the desktop-wide capture shortcut; returns the unsubscribe
-      takeCaptureAtStart: () => Promise<boolean>; // launched with --capture: true once, for the first asker
       setNow: (step: import("./pages/home/nowMirror").MirroredNow) => void; // mirrors Now in the tray
       newestBackup: () => Promise<number | null>; // when the newest backup was written (ms), or null
       writeBackup: (json: string) => Promise<void>;

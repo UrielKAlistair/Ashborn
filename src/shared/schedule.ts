@@ -7,7 +7,7 @@
  */
 import { addDays, atTime, dayOf, startOfDay, toISODate, weekdayOf } from "./dates.js";
 import { mealReminders } from "./kitchen.js";
-import type { AlarmKind, ISODate, Routine, Snapshot } from "./types.js";
+import type { AlarmKind, AlarmSound, ISODate, Routine, Snapshot } from "./types.js";
 
 // How far back the schedule handed to the phone reaches: the rings already rung that are still due
 // say which snoozes may ring again (none whose ring was ticked, skipped or removed since), so the
@@ -21,6 +21,7 @@ export type AlarmInstance = {
   at: Date;
   title: string;
   kind: Exclude<AlarmKind, "none">;
+  sound: AlarmSound;
 };
 
 // Timed routines first, in time order; untimed ones after, in the order they were made
@@ -42,7 +43,7 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
     const date = addDays(firstDate, offset);
     for (const alarm of snapshot.alarms) {
       if (!alarm.enabled || !alarm.time || !alarm.weekdays.includes(weekdayOf(date))) continue;
-      alarms.push({ key: `alarm:${alarm.id}@${date}`, at: atTime(date, alarm.time), title: alarm.label || "Alarm", kind: alarm.kind });
+      alarms.push({ key: `alarm:${alarm.id}@${date}`, at: atTime(date, alarm.time), title: alarm.label || "Alarm", kind: alarm.kind, sound: alarm.sound });
     }
   }
   const { dayStartHour } = snapshot.settings;
@@ -52,21 +53,21 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
     for (const routine of snapshot.routines) {
       if (routine.alarm === "none" || !routine.time || !routine.weekdays.includes(weekdayOf(date))) continue;
       if (checked.has(`${routine.id}@${date}`)) continue;
-      alarms.push({ key: `routine:${routine.id}@${date}`, at: onDayAt(date, routine.time, dayStartHour), title: routine.title, kind: routine.alarm });
+      alarms.push({ key: `routine:${routine.id}@${date}`, at: onDayAt(date, routine.time, dayStartHour), title: routine.title, kind: routine.alarm, sound: "default" });
     }
   }
   const end = startOfDay(addDays(firstDate, days), 0);
   for (const alarm of snapshot.alarms) {
     if (!alarm.enabled || !alarm.at || new Date(alarm.at) >= end) continue;
-    alarms.push({ key: `alarm:${alarm.id}@${new Date(alarm.at).getTime()}`, at: new Date(alarm.at), title: alarm.label || "Alarm", kind: alarm.kind });
+    alarms.push({ key: `alarm:${alarm.id}@${new Date(alarm.at).getTime()}`, at: new Date(alarm.at), title: alarm.label || "Alarm", kind: alarm.kind, sound: alarm.sound });
   }
   const lastDate = addDays(firstDate, days - 1);
   for (const deadline of snapshot.deadlines) {
     if (!deadline.alarmTime || deadline.dueDate > lastDate) continue;
-    alarms.push({ key: `deadline:${deadline.id}@${deadline.dueDate}`, at: onDayAt(deadline.dueDate, deadline.alarmTime, dayStartHour), title: `Due today: ${deadline.title}`, kind: "plain" });
+    alarms.push({ key: `deadline:${deadline.id}@${deadline.dueDate}`, at: onDayAt(deadline.dueDate, deadline.alarmTime, dayStartHour), title: `Due today: ${deadline.title}`, kind: "plain", sound: "default" });
   }
 
-  for (const reminder of mealReminders(snapshot.kitchen, from, days)) alarms.push({ ...reminder, kind: "plain" });
+  for (const reminder of mealReminders(snapshot.kitchen, from, days)) alarms.push({ ...reminder, kind: "plain", sound: "default" });
 
   const skipped = new Set(snapshot.skippedAlarms.map((skip) => skip.key));
   return alarms.filter((alarm) => alarm.at > from && !skipped.has(alarm.key)).sort((a, b) => a.at.getTime() - b.at.getTime());

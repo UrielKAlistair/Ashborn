@@ -8,12 +8,9 @@ import { createApi } from "../../src/lib/api";
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 const COUNT = 1005;
 
-let userId: string;
-
 test.beforeEach(async () => {
-  const { data, error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
+  const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  userId = data.user.id;
   const { error: wipeError } = await db.from("graph_nodes").delete().not("id", "is", null);
   if (wipeError) throw wipeError;
 });
@@ -26,8 +23,8 @@ test("a graph of more than one page is read whole", async () => {
   const { error: edgeError } = await db.from("graph_edges").insert(steps.slice(1).map((step, index) => ({ from_id: steps[index].id, to_id: step.id })));
   if (edgeError) throw edgeError;
 
-  const snapshot = await createApi(db).getSnapshot(userId);
-  expect(snapshot.nodes.filter(({ title }) => title !== "Inbox")).toHaveLength(COUNT);
+  const snapshot = await createApi(db).getSnapshot();
+  expect(snapshot.nodes).toHaveLength(COUNT);
   expect(new Set(snapshot.nodes.map(({ id }) => id)).size).toBe(snapshot.nodes.length);
   expect(snapshot.edges).toHaveLength(COUNT - 2);
 });

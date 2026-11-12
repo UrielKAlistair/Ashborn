@@ -8,18 +8,16 @@ import { useBackupSchedule } from "./lib/backupSchedule";
 import { db } from "./lib/client";
 import { usePhone } from "./lib/usePhone";
 import { AtlasPage } from "./pages/AtlasPage";
-import { requestCapture } from "./pages/home/Capture";
 import { HomePage } from "./pages/home/HomePage";
 import { KitchenPage } from "./pages/kitchen/KitchenPage";
 import { AlarmsPage } from "./pages/AlarmsPage";
+import { CalendarPage } from "./pages/calendar/CalendarPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AlarmScreen } from "./pages/phone/AlarmScreen";
 import { useUndoableChanges, UndoToast } from "./pages/home/UndoToast";
 import { onShowOnGraph } from "./pages/home/showOnGraph";
-import { storedTimer, storeTimer, useNowMemory, useTimeUpNotice } from "./pages/home/nowStore";
-import { NowChoiceContext, useNowMirror } from "./pages/home/nowMirror";
+import { useNowMirror } from "./pages/home/nowMirror";
 import { buildGraphModel } from "./shared/graphModel";
-import { chooseNow } from "./shared/nowStep";
 import { derivePriorities, prioritisedSteps } from "./shared/priority";
 import { useToday } from "./lib/useToday";
 import { PhoneHome } from "./pages/phone/PhoneHome";
@@ -34,9 +32,8 @@ import { asking, askToLeave, saveForQuit } from "./lib/unsaved";
  * desktop app, in memory). The Atlas shows signed in or not.
  *
  * Around the screens it keeps what every screen shares: the alarm schedule handed to the phone and a
- * ringing alarm shown over everything; the daily desktop backup; the step in Now, chosen once here
- * and mirrored to the tray and the graph; the Undo offer; the desktop's capture shortcut; and the
- * question asked before leaving unsaved work. The layout differs by device: the desktop has the
+ * ringing alarm shown over everything; the daily desktop backup; the step in Now, mirrored to the
+ * tray and the graph; the Undo offer; and the question asked before leaving unsaved work. The layout differs by device: the desktop has the
  * rail (Navbar) and window controls, the phone its tab bar (PhoneTabs) and the Home tabs.
  */
 // The packaged desktop app loads its page from a file, where the address is a file path, not a
@@ -46,7 +43,7 @@ const routesInAddress = window.location.protocol !== "file:";
 function App() {
   const [currentPath, setCurrentPath] = useState(routesInAddress ? window.location.pathname || "/" : "/");
   const [userId, setUserId] = useState<string | null | undefined>(undefined); // undefined until the session is read
-  const { snapshot, act, offline, queued, error, setError, readAgain, latest } = useSyncedData(userId);
+  const { snapshot, act, offline, queued, error, setError, readAgain } = useSyncedData(userId);
   const phone = usePhone();
   const [ringing, stopRinging, snoozeRinging] = useRingingAlarm();
   const permissions = useAlarmPermissions();
@@ -102,29 +99,6 @@ function App() {
     });
   };
 
-  // The desktop-wide capture shortcut: Home, with the capture field focused
-  useEffect(
-    () =>
-      window.ashborn?.onCapture(() => {
-        // Work left unsaved on another screen is asked about first, as leaving it any other way is
-        void askToLeave().then((leave) => {
-          if (!leave) return;
-          if (routesInAddress && window.location.pathname !== "/") window.history.pushState({}, "", "/");
-          setCurrentPath("/");
-          requestCapture();
-        });
-      }),
-    [],
-  );
-  // Launched with --capture: the field is focused once it appears (after sign-in, if need be)
-  useEffect(() => {
-    void window.ashborn?.takeCaptureAtStart().then((take) => {
-      if (!take) return;
-      setCurrentPath("/");
-      requestCapture();
-    });
-  }, []);
-
   // On the phone the graph is a tab of its own: asking to show a node opens it there
   useEffect(
     () =>
@@ -137,12 +111,6 @@ function App() {
     [phone],
   );
 
-  useTimeUpNotice((stepId) => {
-    const step = latest()?.nodes.find(({ id }) => id === stepId);
-    return step && !step.completedAt ? step.title : undefined;
-  }, Boolean(snapshot));
-
-  // The step in Now on any screen, for the tray's menu and the graph's tag; the card on Home draws this choice
   const nowDate = useToday(snapshot?.settings.dayStartHour ?? 0);
   // A new day moves the reads bounded by date (the Kitchen's days, the last day's ticks and skips), so
   // a window left open across the day start reads again. Not on the first data, whose own hour can move
@@ -152,28 +120,15 @@ function App() {
     if (dateRead.current && dateRead.current !== nowDate) void readAgain();
     dateRead.current = snapshot ? nowDate : null;
   }, [nowDate, Boolean(snapshot)]);
-  const nowMemory = useNowMemory(nowDate);
-  // The to-do reads only the graph, so alarms, deadlines, the Kitchen or settings changing leave it be
-  const toDo = useMemo(() => {
-    if (!snapshot) return null;
+  // The step in Now, the to-do's first, for the tray's menu and the graph's tag on any screen. The to-do
+  // reads only the graph, so alarms, deadlines, the Kitchen or settings changing leave it be.
+  const nowStep = useMemo(() => {
+    if (!snapshot) return undefined;
     const model = buildGraphModel(snapshot);
-    return { model, steps: prioritisedSteps(model, snapshot, derivePriorities(model, snapshot)).flatMap(({ steps }) => steps) };
+    return prioritisedSteps(model, snapshot, derivePriorities(model, snapshot))[0]?.steps[0];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot?.nodes, snapshot?.edges, snapshot?.inboxId]);
-  // A step done anywhere (Now, the graph, another device), deleted, or put away (it or a box above it
-  // shelved) ends its timer, as Done in Now does, so its time's-up notice doesn't ring for it. A
-  // step split or blocked keeps it.
-  useEffect(() => {
-    const timer = storedTimer();
-    if (!timer || !snapshot) return;
-    const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
-    const step = byId.get(timer.stepId);
-    let away = !step || Boolean(step.completedAt);
-    for (let at = step; at && !away; at = at.parentId ? byId.get(at.parentId) : undefined) away = at.shelved;
-    if (away) storeTimer(null);
-  }, [snapshot?.nodes]);
-  const nowChoice = toDo && chooseNow(toDo.steps, nowMemory, Date.now(), nowDate);
-  useNowMirror(toDo && nowChoice ? { id: nowChoice.step.id, title: nowChoice.step.title } : null);
+  }, [snapshot?.nodes, snapshot?.edges]);
+  useNowMirror(nowStep ? { id: nowStep.id, title: nowStep.title } : null);
 
   const renderPage = () => {
     if (currentPath === "/atlas" || currentPath.startsWith("/atlas/")) {
@@ -193,6 +148,7 @@ function App() {
 
     const away = (() => {
       if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={acting} />;
+      if (currentPath === "/calendar") return <CalendarPage snapshot={snapshot} act={acting} />;
       if (currentPath === "/settings") return <SettingsPage permissions={permissions} dayStartHour={snapshot.settings.dayStartHour} act={acting} sync={sync} />;
       if (currentPath === "/kitchen" || currentPath.startsWith("/kitchen/")) {
         const [, , screen, recipeId] = currentPath.split("/");
@@ -216,7 +172,7 @@ function App() {
     return <PhoneHome snapshot={snapshot} act={acting} screen={screen} away={away} />;
   };
 
-  const page = <NowChoiceContext.Provider value={nowChoice}>{renderPage()}</NowChoiceContext.Provider>;
+  const page = renderPage();
 
   return (
     <main className="relative h-screen overflow-hidden bg-transparent text-ink">

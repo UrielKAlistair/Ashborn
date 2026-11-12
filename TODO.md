@@ -14,15 +14,6 @@ Only open work is listed here. What is built, and why it is built that way, is i
       stopping by itself after 5 minutes with a "Missed" notice, a challenge alarm sounding on silent for 15.
 - [ ] Decide the challenge alarm's emergency stop (design 295): a way out when the challenge can't be done
       where it rings, discouraged enough not to become the everyday stop.
-- [ ] Trial `trial/pixel-ratio` (design 274): the hex canvas at A 2 / B 1.5 / C 1 device pixels per CSS pixel,
-      switch above the phone's tab bar. Install it with `cd ../Ashborn-trial-pixel-ratio && set -a &&
-      . ../Ashborn/.env && set +a && npm run android:install`; pick the smoothest that still looks right.
-- [ ] Try `try/shopping-list` (design 285): Stocks lists what the week's planned meals would leave in the amber,
-      topped back up to target, with Copy. Worktree `../Ashborn-try-shopping-list`; keep it or drop it, and
-      say whether 7 days, the amber line and top-up-to-target are right.
-- [ ] Still open from the hex trial (design 256): a quest box's edge tinted with its priority, and the
-      phone card's menu on a ⋯ or on a tap of its title row. The trial branches are kept in
-      `research/branches-2026-11-06.bundle` (`git fetch <bundle> trial/hex-look:trial/hex-look`).
 - [ ] Install the release build again (`npm run android:install`) and check it is fast enough to
       keep. The first install was uninstalled for being slow; that is probably fixed.
 - [ ] Try it on the phone, in one sitting: `research/daily-use/phone-checks.md`. Allow the
@@ -47,13 +38,6 @@ Only open work is listed here. What is built, and why it is built that way, is i
         HyperOS turns "Floating notifications" and "Lock screen notifications" off by default for
         a new channel, which on its own would leave only a quiet notification in the shade
         (inferred from HyperOS's known defaults, not checked on this phone).
-- [ ] The desktop capture shortcut (Ctrl+Alt+Space, redesign branch) likely fires only while an X11
-      window has focus: Electron 37 runs Ashborn under XWayland, where a global shortcut is an X11
-      key grab. Tested 2026-11-03: neither XWayland nor native Wayland with `GlobalShortcutsPortal`
-      made any call to GNOME's shortcuts portal (session bus watched). Dependable route, built and
-      tested: GNOME Settings > Keyboard > Custom Shortcuts, Ctrl+Alt+Space, command
-      `~/Applications/Ashborn.AppImage --capture` (a second launch hands the running app the flag).
-      To do with the user: set that up and check it over Brave; then the in-app grab can go.
 - [ ] Try sync across real devices: change something on the phone offline and the same thing on
       the desktop, and see the later change kept.
 - [ ] Check the AppImage starts at login: run `scripts/install-appimage.sh`, log out and in,
@@ -61,8 +45,6 @@ Only open work is listed here. What is built, and why it is built that way, is i
 
 ## Redesign follow-ups (from peer-c's reviews, 2026-11-03)
 
-- [ ] Decide: should a step's priority also flow forward to the steps it unlocks? Today it covers only what
-      leads to it, so Ready puts the chips on the quest for chains (decision in docs/design.md).
 - [ ] The phone's quiet "Time's up" (D4, built as design 231) is untested on a phone: run a time box with the
       app closed and see the notice.
 - [ ] The timer and the put-off counts are per device, not synced (D5): fine unless it bothers in use.
@@ -98,6 +80,13 @@ Only open work is listed here. What is built, and why it is built that way, is i
 
 - [ ] Rewrite the Atlas. I write all of its content by hand, with no AI-generated text; Claude
       may suggest the broad headings and structure.
+
+## Looks (later)
+
+- [ ] The light graph's yellow (P2) on parchment: the tile is the pigment laid partly transparent over a
+      paper that is itself pale yellow-brown, so it barely shifts the hue and reads as dirty paper; its rim,
+      browned toward the ink, turns olive. Try A an ochre that differs from the paper by darkness, B another
+      hue for P2 on paper only, C a multiply blend (pigment only darkens the paper). Design 310.
 
 ## Later
 

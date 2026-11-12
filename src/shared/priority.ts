@@ -78,11 +78,11 @@ export function needsFirstStep(model: GraphModel, node: GraphNode) {
 }
 
 // The to-do: what shown quests have ready now that a priority covers, most urgent first: steps, and
-// quests that need a first step (a finished quest has steps; an empty Inbox waits for captures)
+// quests that need a first step (a finished quest has steps)
 export function prioritisedSteps(model: GraphModel, snapshot: Snapshot, { effective }: Priorities): Array<{ priority: Priority; steps: GraphNode[] }> {
   const steps = snapshot.nodes.filter(
     (node) =>
-      (node.parentId || (needsFirstStep(model, node) && node.id !== snapshot.inboxId)) &&
+      (node.parentId || needsFirstStep(model, node)) &&
       model.ready.has(node.id) &&
       effective.has(node.id),
   );

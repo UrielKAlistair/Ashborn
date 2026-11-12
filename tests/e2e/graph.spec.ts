@@ -110,10 +110,10 @@ test("home graph", async () => {
     await first.fill("Deep Learning");
     await first.press("Enter");
     await expect(nodes()).toHaveCount(1);
-    // A new quest opens on Split, for its first steps; Escape puts it away
-    await expect(page.getByLabel("Steps, one per line")).toBeFocused();
-    await page.getByLabel("Steps, one per line").press("Escape");
-    await expect(page.getByLabel("Steps, one per line")).toHaveCount(0);
+    // A new quest opens on its add row, for its first steps; Escape puts it away
+    await expect(addInput()).toBeFocused();
+    await addInput().press("Escape");
+    await expect(addInput()).toHaveCount(0);
   });
 
   await test.step("the green + adds steps and stays open; Escape closes it, not the window", async () => {
@@ -176,7 +176,7 @@ test("home graph", async () => {
     await expect(upNext()).toContainText("Implement an MLP");
   });
 
-  await test.step("level-up and ticks train the quest's stats by weight, and count toward today's progress", async () => {
+  await test.step("level-up and ticks train the quest's stats by weight", async () => {
     await card("Deep Learning").getByTitle("Options").click();
     await page.getByLabel("INT weight").fill("1.5");
     await page.getByLabel("INT weight").press("Enter");
@@ -186,7 +186,6 @@ test("home graph", async () => {
     // 20 xp in the quest: one tick and one level-up
     await expect(page.locator("dl div[title='30 xp']", { hasText: "INT" })).toHaveCount(1);
     await expect(page.locator("dl div[title='10 xp']", { hasText: "CHR" })).toHaveCount(1);
-    await expect(page.getByText("2 steps of progress today")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByLabel("INT weight")).toHaveCount(0);
     expect(await windowVisible()).toBe(true);
@@ -353,11 +352,14 @@ test("home graph", async () => {
   });
 
   await test.step("alarms: a quick one, a recurring one with a challenge, switched off and on", async () => {
-    await page.getByRole("button", { name: "Alarms" }).click();
+    await page.getByRole("button", { name: "Calendar", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
     await page.getByRole("button", { name: "New alarm" }).click();
     await page.getByRole("dialog", { name: "New alarm" }).getByRole("button", { name: "In 30 min" }).click();
-    await page.getByRole("button", { name: "All alarms ›" }).click();
-    await expect(page.getByText(/^once, /)).toBeVisible();
+    // A one-time alarm is listed with today's rings, not with the repeating ones
+    await expect(page.getByRole("group", { name: "Alarm", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Repeating ›" }).click();
+    await expect(page.getByRole("group", { name: "Alarm", exact: true })).toHaveCount(0);
 
     await page.getByRole("button", { name: "New alarm" }).click();
     const dialog = page.getByRole("dialog", { name: "New alarm" });

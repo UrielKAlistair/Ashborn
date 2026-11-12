@@ -18,13 +18,17 @@ import java.util.Set;
 
 // Keeps Android's alarm clock in step with the app: the scheduled alarms and the rings going off
 // now are stored on the phone, so they survive the app closing and are re-armed after a reboot.
-// The app and the background refresh both schedule, so scheduling is synchronized.
+// The app and the background refresh both schedule, so scheduling is synchronized. A call pushed to
+// the phone (PushService) is held apart from the schedule until it rings, so a schedule built from
+// rows read before the call existed does not drop it.
 final class AlarmScheduler {
     private static final String PREFS = "ashborn-alarms";
     private static final String SCHEDULED = "scheduled";
     private static final String RINGING = "ringing";
     private static final String SNOOZED = "snoozed";
     private static final String SNOOZE_PREFIX = "snooze:";
+    private static final String PUSHED = "pushed";
+    private static final String PUSHED_AT = "pushedAt";
     private static final String HANDED_AT_PREFIX = "handedAt:";
     private static final long SNOOZE_MS = 10 * 60_000;
 
@@ -32,14 +36,16 @@ final class AlarmScheduler {
 
     private AlarmScheduler() {}
 
-    // Replaces every scheduled alarm with `alarms`, plus the snoozed alarms still to ring, which
-    // the app's schedule does not know about. `alarms` reaches a day back (RING_LOOKBACK_MS in
+    // Replaces every scheduled alarm with `alarms`, built from rows read at `readAt` (epoch ms), plus
+    // the snoozed alarms still to ring, which the app's schedule does not know about, and the pushed
+    // calls still to ring (stillPushed). `alarms` reaches a day back (RING_LOOKBACK_MS in
     // src/shared/schedule.ts), so it also holds the rings already rung that are still due; it is stored
     // whole, for snoozing and re-arming after a reboot.
-    static synchronized void schedule(Context context, List<Alarm> alarms) throws JSONException {
+    static synchronized void schedule(Context context, List<Alarm> alarms, long readAt) throws JSONException {
         AlarmManager manager = context.getSystemService(AlarmManager.class);
         long now = System.currentTimeMillis();
         List<Alarm> snoozed = load(context, SNOOZED);
+        List<Pushed> pushed = loadPushed(context);
         Map<String, Alarm> byKey = new LinkedHashMap<>();
         JSONArray scheduled = new JSONArray();
         for (Alarm alarm : alarms) {
@@ -51,18 +57,25 @@ final class AlarmScheduler {
             byKey.put(alarm.key, alarm);
             stillSnoozed.put(alarm.toJson());
         }
+        // After the schedule, so a pushed call due now (rung at once) replaces its past ring of the same key
+        JSONArray stillPushed = new JSONArray();
+        for (Pushed call : stillPushed(pushed, byKey.keySet(), readAt, now)) {
+            byKey.put(call.alarm.key, call.alarm);
+            stillPushed.put(call.toJson());
+        }
 
         // Setting a key again replaces its alarm (one PendingIntent per key), so only the alarms
         // that leave are cancelled: cancelling all first would drop a ring falling due meanwhile
         List<Alarm> before = load(context, SCHEDULED);
         before.addAll(snoozed);
+        for (Pushed call : pushed) before.add(call.alarm);
         for (Alarm old : before) {
             if (leaves(old, byKey.get(old.key), now)) manager.cancel(fireIntent(context, old));
         }
 
         // Stored first, and each alarm set on its own, so one the system refuses (exact alarms not
         // allowed) neither loses the schedule nor stops the alarms after it from being set
-        prefs(context).edit().putString(SCHEDULED, scheduled.toString()).putString(SNOOZED, stillSnoozed.toString()).apply();
+        prefs(context).edit().putString(SCHEDULED, scheduled.toString()).putString(SNOOZED, stillSnoozed.toString()).putString(PUSHED, stillPushed.toString()).apply();
         for (Alarm alarm : byKey.values()) {
             if (alarm.at <= now) continue;
             try {
@@ -81,9 +94,10 @@ final class AlarmScheduler {
         return next == null || (next.at <= now && next.at != old.at);
     }
 
-    // Schedules `alarms` as handed over by `by` ("app" or "background"), and records when
-    static synchronized void handOver(Context context, List<Alarm> alarms, String by) throws JSONException {
-        schedule(context, alarms);
+    // Schedules `alarms`, built from rows read at `readAt`, as handed over by `by` ("app" or
+    // "background"), and records when
+    static synchronized void handOver(Context context, List<Alarm> alarms, String by, long readAt) throws JSONException {
+        schedule(context, alarms, readAt);
         prefs(context).edit().putLong(HANDED_AT_PREFIX + by, System.currentTimeMillis()).apply();
     }
 
@@ -92,9 +106,34 @@ final class AlarmScheduler {
         return prefs(context).getLong(HANDED_AT_PREFIX + by, 0);
     }
 
-    // The next `count` alarms still to ring, snoozes included, soonest first
+    // Arms a call pushed to the phone at once, ahead of any refresh; one already due rings now
+    static synchronized void push(Context context, Alarm call) throws JSONException {
+        long now = System.currentTimeMillis();
+        Alarm armed = call.at > now ? call : new Alarm(call.key, now + 1000, call.title, call.kind, call.sound);
+        List<Pushed> pushed = new ArrayList<>();
+        for (Pushed other : loadPushed(context)) if (!other.alarm.key.equals(call.key)) pushed.add(other);
+        pushed.add(new Pushed(armed, now));
+        JSONArray array = new JSONArray();
+        for (Pushed one : pushed) array.put(one.toJson());
+        prefs(context).edit().putString(PUSHED, array.toString()).apply();
+        schedule(context, load(context, SCHEDULED), 0);
+    }
+
+    // The pushed calls kept: those still to ring that the new schedule has too, or that arrived after
+    // its rows were read (a call missing from rows read later was deleted)
+    static List<Pushed> stillPushed(List<Pushed> pushed, Set<String> scheduled, long readAt, long now) {
+        List<Pushed> kept = new ArrayList<>();
+        for (Pushed call : pushed) {
+            if (call.alarm.at > now && (scheduled.contains(call.alarm.key) || call.pushedAt > readAt)) kept.add(call);
+        }
+        return kept;
+    }
+
+    // The next `count` alarms still to ring, snoozes and pushed calls included, soonest first
     static List<Alarm> next(Context context, int count) throws JSONException {
-        return next(load(context, SCHEDULED), load(context, SNOOZED), System.currentTimeMillis(), count);
+        List<Alarm> extra = load(context, SNOOZED);
+        for (Pushed call : loadPushed(context)) extra.add(call.alarm);
+        return next(load(context, SCHEDULED), extra, System.currentTimeMillis(), count);
     }
 
     static List<Alarm> next(List<Alarm> scheduled, List<Alarm> snoozed, long now, int count) {
@@ -117,7 +156,7 @@ final class AlarmScheduler {
 
     // After a reboot Android has forgotten the alarms; set the stored ones again
     static synchronized void rearm(Context context) throws JSONException {
-        schedule(context, load(context, SCHEDULED));
+        schedule(context, load(context, SCHEDULED), 0);
     }
 
     // Rings `parts` again in ten minutes, each under its own key, so they go off together again
@@ -125,7 +164,7 @@ final class AlarmScheduler {
         JSONArray array = new JSONArray();
         for (Alarm alarm : snoozedWith(load(context, SNOOZED), parts, System.currentTimeMillis() + SNOOZE_MS)) array.put(alarm.toJson());
         prefs(context).edit().putString(SNOOZED, array.toString()).apply();
-        schedule(context, load(context, SCHEDULED));
+        schedule(context, load(context, SCHEDULED), 0);
     }
 
     // `snoozed` with each of `parts` due again at `at`; snoozing a snoozed ring moves it rather than adding one
@@ -135,7 +174,7 @@ final class AlarmScheduler {
         for (Alarm part : parts) {
             String key = part.key.startsWith(SNOOZE_PREFIX) ? part.key : SNOOZE_PREFIX + part.key;
             keys.add(key);
-            added.add(new Alarm(key, at, part.title, part.kind));
+            added.add(new Alarm(key, at, part.title, part.kind, part.sound));
         }
         List<Alarm> result = new ArrayList<>();
         for (Alarm other : snoozed) if (!keys.contains(other.key)) result.add(other);
@@ -182,6 +221,31 @@ final class AlarmScheduler {
         List<Alarm> alarms = new ArrayList<>();
         for (int i = 0; i < array.length(); i++) alarms.add(Alarm.fromJson(array.getJSONObject(i)));
         return alarms;
+    }
+
+    private static List<Pushed> loadPushed(Context context) throws JSONException {
+        JSONArray array = new JSONArray(prefs(context).getString(PUSHED, "[]"));
+        List<Pushed> pushed = new ArrayList<>();
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject json = array.getJSONObject(i);
+            pushed.add(new Pushed(Alarm.fromJson(json), json.getLong(PUSHED_AT)));
+        }
+        return pushed;
+    }
+
+    // A call pushed to the phone, and when it arrived (epoch ms)
+    static final class Pushed {
+        final Alarm alarm;
+        final long pushedAt;
+
+        Pushed(Alarm alarm, long pushedAt) {
+            this.alarm = alarm;
+            this.pushedAt = pushedAt;
+        }
+
+        JSONObject toJson() throws JSONException {
+            return alarm.toJson().put(PUSHED_AT, pushedAt);
+        }
     }
 
     private static SharedPreferences prefs(Context context) {

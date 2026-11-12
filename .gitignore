@@ -49,3 +49,6 @@ research/
 
 # The hosted agent server, built from mcp/connector.ts
 supabase/functions/mcp/connector.js
+
+# Firebase app config for the phone build; kept out of git
+android/app/google-services.json

@@ -49,12 +49,15 @@ export function useTheme(): Theme {
 // How the hex canvas is drawn in a theme: in the dark light is added, on the light theme's paper the
 // hue is laid down as a wash. The bare fabric is faint everywhere, so the territories carry the
 // picture. Colours are the theme's own.
+// On paper there is no bare fabric, and a quest of no priority is a sage green, not the ink's brown.
 export function canvasStyle(theme: Theme): CanvasStyle {
   const ink = cssRgb("--color-ink");
-  const hues = { 1: cssRgb("--priority-1"), 2: cssRgb("--priority-2"), 3: cssRgb("--priority-3"), 4: cssRgb("--priority-4"), none: ink };
   const dark = theme === "dark";
-  return { ink, fabricAlpha: dark ? 0.045 : 0.09, dark, hues };
+  const hues = { 1: cssRgb("--priority-1"), 2: cssRgb("--priority-2"), 3: cssRgb("--priority-3"), 4: cssRgb("--priority-4"), none: dark ? ink : sage };
+  return { ink, fabricAlpha: dark ? 0.045 : 0, dark, hues };
 }
+
+const sage: RGB = [96, 128, 84];
 
 // A colour variable of the theme as RGB (0-255), for drawing outside CSS. The theme writes them as
 // #rrggbb, the only form read; anything else draws white.

@@ -55,18 +55,31 @@ public class RefreshWake extends BroadcastReceiver {
         arm(context);
         // In Doze the network is cut off unless the app is exempt from battery optimisation
         PowerManager power = context.getSystemService(PowerManager.class);
-        if (power.isDeviceIdleMode() && !power.isIgnoringBatteryOptimizations(context.getPackageName())) return;
-        if (ringNear(AlarmService.ringing, AlarmReceiver.firedAt, nextRingAt(context), System.currentTimeMillis())) return;
+        long now = System.currentTimeMillis();
+        boolean idle = power.isDeviceIdleMode(), exempt = power.isIgnoringBatteryOptimizations(context.getPackageName());
+        if (idle && !exempt) {
+            Diagnostics.wake(context, now, idle, exempt, "skipped: Doze without the battery exemption");
+            return;
+        }
+        if (ringNear(AlarmService.ringing, AlarmReceiver.firedAt, nextRingAt(context), now)) {
+            Diagnostics.wake(context, now, idle, exempt, "skipped: ring near");
+            return;
+        }
 
         PendingResult result = goAsync();
         PowerManager.WakeLock lock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ashborn:refresh");
         lock.acquire(WAKE_LOCK_MS);
         long deadline = System.currentTimeMillis() + RUN_MS;
         new Thread(() -> {
+            String outcome;
             try {
-                AlarmRefreshWorker.refresh(context, deadline);
+                outcome = AlarmRefreshWorker.refresh(context, deadline) ? "refreshed" : "busy or not connected";
             } catch (IOException | JSONException | RuntimeException e) {
                 Log.e("Ashborn", "Woken alarm refresh failed", e);
+                outcome = "failed: " + e.getMessage();
+            }
+            try {
+                Diagnostics.wake(context, now, idle, exempt, outcome);
             } finally {
                 if (lock.isHeld()) lock.release();
                 result.finish();
@@ -82,7 +95,7 @@ public class RefreshWake extends BroadcastReceiver {
 
     // The next ring the phone holds, in epoch ms; 0 when none is. An unreadable schedule counts as a
     // ring due now, so the refresh stays off.
-    private static long nextRingAt(Context context) {
+    static long nextRingAt(Context context) {
         try {
             List<Alarm> next = AlarmScheduler.next(context, 1);
             return next.isEmpty() ? 0 : next.get(0).at;

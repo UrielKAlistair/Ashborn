@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { toISODate } from "../../src/shared/dates";
 
-// The Alarms page: today's rings, each skipped for today alone by its switch; all alarms, turned
-// off, and opened to edit or delete; a quick alarm set from the pop-up. The alarm rings a few minutes from
+// The Alarms page: today's rings, each skipped for today alone by its switch; the repeating alarms,
+// turned off, and opened to edit or delete; a quick alarm set from the pop-up. The Calendar: a
+// one-time alarm edited there, and a deadline added. The alarm rings a few minutes from
 // now, so this fails if run in the last minutes before midnight.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
@@ -47,7 +48,8 @@ test("alarms", async () => {
     await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
     await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await page.getByRole("button", { name: "Alarms", exact: true }).click({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Calendar", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Alarms", exact: true }).click({ timeout: 20_000 });
     await expect(ring("Stretch")).toContainText(time);
     await ring("Stretch").getByRole("switch").click();
     await expect.poll(skipOf).toBe(true);
@@ -57,16 +59,10 @@ test("alarms", async () => {
     await expect.poll(skipOf).toBe(false);
   });
 
-  await test.step("all alarms: turned off, edited, deleted", async () => {
-    await page.getByRole("button", { name: "All alarms ›" }).click();
+  await test.step("repeating: turned off, edited, deleted; a one-off is not listed", async () => {
+    await page.getByRole("button", { name: "Repeating ›" }).click();
     await expect(ring("Stretch")).toBeVisible();
-    await expect(page.getByText("Rang this morning")).toHaveCount(0);
-    // Relabelled, a one-off keeps its moment
-    await ring("Dentist").getByRole("button", { name: "Edit Dentist" }).click();
-    await page.getByRole("dialog", { name: "Edit alarm" }).getByPlaceholder("Label (optional)").fill("Dentist, bring the form");
-    await page.getByRole("dialog", { name: "Edit alarm" }).getByRole("button", { name: "Save" }).click();
-    await expect.poll(async () => (await db.from("alarms").select("label").eq("id", later).single()).data?.label).toBe("Dentist, bring the form");
-    expect(Date.parse((await db.from("alarms").select("at").eq("id", later).single()).data!.at)).toBe(Date.parse(laterAt));
+    await expect(ring("Dentist")).toHaveCount(0);
     await ring("Stretch").getByRole("switch").click();
     await expect.poll(async () => (await alarmRow())?.enabled).toBe(false);
     await ring("Stretch").getByRole("button", { name: "Edit Stretch" }).click();
@@ -80,17 +76,44 @@ test("alarms", async () => {
     await expect.poll(alarmRow).toBeNull();
   });
 
-  await test.step("an open alarm needs a time to save, and closes when it is deleted elsewhere", async () => {
-    await ring("Dentist, bring the form").getByRole("button", { name: "Edit Dentist, bring the form" }).click();
-    const dialog = page.getByRole("dialog", { name: "Edit alarm" });
+  await test.step("calendar: a one-off relabelled keeps its moment; one deleted elsewhere closes", async () => {
+    await page.getByRole("button", { name: "Calendar", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Calendar", exact: true }).click();
+    await expect(page.getByText("Rang this morning")).toBeVisible(); // still in the snapshot, on today
+    await ring("Dentist").getByRole("button", { name: "Open Dentist" }).click();
+    const dialog = page.getByRole("dialog", { name: "Alarm" });
+    await dialog.getByPlaceholder("What for (optional)").fill("Dentist, bring the form");
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect.poll(async () => (await db.from("alarms").select("label").eq("id", later).single()).data?.label).toBe("Dentist, bring the form");
+    expect(Date.parse((await db.from("alarms").select("at").eq("id", later).single()).data!.at)).toBe(Date.parse(laterAt));
+
+    await ring("Dentist, bring the form").getByRole("button", { name: "Open Dentist, bring the form" }).click();
     await dialog.getByLabel("Time").fill("");
     await expect(dialog.getByRole("button", { name: "Save" })).toBeDisabled();
     await db.from("alarms").delete().eq("id", later);
     await expect(dialog).toHaveCount(0, { timeout: 10_000 });
   });
 
+  await test.step("calendar: a deadline added from + and changed", async () => {
+    await page.getByRole("button", { name: "Add to the calendar" }).click();
+    const dialog = page.getByRole("dialog", { name: /^New on / });
+    await dialog.getByRole("tab", { name: "Deadline" }).click();
+    await dialog.getByPlaceholder("What is due").fill("Hand in the essay");
+    await dialog.getByRole("button", { name: "Add" }).click();
+    await expect.poll(async () => (await db.from("deadlines").select("title").eq("title", "Hand in the essay")).data?.length).toBe(1);
+    await expect(ring("Hand in the essay")).toBeVisible();
+
+    // Opened again, its title changes
+    await page.getByRole("button", { name: "Open Hand in the essay", exact: true }).click();
+    const edit = page.getByRole("dialog", { name: "Deadline" });
+    await edit.getByPlaceholder("What is due").fill("Hand in the essay draft");
+    await edit.getByRole("button", { name: "Save" }).click();
+    await expect.poll(async () => (await db.from("deadlines").select("title").eq("title", "Hand in the essay draft")).data?.length).toBe(1);
+  });
+
   await test.step("the + pop-up sets a quick alarm, which rings today", async () => {
-    await page.getByRole("button", { name: "‹ Today" }).click();
+    await page.getByRole("button", { name: "Calendar", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
     const count = async () => (await db.from("alarms").select("id")).data?.length;
     const before = await count();
     await page.getByRole("button", { name: "New alarm" }).click();

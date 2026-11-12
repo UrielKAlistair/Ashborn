@@ -17,7 +17,7 @@ import { createClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { publishableKey, url } from "./client";
 import { RING_LOOKBACK_MS, upcomingAlarms } from "../shared/schedule";
-import type { AlarmKind, Snapshot } from "../shared/types";
+import type { AlarmKind, AlarmSound, Snapshot } from "../shared/types";
 
 // How far ahead the phone's alarm clock is filled; the app refills it each time it runs
 const SCHEDULE_DAYS = 7;
@@ -35,17 +35,24 @@ const STOP_SETTLE_MS = 5000;
 // background: the background refresh has a session (connectBackgroundRefresh)
 export type AlarmPermissions = { notifications: boolean; exactAlarms: boolean; fullScreen: boolean; alarmChannel: boolean; battery: boolean; xiaomi: boolean; background: boolean };
 
-export type RingingAlarm = { key: string; at: number; title: string; kind: Exclude<AlarmKind, "none"> };
+export type RingingAlarm = { key: string; at: number; title: string; kind: Exclude<AlarmKind, "none">; sound: AlarmSound };
 
 // What the phone holds: the next alarms in its stored schedule, when (epoch ms) the app and the
-// background refresh each last handed the schedule over, and the next alarm clock Android itself
-// will ring, from any app
+// background refresh each last handed the schedule over, the next alarm clock Android itself
+// will ring, from any app, and the background's log (Diagnostics.java), oldest first
 export type HeldSchedule = {
   alarms: RingingAlarm[];
   appHandedAt: number | null;
   backgroundHandedAt: number | null;
   system: { at: number; ours: boolean } | null;
+  log: BackgroundEntry[];
 };
+
+// A refresh wake: whether the phone was in Doze and exempt from battery optimisation. A push: its
+// kind, when the server sent it (0 if unknown), and the priority asked for and delivered. Times in epoch ms.
+export type BackgroundEntry =
+  | { type: "wake"; at: number; idle: boolean; exempt: boolean; outcome: string }
+  | { type: "push"; at: number; kind: string; sentAt: number; originalPriority: string; priority: string; outcome: string };
 
 // The native side, in android/app/src/main/java/dev/ashborn/app/AlarmPlugin.java
 type AlarmPlugin = {
@@ -93,7 +100,7 @@ const handOver = (alarms: RingingAlarm[]) => void plugin.schedule({ alarms }).th
 // A change of `syncs` hands it over again.
 export function useAlarmSchedule(snapshot: Snapshot | null, syncs: number) {
   const alarms = snapshot
-    ? upcomingAlarms(snapshot, new Date(Date.now() - RING_LOOKBACK_MS), SCHEDULE_DAYS + 1).map((alarm) => ({ key: alarm.key, at: alarm.at.getTime(), title: alarm.title, kind: alarm.kind }))
+    ? upcomingAlarms(snapshot, new Date(Date.now() - RING_LOOKBACK_MS), SCHEDULE_DAYS + 1).map((alarm) => ({ key: alarm.key, at: alarm.at.getTime(), title: alarm.title, kind: alarm.kind, sound: alarm.sound }))
     : null;
   const signature = JSON.stringify(alarms);
   const latest = useRef(alarms);

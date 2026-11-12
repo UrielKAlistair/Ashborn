@@ -15,7 +15,7 @@ const FIXTURES = "android/app/src/test/resources/schedule-fixtures.json";
 
 const routine = (overrides: Partial<Routine>): Routine => ({ id: "r", title: "Routine", cue: "", weekdays: [], time: null, alarm: "none", ...overrides });
 const deadline = (overrides: Partial<Deadline>): Deadline => ({ id: "d", nodeId: null, title: "Deadline", dueDate: "2026-10-20", alarmTime: null, ...overrides });
-const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", at: null, time: null, weekdays: [], enabled: true, ...overrides });
+const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", sound: "default", at: null, time: null, weekdays: [], enabled: true, ...overrides });
 const reminder = (id: string, offsetMinutes: number, anchorId: string | null = null): RecipeReminder => ({ id, label: id, offsetMinutes, anchorId });
 const recipe = (id: string, title: string, reminders: RecipeReminder[]): Recipe => ({ id, title, body: "", ingredients: [], reminders });
 const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
@@ -89,13 +89,14 @@ const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] 
     days: 2,
   },
   {
-    name: "standalone alarms: recurring, one-off as Postgres writes it, switched off, beyond the window, past",
+    name: "standalone alarms: recurring, one-off as Postgres writes it, a call, switched off, beyond the window, past",
     snapshot: snapshot({
       alarms: [
         alarm({ id: "wake", label: "Wake up", kind: "situps", time: "06:00", weekdays: ["Tue", "Wed"] }),
         alarm({ id: "nap", at: "2026-10-19T10:00:00+00:00" }),
         alarm({ id: "precise", label: "Precise", at: "2026-10-20T01:30:00.123456+00:00" }),
         alarm({ id: "zulu", at: "2026-10-20T04:00:00Z" }),
+        alarm({ id: "call", label: "Claude needs you", sound: "call", at: "2026-10-19T08:00:00Z" }),
         alarm({ id: "off", time: "07:00", weekdays: ["Tue"], enabled: false }),
         alarm({ id: "offOnce", at: "2026-10-20T03:00:00+00:00", enabled: false }),
         alarm({ id: "far", at: "2026-11-30T09:00:00+00:00" }),

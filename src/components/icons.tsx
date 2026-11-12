@@ -112,6 +112,25 @@ export function KitchenIcon({ className }: IconProps) {
 }
 
 // "alarm-clock" from Lucide (lucide.dev), ISC licence
+export function CalendarIcon({ className }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={withDefaultClasses("h-6 w-6", className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4M8 14h2M14 14h2M8 17.5h2" />
+    </svg>
+  );
+}
+
 export function AlarmsIcon({ className }: IconProps) {
   return (
     <svg

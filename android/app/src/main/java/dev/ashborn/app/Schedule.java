@@ -44,7 +44,7 @@ final class Schedule {
             for (JSONObject alarm : standalone) {
                 String time = text(alarm, "time");
                 if (!alarm.getBoolean("enabled") || time == null || !has(alarm.getJSONArray("weekdays"), weekdayOf(date))) continue;
-                alarms.add(new Alarm("alarm:" + alarm.getString("id") + "@" + date, atTime(date, time), label(alarm), alarm.getString("kind")));
+                alarms.add(new Alarm("alarm:" + alarm.getString("id") + "@" + date, atTime(date, time), label(alarm), alarm.getString("kind"), alarm.getString("sound")));
             }
         }
         int dayStartHour = snapshot.getJSONObject("settings").getInt("dayStartHour");
@@ -63,7 +63,7 @@ final class Schedule {
         for (JSONObject alarm : standalone) {
             String at = text(alarm, "at");
             if (!alarm.getBoolean("enabled") || at == null || instant(at) >= end) continue;
-            alarms.add(new Alarm("alarm:" + alarm.getString("id") + "@" + instant(at), instant(at), label(alarm), alarm.getString("kind")));
+            alarms.add(new Alarm("alarm:" + alarm.getString("id") + "@" + instant(at), instant(at), label(alarm), alarm.getString("kind"), alarm.getString("sound")));
         }
         String lastDate = isoDate(new GregorianCalendar(year, month, day + days - 1));
         for (JSONObject deadline : objects(snapshot.getJSONArray("deadlines"))) {

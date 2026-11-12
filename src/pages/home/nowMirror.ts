@@ -1,16 +1,10 @@
-import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from "react";
-import type { NowChoice } from "../../shared/nowStep";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 /**
- * The step in Now, chosen once (App.tsx) and shown in three places, so none of them can disagree: the
- * card on Home reads the choice from NowChoiceContext; the desktop tray's menu names it; and the graph
- * marks its card (useIsNowStep).
+ * The step in Now, the to-do's first (App.tsx), passed to the desktop tray's menu, which names it, and
+ * to the graph, which marks its card (useIsNowStep).
  */
 export type MirroredNow = { id: string; title: string } | null;
-
-// The step in Now as the app chose it, for the card on Home
-export const NowChoiceContext = createContext<NowChoice | null>(null);
-export const useNowChoice = () => useContext(NowChoiceContext);
 
 // The id the graph marks, held outside React so a card re-renders only when its own answer changes
 let nowStep: string | null = null;

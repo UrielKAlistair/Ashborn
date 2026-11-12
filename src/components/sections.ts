@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import {
   AlarmsIcon,
   AtlasIcon,
+  CalendarIcon,
   CharacterIcon,
   GraphIcon,
   HomeIcon,
@@ -56,14 +57,19 @@ const kitchen: Section = {
   desktop: [{ label: "Planning", path: "/kitchen", icon: MealPlanIcon }, { ...recipes, label: "Cookbook" }],
 };
 
-const alarms = single("Alarms", "/alarms", AlarmsIcon);
+// The calendar of one-time alarms and deadlines, and the alarms that repeat
+const calendarScreens: Screen[] = [
+  { label: "Calendar", path: "/calendar", icon: CalendarIcon },
+  { label: "Alarms", path: "/alarms", icon: AlarmsIcon },
+];
+const calendar: Section = { label: "Calendar", icon: CalendarIcon, phone: calendarScreens, desktop: calendarScreens };
 const atlas = single("Atlas", "/atlas", AtlasIcon);
 const settings = single("Settings", "/settings", SettingsIcon);
 
 // Each device's sections, most used first. The phone has no Atlas; only the phone has Settings
 // (the desktop's rail has its theme switch, and alarms ring only on the phone).
-export const desktopSections: Section[] = [home, kitchen, alarms, atlas];
-export const phoneSections: Section[] = [home, alarms, kitchen, settings];
+export const desktopSections: Section[] = [home, kitchen, calendar, atlas];
+export const phoneSections: Section[] = [home, calendar, kitchen, settings];
 // The screen `path` shows: the longest screen path it starts with ("/" only matches itself)
 export function screenAt(path: string, screens: Screen[]): Screen | undefined {
   return screens

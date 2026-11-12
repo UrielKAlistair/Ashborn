@@ -3,21 +3,18 @@
  * keeps it alive in the tray.
  *
  * Its jobs, in the order this file tells them:
- * 1. One instance only: a second launch shows the first (with --capture, at the capture field) and
- *    exits.
+ * 1. One instance only: a second launch shows the first and exits.
  * 2. The window: maximised, or phone-sized for checking the phone layout. Closing or minimising it
  *    hides it to the tray; only Quit ends the app. It shows only the app's own page; links to the web
  *    open in the system browser.
  * 3. The tray: its menu names the step Now shows and opens the window.
- * 4. Capture from anywhere: a launch with --capture (dependable, bound to a key in GNOME), or the
- *    Ctrl+Alt+Space grab (heard only over X11 windows on a Wayland desktop).
- * 5. What the page asks of the desktop over IPC (see preload.cts): the window controls, Now's step for
+ * 4. What the page asks of the desktop over IPC (see preload.cts): the window controls, Now's step for
  *    the tray, unsaved work, and the daily backups to disk.
- * 6. Quitting with unsaved work asks first: Save, Discard or Cancel.
+ * 5. Quitting with unsaved work asks first: Save, Discard or Cancel.
  *
- * Flags: --hidden (started at login: tray only), --capture, --phone (`npm run phone`).
+ * Flags: --hidden (started at login: tray only), --phone (`npm run phone`).
  */
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Tray, nativeImage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Tray, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -26,8 +23,6 @@ import os from "node:os";
 const isDev = !app.isPackaged;
 // Started at login (see scripts/install-appimage.sh): only the tray icon until it is clicked
 const startHidden = process.argv.includes("--hidden");
-// Launched with --capture (GNOME can bind a key to that command): the capture field, ready for a thought
-const startCapture = process.argv.includes("--capture");
 // `npm run phone`: open straight in the phone view, for checking the phone layout
 const startPhone = process.argv.includes("--phone");
 // The phone view's window size: narrow enough for the phone layout (under 640 px wide)
@@ -41,7 +36,6 @@ const BACKUPS_KEPT = 30;
 // How long Save at quit waits for the page to answer before the app stays open (a page reloading or
 // crashed never answers): longer than a request's own timeout (15 s), so a slow save can finish
 const SAVE_FOR_QUIT_MS = 30_000;
-const CAPTURE_SHORTCUT = "CommandOrControl+Alt+Space";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
@@ -49,9 +43,6 @@ let tray: Tray | null = null;
 // The step in the app's Now, named in the tray's menu
 type NowStep = { id: string; title: string } | null;
 let nowStep: NowStep = null;
-// A capture asked for before the page could hear it (a first launch with --capture, or a page still
-// loading): the page takes it once it starts (app:take-capture)
-let captureAtStart = startCapture;
 // Set once the app is really quitting, so closing the window no longer just hides it
 let quitting = false;
 // Work the page holds unsaved (a recipe being edited), named for the question asked at quit; null when none
@@ -64,19 +55,13 @@ let saveRequest = 0;
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  // With --capture, at the capture field. On a Wayland desktop that is the dependable way to a
-  // desktop-wide key, since the key grab below hears keys only over X11 windows.
-  app.on("second-instance", (_event, argv) => (argv.includes("--capture") ? captureThought() : showMainWindow()));
+  app.on("second-instance", showMainWindow);
   app.whenReady().then(() => {
     listenToPage();
     createWindow();
     createTray();
-    // From anywhere on the desktop: the window, with its capture field ready for a thought. A key
-    // another app already holds is left to it.
-    globalShortcut.register(CAPTURE_SHORTCUT, captureThought);
   });
   app.on("before-quit", askIfUnsaved);
-  app.on("will-quit", () => globalShortcut.unregisterAll());
 }
 
 // --- The window ---
@@ -210,15 +195,6 @@ function updateTrayMenu() {
   tray.setToolTip(title ? `Ashborn · Now: ${title}` : "Ashborn");
 }
 
-// --- Capture ---
-
-function captureThought() {
-  showMainWindow();
-  // A page still loading has no listener yet: it asks once it starts
-  if (!mainWindow || mainWindow.webContents.isLoading()) captureAtStart = true;
-  else mainWindow.webContents.send("app:capture");
-}
-
 // --- What the page asks of the desktop (the other ends are in preload.cts) ---
 
 function listenToPage() {
@@ -230,11 +206,6 @@ function listenToPage() {
   ipcMain.handle("app:is-maximised", () => mainWindow?.isMaximized() ?? false);
   ipcMain.on("app:quit", () => app.quit());
 
-  ipcMain.handle("app:take-capture", () => {
-    const take = captureAtStart;
-    captureAtStart = false;
-    return take;
-  });
   ipcMain.on("now:update", (_event, step: NowStep) => {
     nowStep = step;
     updateTrayMenu();

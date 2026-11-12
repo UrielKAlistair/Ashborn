@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { addDays, today } from "../../src/shared/dates";
 
-// Focus: Now lists the most urgent ready steps, the first being the one to do, without reasons; Not
-// now (in a row's ⋯ menu) passes to the next, Split turns a step into smaller ones, and the tick does it.
+// Focus: Now lists the most urgent ready steps, the first being the one to do, without reasons; the
+// tick, or D for the first, does it.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 
@@ -38,11 +38,8 @@ test("focus", async () => {
   const page = await app.firstWindow();
   const now = page.getByRole("region", { name: "Now" });
   const first = () => now.getByRole("listitem").first();
-  // A row's ⋯ menu, then one of its items
-  const choose = async (title: string, item: string) => {
-    await now.getByRole("button", { name: `Actions for ${title}` }).click();
-    await now.getByRole("menuitem", { name: item }).click();
-  };
+  const tag = (stepId: string) => page.locator(`.react-flow__node[data-id="${stepId}"]`).getByText("Now", { exact: true });
+  const completedAt = async (stepId: string) => (await db.from("graph_nodes").select("completed_at").eq("id", stepId).single()).data?.completed_at;
 
   await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
   await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
@@ -58,14 +55,9 @@ test("focus", async () => {
     expect((await deadlines.boundingBox())!.y).toBeLessThan((await now.boundingBox())!.y);
   });
 
-  await test.step("the graph marks the step in Now, and the mark follows Not now", async () => {
-    const tag = (stepId: string) => page.locator(`.react-flow__node[data-id="${stepId}"]`).getByText("Now", { exact: true });
+  await test.step("the graph marks the step in Now", async () => {
     await expect(tag(id.survey)).toBeVisible();
-    await choose("Read the survey", "Not now");
-    await expect(tag(id.apply)).toBeVisible();
-    await expect(tag(id.survey)).toHaveCount(0);
-    await choose("Apply to DTL", "Not now");
-    await expect(tag(id.survey)).toBeVisible();
+    await expect(tag(id.apply)).toHaveCount(0);
   });
 
   await test.step("its title shows it on the graph", async () => {
@@ -73,58 +65,26 @@ test("focus", async () => {
     await expect(page.locator('.react-flow__node[data-id="' + id.survey + '"]')).toHaveClass(/node-flash/);
   });
 
-  await test.step("Not now passes to the next, and passing the last starts the round again", async () => {
-    await choose("Read the survey", "Not now");
-    await expect(first()).toContainText("Apply to DTL");
-    await choose("Apply to DTL", "Not now");
-    await expect(first()).toContainText("Read the survey");
-  });
-
-  await test.step("the keys: N passes, but not under the keys list; / goes to the capture field and typing there passes nothing", async () => {
-    await page.keyboard.press("n");
-    await expect(first()).toContainText("Apply to DTL");
-    await page.keyboard.press("n");
-    await expect(first()).toContainText("Read the survey");
-    // With the keys list open, the keys are not for Now
-    await page.keyboard.press("?");
-    await page.keyboard.press("n");
-    await expect(first()).toContainText("Read the survey");
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: "Keys" })).toHaveCount(0);
-    await page.keyboard.press("/");
-    await expect(page.getByLabel("Capture a thought")).toBeFocused();
-    await page.keyboard.type("n");
-    await expect(first()).toContainText("Read the survey");
-    await page.getByLabel("Capture a thought").fill("");
-    await page.getByLabel("Capture a thought").blur();
-  });
-
-  await test.step("Split turns it into smaller steps, the first of which comes up next", async () => {
-    await choose("Read the survey", "Split it");
-    await now.getByRole("button", { name: "Copy a prompt for Claude" }).click();
-    await expect(now).toContainText("Copied. Paste Claude's answer here.");
-    const prompt = await app.evaluate(({ clipboard }) => clipboard.readText());
-    expect(prompt).toContain("Task: Read the survey");
-    expect(prompt).toContain("Finishing it unlocks: Give the talk");
-    await now.getByLabel("Steps, one per line").fill("Skim the abstract\nRead section 2");
-    await now.getByRole("button", { name: "Add steps" }).click();
-    await expect(first()).toContainText("Skim the abstract");
-  });
-
-  await test.step("Done ticks it, without moving the card; Done today can untick it", async () => {
-    await expect(page.getByText("No steps of progress yet today")).toBeVisible();
+  await test.step("Done ticks it, without moving the card; what it unlocks comes next, and the mark follows", async () => {
     const before = (await now.boundingBox())!.y;
     await first().getByTitle("Mark done").click();
-    await expect(first()).toContainText("Read section 2");
+    await expect(first()).toContainText("Give the talk");
     expect((await now.boundingBox())!.y).toBe(before);
-    await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("title", "Skim the abstract").single()).data?.completed_at).toBeTruthy();
-    await page.getByRole("button", { name: /of progress today/ }).click();
-    await expect(page.getByRole("list", { name: "Done today" })).toContainText("Skim the abstract");
-    await page.getByRole("list", { name: "Done today" }).getByTitle("Mark not done").click();
-    await expect(now).toContainText("Skim the abstract");
-    await expect.poll(async () => (await db.from("graph_nodes").select("completed_at").eq("title", "Skim the abstract").single()).data?.completed_at).toBeNull();
-    await now.getByRole("listitem").filter({ hasText: "Skim the abstract" }).getByTitle("Mark done").click();
-    await expect(first()).toContainText("Read section 2");
+    await expect.poll(() => completedAt(id.survey)).toBeTruthy();
+    await expect(tag(id.talk)).toBeVisible();
+    await expect(tag(id.survey)).toHaveCount(0);
+  });
+
+  await test.step("D ticks the first, but not under the keys list", async () => {
+    await page.keyboard.press("?");
+    await page.keyboard.press("d");
+    await page.waitForTimeout(300);
+    expect(await completedAt(id.talk)).toBeNull();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Keys" })).toHaveCount(0);
+    await page.keyboard.press("d");
+    await expect(first()).toContainText("Apply to DTL");
+    await expect.poll(() => completedAt(id.talk)).toBeTruthy();
   });
 
   await test.step("a step of a prioritised quest comes up in Now", async () => {
@@ -144,17 +104,6 @@ test("focus", async () => {
     // The double-click's second press landed where the next row had slid up, and was let go
     await expect(page.getByRole("group", { name: "Priority for Water the plants" })).toBeVisible();
     expect((await db.from("graph_nodes").select("priority").eq("title", "Water the plants").single()).data?.priority).toBeNull();
-  });
-
-  await test.step("Split left open on a screen that's gone lets Now go", async () => {
-    await first().getByRole("button", { name: /^Actions for/ }).click();
-    await now.getByRole("menuitem", { name: "Split it" }).click();
-    await expect(now.getByLabel("Steps, one per line")).toBeVisible();
-    await page.getByRole("button", { name: "Alarms", exact: true }).click();
-    await expect(now).toHaveCount(0);
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await expect(now).toBeVisible();
-    await expect(now.getByLabel("Steps, one per line")).toHaveCount(0);
   });
 
   await app.close();

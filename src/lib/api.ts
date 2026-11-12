@@ -69,7 +69,7 @@ export type NodeRow = {
   y: number | null;
 };
 export type RoutineRow = { id: string; title: string; cue: string; weekdays: Weekday[]; time: string | null; alarm: AlarmKind };
-export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean };
+export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; sound: Alarm["sound"]; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean };
 export type DeadlineRow = { id: string; title: string; due_date: string; done_at: string | null; alarm_time: string | null; node_id: string | null };
 type StockRow = { id: string; name: string; unit: StockUnit; target: number; on_hand: number; read_at: string | null };
 type RecipeRow = {
@@ -105,7 +105,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     id ? (must(await db.rpc("reopen_around", { start: id, at })) as NodeRow[]).map(toNode) : [];
 
   return inRowOrder(db, {
-    async getSnapshot(userId) {
+    async getSnapshot() {
       // Which day it is depends on the day-start hour, so the reads of today's data wait for it
       const settings = readSettings(db);
       const date = settings.then(({ dayStartHour }) => dayOf(new Date(), dayStartHour));
@@ -137,7 +137,6 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         progressToday,
         kitchen,
         settings: settingsRow,
-        inboxId: userId,
       };
     },
 
@@ -599,7 +598,7 @@ export function toDeadline(row: DeadlineRow): Deadline {
 }
 
 export function toAlarm(row: AlarmRow): Alarm {
-  return { id: row.id, label: row.label, kind: row.kind, at: row.at, time: toClock(row.time), weekdays: row.weekdays, enabled: row.enabled };
+  return { id: row.id, label: row.label, kind: row.kind, sound: row.sound, at: row.at, time: toClock(row.time), weekdays: row.weekdays, enabled: row.enabled };
 }
 
 // Postgres gives times as HH:MM:SS

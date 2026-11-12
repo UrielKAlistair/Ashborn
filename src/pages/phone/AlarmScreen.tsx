@@ -7,8 +7,8 @@ import { SITUPS_TO_STOP, STEPS_TO_STOP, situpCounter, stepCounter } from "../../
 // WebView that sends nothing, must not leave an alarm that can never be stopped
 const SENSOR_WAIT_MS = 10_000;
 
-// Shown over everything while an alarm rings. A plain alarm stops or snoozes with a button; a
-// challenge alarm stops only once the accelerometer has counted enough steps or sit-ups.
+// Shown over everything while an alarm rings. A plain alarm stops or snoozes with a button (a call
+// only stops); a challenge alarm stops only once the accelerometer has counted enough steps or sit-ups.
 export function AlarmScreen({ alarm, onStop, onSnooze }: { alarm: RingingAlarm; onStop: () => void; onSnooze: () => void }) {
   const time = clockOf(new Date(alarm.at));
 
@@ -23,9 +23,11 @@ export function AlarmScreen({ alarm, onStop, onSnooze }: { alarm: RingingAlarm; 
             <button type="button" onClick={onStop} className="min-w-48 rounded-xl bg-ember px-10 py-4 text-base font-semibold text-canvas active:brightness-110">
               Stop
             </button>
-            <button type="button" onClick={onSnooze} className="min-h-11 rounded-lg px-8 py-3 text-[13px] text-ink/65 active:bg-ink/8">
-              Snooze 10 min
-            </button>
+            {alarm.sound === "call" ? null : (
+              <button type="button" onClick={onSnooze} className="min-h-11 rounded-lg px-8 py-3 text-[13px] text-ink/65 active:bg-ink/8">
+                Snooze 10 min
+              </button>
+            )}
           </div>
         ) : (
           // A ring that changes (another took its place, or a harder stop joined) starts a fresh count

@@ -16,26 +16,42 @@ final class Alarm {
     final long at; // epoch milliseconds
     final String title;
     final String kind; // "plain", "walk" or "situps"
+    final String sound; // DEFAULT, or CALL for an agent calling the user
 
-    Alarm(String key, long at, String title, String kind) {
+    static final String DEFAULT = "default";
+    static final String CALL = "call";
+
+    Alarm(String key, long at, String title, String kind, String sound) {
         this.key = key;
         this.at = at;
         this.title = title;
         this.kind = kind;
+        this.sound = sound;
     }
 
-    // Rings going off together, as one: the first's key and time, their titles, and the hardest stop
+    Alarm(String key, long at, String title, String kind) {
+        this(key, at, title, kind, DEFAULT);
+    }
+
+    boolean isCall() {
+        return CALL.equals(sound);
+    }
+
+    // Rings going off together, as one: the first's key and time, their titles, the hardest stop, and
+    // the call's sound if any part is a call
     static Alarm joined(List<Alarm> parts) {
         Alarm first = parts.get(0);
         String kind = first.kind;
+        String sound = DEFAULT;
         StringBuilder title = new StringBuilder();
         for (int i = 0; i < parts.size(); i++) {
             Alarm part = parts.get(i);
             if (STOPS.indexOf(part.kind) > STOPS.indexOf(kind)) kind = part.kind;
+            if (part.isCall()) sound = CALL;
             if (i < TITLES_SHOWN) title.append(i == 0 ? "" : " + ").append(part.title);
         }
         if (parts.size() > TITLES_SHOWN) title.append(" + ").append(parts.size() - TITLES_SHOWN).append(" more");
-        return new Alarm(first.key, first.at, title.toString(), kind);
+        return new Alarm(first.key, first.at, title.toString(), kind, sound);
     }
 
     // Whether a stop or snooze given for the ring shown as `shownKey` with `shownKind` may end `parts`:
@@ -48,10 +64,11 @@ final class Alarm {
     }
 
     static Alarm fromJson(JSONObject json) throws JSONException {
-        return new Alarm(json.getString("key"), json.getLong("at"), json.getString("title"), json.getString("kind"));
+        // Rings stored before calls existed have no sound
+        return new Alarm(json.getString("key"), json.getLong("at"), json.getString("title"), json.getString("kind"), json.optString("sound", DEFAULT));
     }
 
     JSONObject toJson() throws JSONException {
-        return new JSONObject().put("key", key).put("at", at).put("title", title).put("kind", kind);
+        return new JSONObject().put("key", key).put("at", at).put("title", title).put("kind", kind).put("sound", sound);
     }
 }

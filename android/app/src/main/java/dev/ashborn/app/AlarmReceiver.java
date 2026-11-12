@@ -6,8 +6,9 @@ import android.content.Intent;
 import android.util.Log;
 import androidx.core.content.ContextCompat;
 import org.json.JSONException;
+import org.json.JSONObject;
 
-// Wakes when an alarm is due (and starts it ringing), or when the phone has rebooted or the app been
+// Wakes when an alarm is due (and starts it ringing, or reports a call fired too late as missed), or when the phone has rebooted or the app been
 // updated (and re-arms the schedule and the background refresh's wakes, which either may have cleared)
 public class AlarmReceiver extends BroadcastReceiver {
     // When an alarm last fired, in epoch ms, before AlarmService has it ringing (RefreshWake)
@@ -28,7 +29,17 @@ public class AlarmReceiver extends BroadcastReceiver {
         }
 
         firedAt = System.currentTimeMillis();
-        Intent ring = new Intent(context, AlarmService.class).putExtra(AlarmScheduler.EXTRA_ALARM, intent.getStringExtra(AlarmScheduler.EXTRA_ALARM));
+        String json = intent.getStringExtra(AlarmScheduler.EXTRA_ALARM);
+        try {
+            Alarm alarm = Alarm.fromJson(new JSONObject(json));
+            if (AlarmService.staleCall(alarm, firedAt)) {
+                AlarmService.notifyMissed(context, alarm);
+                return;
+            }
+        } catch (JSONException | NullPointerException e) {
+            // AlarmService reports a bad alarm
+        }
+        Intent ring = new Intent(context, AlarmService.class).putExtra(AlarmScheduler.EXTRA_ALARM, json);
         ContextCompat.startForegroundService(context, ring);
     }
 }

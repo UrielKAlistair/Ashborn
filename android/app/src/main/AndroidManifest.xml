@@ -40,6 +40,12 @@
         <!-- The end of Now's timer, said as a notification -->
         <receiver android:name=".TimeUp" android:exported="false" />
         <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <!-- Pushes from the server: a change to the alarms, or an agent calling -->
+        <service android:name=".PushService" android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

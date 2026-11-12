@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Popup } from "../components/Popup";
+import { Switch } from "../components/Switch";
 import { alarmsAvailable } from "../lib/alarms";
 import { SITUPS_TO_STOP, STEPS_TO_STOP } from "../lib/motion";
 import { addDays, clockOf, startOfDay, toISODate, week } from "../shared/dates";
@@ -9,15 +11,17 @@ import type { Act } from "./home/HomePage";
 /**
  * The Alarms screen, in two views. Today: everything still to ring today, from every source (the
  * user's alarms, routines, deadlines, meal reminders), each with a switch that skips that one ring.
- * All alarms: the user's own alarms, each with a switch that turns it off on every day; a tap opens
- * it to edit or delete. A new alarm is set in a pop-up from the round + button.
+ * Repeating: the user's repeating alarms, each with a switch that turns it off on every day; a tap
+ * opens it to edit or delete. A new alarm is set in a pop-up from the round + button: a repeating
+ * one, or a one-time one within the next day. One-time alarms further ahead, and editing any
+ * one-time alarm, belong to the Calendar (calendar/CalendarPage.tsx).
  * Rings are computed here from the snapshot (shared/schedule.ts), as the phone computes them.
  */
 
 // One-tap alarms, in minutes from now
 const QUICK_MINUTES = [10, 30, 60, 120];
 
-const kindLabels: Record<Alarm["kind"], string> = {
+export const kindLabels: Record<Alarm["kind"], string> = {
   plain: "Plain",
   walk: `Walk ${STEPS_TO_STOP} steps`,
   situps: `${SITUPS_TO_STOP} sit-ups`,
@@ -53,10 +57,10 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
       <div className="panel-scroll flex min-h-0 min-w-0 flex-1 phone:flex-col phone:overflow-y-auto">
         <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 w-full flex-col gap-5 overflow-y-auto p-5 pb-20 phone:shrink-0 phone:grow phone:overflow-visible">
           <div className="flex items-center justify-between gap-3">
-            <h1 className="caps font-display text-[13px] font-bold text-ink/90">{view === "today" ? "Today" : "All alarms"}</h1>
+            <h1 className="caps font-display text-[13px] font-bold text-ink/90">{view === "today" ? "Today" : "Repeating"}</h1>
             {view === "today" ? (
               <button type="button" onClick={() => setView("all")} className={toggle}>
-                All alarms ›
+                Repeating ›
               </button>
             ) : (
               <button type="button" onClick={() => setView("today")} className={toggle}>
@@ -91,7 +95,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
                 <button
                   key={minutes}
                   type="button"
-                  onClick={() => save({ label: "", kind: "plain", at: new Date(Date.now() + minutes * 60_000).toISOString(), time: null, weekdays: [] })}
+                  onClick={() => save({ label: "", kind: "plain", sound: "default", at: new Date(Date.now() + minutes * 60_000).toISOString(), time: null, weekdays: [] })}
                   className="rounded-lg border border-ink/12 px-3.5 py-1.5 text-[13px] text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11"
                 >
                   In {minutes < 60 ? `${minutes} min` : `${minutes / 60} h`}
@@ -146,26 +150,16 @@ function TodayRings({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
   );
 }
 
-// The user's own alarms: the switch turns a whole alarm off, every day it repeats on. A one-off that has
-// rung is gone from here, though the snapshot keeps it a day for its snooze.
+// The user's repeating alarms, by time of day: the switch turns a whole alarm off, every day it repeats on
 function AllAlarms({ alarms: all, act, onEdit }: { alarms: Alarm[]; act: Act; onEdit: (alarm: Alarm) => void }) {
-  const alarms = all.filter((alarm) => !alarm.at || Date.parse(alarm.at) > Date.now());
-  if (alarms.length === 0) return <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">None set. Routines, deadlines and meals ring from their own settings.</p>;
+  const alarms = all.filter((alarm) => alarm.time);
+  if (alarms.length === 0) return <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">None set. One-time alarms are on the Calendar; routines, deadlines and meals ring from their own settings.</p>;
   return (
     <RowList>
-      {[...alarms].sort(bySchedule).map((alarm) => {
+      {[...alarms].sort((a, b) => a.time!.localeCompare(b.time!)).map((alarm) => {
         const stops = alarm.kind === "plain" ? "" : kindLabels[alarm.kind].toLowerCase();
-        const when = alarm.at ? `once, ${day(new Date(alarm.at))}` : daysText(alarm.weekdays);
         return (
-          <Row
-            key={alarm.id}
-            time={alarm.time ?? clockOf(new Date(alarm.at!))}
-            title={alarm.label || "Alarm"}
-            detail={[when, stops].filter(Boolean).join(" · ")}
-            days={alarm.at ? undefined : { weekdays: alarm.weekdays, stops }}
-            dim={!alarm.enabled}
-            onOpen={() => onEdit(alarm)}
-          >
+          <Row key={alarm.id} time={alarm.time!} title={alarm.label || "Alarm"} detail="" days={{ weekdays: alarm.weekdays, stops }} dim={!alarm.enabled} onOpen={() => onEdit(alarm)}>
             <Switch label={`${alarm.label || "Alarm"} on`} on={alarm.enabled} onChange={(enabled) => void act("updateAlarm", alarm.id, { enabled })} />
           </Row>
         );
@@ -221,49 +215,18 @@ function detailOf(ring: AlarmInstance, snapshot: Snapshot) {
   return `${sourceLabels[source] ?? "Alarm"}${stops}`;
 }
 
-// Over the page, closed by Escape or a click outside it. Escape is heard in the capture phase and marked
-// handled, so the navbar's Escape (which hides the desktop window) leaves it alone.
-function Popup({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/50 p-4" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={label} onClick={(event) => event.stopPropagation()} className="w-full max-w-md space-y-4 rounded-2xl border border-ink/10 bg-card p-5 shadow-[var(--card-shadow)]">
-        <div className="flex items-center justify-between">
-          <p className="caps font-display text-[13px] font-bold text-ink/90">{label}</p>
-          <button type="button" onClick={onClose} aria-label="Close" className="flex h-7 w-7 items-center justify-center rounded-md text-lg leading-none text-muted hover:bg-ink/8 phone:h-11 phone:w-11">
-            ×
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 // A time, days (none: once, at the next such time), a label and how it stops; filled from `alarm`
-// when editing one
+// when editing a repeating one
 function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omit<Alarm, "id" | "enabled">) => unknown }) {
-  const [time, setTime] = useState(alarm ? (alarm.time ?? clockOf(new Date(alarm.at!))) : "07:00");
+  const [time, setTime] = useState(alarm?.time ?? "07:00");
   const [days, setDays] = useState<Weekday[]>(alarm?.weekdays ?? []);
   const [label, setLabel] = useState(alarm?.label ?? "");
   const [kind, setKind] = useState<Alarm["kind"]>(alarm?.kind ?? "plain");
 
   const submit = () => {
     if (!time) return;
-    // A one-off whose time is left as it was keeps its moment: it may be days ahead, and its ring's key
-    // (which a skip or snooze holds) is that moment
-    const kept = alarm?.at && alarm.weekdays.length === 0 && clockOf(new Date(alarm.at)) === time ? alarm.at : null;
-    const at = days.length === 0 ? (kept ?? nextOccurrence(time).toISOString()) : null;
-    onSave({ label: label.trim(), kind, at, time: at ? null : time, weekdays: days });
+    const at = days.length === 0 ? nextOccurrence(time).toISOString() : null;
+    onSave({ label: label.trim(), kind, sound: alarm?.sound ?? "default", at, time: at ? null : time, weekdays: days });
   };
 
   return (
@@ -302,28 +265,6 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
   );
 }
 
-function Switch({ label, on, onChange }: { label: string; on: boolean; onChange: (on: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-label={label}
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-      className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-[''] ${on ? "border-transparent bg-ember" : "border-ink/15 bg-ink/[0.04]"}`}
-    >
-      <span className={`absolute top-0.5 h-4 w-4 rounded-full transition-[left] ${on ? "left-[22px] bg-canvas" : "left-0.5 bg-ink/70"}`} />
-    </button>
-  );
-}
-
-// Recurring alarms by time of day, then one-offs by when they ring
-function bySchedule(a: Alarm, b: Alarm) {
-  if (a.time && b.time) return a.time.localeCompare(b.time);
-  if (a.at && b.at) return a.at.localeCompare(b.at);
-  return a.time ? -1 : 1;
-}
-
 // The week's seven initials, the alarm's days inked and marked beneath, the rest faint
 function WeekStrip({ weekdays }: { weekdays: Weekday[] }) {
   return (
@@ -345,7 +286,5 @@ function daysText(days: Weekday[]) {
   return week.filter((weekday) => days.includes(weekday)).join(" ");
 }
 
-const day = (date: Date) => date.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
-
-const field =
+export const field =
   "rounded-lg border border-ink/10 bg-canvas/60 px-3 py-1.5 text-[13px] text-ink/90 placeholder:text-ink/35 focus:border-ember/60 focus:outline-none phone:min-h-11";

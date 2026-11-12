@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { phoneWindow } from "../phoneWindow";
 
-// Gone quiet: what the server stamps decides it. Moving or recolouring a quest doesn't bring it back;
-// a level-up, a priority, a new step or shelving does. Seeded with old creation dates.
+// Gone quiet, at the top of Today: what the server stamps decides it. Moving a quest or giving it a
+// priority doesn't bring it back; a level-up, a new step or shelving does. A P1 quest is quiet after
+// three days, any other after seven, on the to-do or not. Seeded with old creation dates.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 const shots = "research/lower-cost/shots";
@@ -17,19 +18,22 @@ test("gone quiet", async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
   for (const table of ["graph_nodes", "routines", "deadlines", "alarms"]) await db.from(table).delete().not("id", "is", null);
-  const ids = { moved: uuid(), levelled: uuid(), given: uuid(), extended: uuid(), shelved: uuid(), fresh: uuid() };
-  const old = (id: string, title: string, days: number) => ({ id, title, parent_id: null, created_at: daysAgo(days) });
+  const ids = { urgent: uuid(), notYet: uuid(), moved: uuid(), levelled: uuid(), given: uuid(), extended: uuid(), shelved: uuid(), fresh: uuid() };
+  const old = (id: string, title: string, days: number, priority: number | null = null) => ({ id, title, parent_id: null, created_at: daysAgo(days), priority });
   const { error: questError } = await db.from("graph_nodes").insert([
+    old(ids.urgent, "Urgent and stalled", 4, 1),
+    old(ids.notYet, "Four days on a P2", 4, 2),
     old(ids.moved, "Moved around", 40),
     old(ids.levelled, "Levelled up", 30),
     old(ids.given, "Given a priority", 20),
     old(ids.extended, "Extended", 15),
     old(ids.shelved, "Shelved it", 10),
-    { id: ids.fresh, title: "Fresh quest", parent_id: null, created_at: daysAgo(0) },
+    old(ids.fresh, "Fresh quest", 0),
   ]);
   if (questError) throw questError;
+  const stepAge = { urgent: 4, notYet: 4, fresh: 0 } as Record<string, number>;
   const { error: stepError } = await db.from("graph_nodes").insert(
-    Object.entries(ids).map(([key, parent]) => ({ id: uuid(), title: `Step of ${key}`, parent_id: parent, created_at: key === "fresh" ? daysAgo(0) : daysAgo(40) })),
+    Object.entries(ids).map(([key, parent]) => ({ id: uuid(), title: `Step of ${key}`, parent_id: parent, created_at: daysAgo(stepAge[key] ?? 40) })),
   );
   if (stepError) throw stepError;
 
@@ -42,22 +46,29 @@ test("gone quiet", async () => {
   const pageErrors: string[] = [];
   page.on("pageerror", (pageError) => pageErrors.push(pageError.message));
 
-  const section = page.getByRole("group", { name: "Gone quiet" });
-  const header = section.getByRole("button", { name: /Gone quiet/ });
-  const chips = (title: string) => page.getByRole("group", { name: `Priority for ${title}` });
-  const row = (title: string) => section.locator("div.rounded-lg", { hasText: title });
-  const titles = () => section.locator("p.text-\\[13px\\]").allInnerTexts();
+  const section = page.getByRole("region", { name: "Gone quiet" });
+  const header = section.getByText(/^Gone quiet\s*\d+$/);
+  const now = page.getByRole("region", { name: "Now" });
+  const chips = (title: string) => section.getByRole("group", { name: `Priority for ${title}` });
+  const row = (title: string) => section.getByRole("listitem").filter({ hasText: title });
+  const titles = () => section.getByTitle("Show on the graph").allInnerTexts();
 
   await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
   await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(header).toContainText("5", { timeout: 20_000 });
+  await expect(header).toContainText("6", { timeout: 20_000 });
 
-  await test.step("folded, then longest quiet first, with a count of days; a new quest isn't there", async () => {
-    await expect(section.getByText("Moved around")).toHaveCount(0);
-    await header.click();
-    expect(await titles()).toEqual(["Moved around", "Levelled up", "Given a priority", "Extended", "Shelved it"]);
-    await expect(section).toContainText("Quiet for 40 days · 1 open step");
+  await test.step("at the top; P1 first, then longest quiet; three until unfolded; a new quest isn't there", async () => {
+    expect((await section.boundingBox())!.y).toBeLessThan((await now.boundingBox())!.y);
+    await expect(section).toContainText("What's up?");
+    expect(await titles()).toEqual(["Urgent and stalled", "Moved around", "Levelled up"]);
+    await section.getByRole("button", { name: "Show all 6" }).click();
+    expect(await titles()).toEqual(["Urgent and stalled", "Moved around", "Levelled up", "Given a priority", "Extended", "Shelved it"]);
+    await expect(row("Urgent and stalled")).toContainText("P1 · Quiet for 4 days · 1 open step");
+    await expect(row("Moved around")).toContainText("Quiet for 40 days · 1 open step");
+    // On the to-do and quiet: it shows in both. Four days on a P2 isn't quiet yet
+    await expect(now).toContainText("Step of urgent");
+    await expect(section.getByText("Four days on a P2")).toHaveCount(0);
     // Their steps aren't listed again under Ready: only the new quest's is
     await expect(page.getByRole("button", { name: /Ready, no priority/ })).toHaveText(/Ready, no priority\s*1$/);
     await page.screenshot({ path: `${shots}/gone-quiet.png` });
@@ -70,41 +81,39 @@ test("gone quiet", async () => {
     expect(data?.x).toBe(900);
     expect(Object.keys(data?.changed_at ?? {})).toContain("x"); // the stamps are there; the rule passes them over
     await page.reload();
-    await expect(header).toContainText("5", { timeout: 20_000 });
+    await expect(header).toContainText("6", { timeout: 20_000 });
   });
 
   await test.step("a level-up counts, as it arrives from elsewhere", async () => {
     await page.waitForTimeout(3000); // the reloaded page hears changes only once it has subscribed
     const { error: logError } = await db.from("progress_log").insert({ node_id: ids.levelled, amount: 10 });
     if (logError) throw logError;
-    await expect(header).toContainText("4");
-    await header.click();
+    await expect(header).toContainText("5");
     await expect(section.getByText("Levelled up")).toHaveCount(0);
   });
 
-  await test.step("a priority brings it to the to-do, with Undo", async () => {
+  await test.step("a priority puts it on the to-do but isn't work, so it stays quiet; with Undo", async () => {
     await chips("Given a priority").getByRole("button", { name: "P2" }).click();
     await expect(page.getByRole("status")).toContainText("P2: Given a priority");
-    await expect(header).toContainText("3");
-    await expect(page.getByRole("region", { name: "Now" })).toContainText("Step of given");
+    await expect(now).toContainText("Step of given");
+    await expect(row("Given a priority")).toContainText("P2 · Quiet for 20 days");
+    await expect(header).toContainText("5");
     await page.getByRole("status").getByRole("button", { name: "Undo" }).click();
-    await expect(page.getByRole("region", { name: "Now" }).getByRole("listitem")).toHaveCount(0);
-    // A priority isn't work, so with it undone the quest is as quiet as before
-    await expect(section.getByText("Given a priority")).toBeVisible();
+    await expect(now).not.toContainText("Step of given");
+    await expect(row("Given a priority").getByText(/Quiet for/)).not.toContainText("P2");
+  });
+
+  await test.step("Show on graph finds it; a step added there counts", async () => {
+    await row("Extended").getByRole("button", { name: "Show on graph" }).click();
+    await expect(page.locator(`.react-flow__node[data-id="${ids.extended}"]`)).toHaveClass(/node-flash/);
+    const { error: addError } = await db.from("graph_nodes").insert({ title: "Pick it up again", parent_id: ids.extended });
+    if (addError) throw addError;
+    await expect(section.getByText("Extended")).toHaveCount(0);
     await expect(header).toContainText("4");
   });
 
-  await test.step("a next step counts, and goes inside", async () => {
-    await row("Extended").getByRole("button", { name: "Add a next step" }).click();
-    await expect(section.getByText("Next steps", { exact: true })).toBeVisible();
-    await section.getByLabel("Steps, one per line").fill("Pick it up again");
-    await section.getByRole("button", { name: "Add", exact: true }).click();
-    await expect.poll(async () => (await db.from("graph_nodes").select("parent_id").eq("title", "Pick it up again").maybeSingle()).data?.parent_id).toBe(ids.extended);
-    await expect(section.getByText("Extended")).toHaveCount(0);
-  });
-
   await test.step("Shelve puts it away, with Undo", async () => {
-    await row("Shelved it").getByRole("button", { name: "Shelve" }).click();
+    await row("Shelved it").getByRole("button", { name: "Shelve", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("Shelved: Shelved it");
     await expect(section.getByText("Shelved it")).toHaveCount(0);
     await expect.poll(async () => (await db.from("graph_nodes").select("shelved").eq("id", ids.shelved).single()).data?.shelved).toBe(true);
@@ -112,32 +121,16 @@ test("gone quiet", async () => {
     await expect.poll(async () => (await db.from("graph_nodes").select("shelved").eq("id", ids.shelved).single()).data?.shelved).toBe(false);
     await expect(section.getByText("Shelved it")).toBeVisible(); // back, still quiet
     await page.reload(); // and as the server counts it, too
-    await header.click();
     await expect(section.getByText("Shelved it")).toBeVisible({ timeout: 20_000 });
-    await expect(section.getByText("Given a priority")).toBeVisible();
   });
 
   await test.step("on the phone, within the width", async () => {
     await phoneWindow(app, page);
-    await header.click();
     await expect(section.getByText("Moved around")).toBeVisible();
-    await section.getByText("Moved around").scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${shots}/gone-quiet-phone.png` });
-    const shelve = (await section.getByRole("button", { name: "Shelve" }).first().boundingBox())!;
+    const shelve = (await section.getByRole("button", { name: "Shelve", exact: true }).first().boundingBox())!;
     expect(shelve.x + shelve.width).toBeLessThanOrEqual(400);
     expect(shelve.height).toBeGreaterThanOrEqual(32);
-  });
-
-  await test.step("with nothing else to do, it opens by itself", async () => {
-    // Only quiet quests left: the fresh one and the two brought back above go
-    for (const id of [ids.fresh, ids.levelled, ids.extended]) {
-      const { error: stepsError } = await db.from("graph_nodes").delete().eq("parent_id", id);
-      if (stepsError) throw stepsError;
-      const { error: questError } = await db.from("graph_nodes").delete().eq("id", id);
-      if (questError) throw questError;
-    }
-    await page.reload();
-    await expect(chips("Moved around")).toBeVisible({ timeout: 20_000 });
   });
 
   expect(pageErrors).toEqual([]);

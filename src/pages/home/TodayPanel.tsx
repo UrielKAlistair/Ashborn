@@ -1,18 +1,16 @@
 import { DayStartSelect } from "../../components/DayStartSelect";
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
-import { dayOf, daysBetween, today, week, weekdayOf } from "../../shared/dates";
+import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
 import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
 import { priorities as priorityLevels, type AlarmKind, type Deadline, type GraphNode, type ISODate, type Priority, type Snapshot, type Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
-import { Capture } from "./Capture";
 import { NodePicker } from "./nodePickers";
 import { FocusCard } from "./FocusCard";
 import { goneQuiet } from "../../shared/goneQuiet";
-import { inInbox } from "../../shared/inbox";
 import { GoneQuiet } from "./GoneQuiet";
 import { useOneTap } from "./oneTap";
 import { Tick } from "./Tick";
@@ -30,19 +28,13 @@ type TodayPanelProps = {
 
 /**
  * Today: the desktop's right-hand panel, and the phone's To-do screen. Top to bottom: the date (a tap
- * sets the hour the day starts); the progress made today; deadlines overdue or due within three
- * weeks; Capture, the Inbox and its sorting; Now, the to-do; the ready steps no priority covers yet, and the quests
- * gone quiet; and today's routines. While the Inbox is sorted Now steps aside, and while a started
- * step's timer runs the lists below it wait, so the panel holds one thing at a time.
+ * sets the hour the day starts); the quests gone quiet, asking what's up; deadlines overdue or due
+ * within three weeks; Now, the to-do; the ready steps no priority covers yet; and today's routines.
  */
 export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const { dayStartHour } = snapshot.settings;
   const date = useToday(dayStartHour);
   const [dayStartOpen, setDayStartOpen] = useState(false);
-  // While the Inbox is being sorted, Now steps aside: one card at a time
-  const [sorting, setSorting] = useState(false);
-  // While a started step's timer runs, the lists wait, so the box holds one thing
-  const [boxed, setBoxed] = useState(false);
   const weekday = weekdayOf(date);
 
   // Worked out again when the data or the day changes, not when a section opens or closes
@@ -51,15 +43,14 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
     const priorities = derivePriorities(model, snapshot);
     const todo = prioritisedSteps(model, snapshot, priorities);
     // Ready steps and empty quests nothing covers yet, so a priority can be given here without the
-    // graph; untriaged Inbox items are left to the Inbox, and quiet quests' steps to Gone quiet
-    const quiet = goneQuiet(model, snapshot, priorities, date);
+    // graph; quiet quests' steps are left to Gone quiet
+    const quiet = goneQuiet(model, priorities, date);
     const quietIds = new Set(quiet.map(({ quest }) => quest.id));
     const unprioritised = snapshot.nodes.filter(
       (node) =>
         (node.parentId || needsFirstStep(model, node)) &&
         model.ready.has(node.id) &&
         !priorities.effective.has(node.id) &&
-        !inInbox(model, node, snapshot.inboxId) &&
         !quietIds.has(questOf(model.byId, node).id),
     );
     return { priorities, todo, quiet, unprioritised };
@@ -88,83 +79,30 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         </label>
       ) : null}
 
-
-      <DoneToday snapshot={snapshot} model={model} act={act} date={date} />
+      <GoneQuiet quiet={quiet} act={act} />
 
       <Deadlines snapshot={snapshot} model={model} act={act} date={date} />
 
-      <Capture snapshot={snapshot} model={model} act={act} onSorting={setSorting} />
-      {sorting ? null : (
-        <FocusCard
-          steps={todo.flatMap(({ steps }) => steps)}
-          priorities={priorities}
-          snapshot={snapshot}
-          model={model}
-          act={act}
-          date={date}
-          onBoxed={setBoxed}
-          empty={
-            <p className="px-2 pb-1 text-[12px] leading-relaxed text-muted">
-              {!model.children.get(null)?.some((quest) => quest.id !== snapshot.inboxId)
-                ? "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."
-                : unprioritised.length > 0
-                  ? "Nothing with a priority is ready. Give a quest a priority below, and its next step shows here."
-                  : "Nothing with a priority is ready. Give a quest or step a priority, and what you can start shows here."}
-            </p>
-          }
-        />
-      )}
+      <FocusCard
+        steps={todo.flatMap(({ steps }) => steps)}
+        priorities={priorities}
+        model={model}
+        act={act}
+        empty={
+          <p className="px-2 pb-1 text-[12px] leading-relaxed text-muted">
+            {!model.children.has(null)
+              ? "Start a quest on the graph. Once a chain in it has a priority, its next step shows here."
+              : unprioritised.length > 0
+                ? "Nothing with a priority is ready. Give a quest a priority below, and its next step shows here."
+                : "Nothing with a priority is ready. Give a quest or step a priority, and what you can start shows here."}
+          </p>
+        }
+      />
 
-      {boxed ? (
-        <p className="-mt-2 px-1 text-[12px] text-muted">The rest of the list waits until the timer ends.</p>
-      ) : (
-        <>
-          {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} priorities={priorities} openAtFirst={todoCount === 0} /> : null}
-          <GoneQuiet quiet={quiet} snapshot={snapshot} model={model} act={act} openAtFirst={todoCount === 0 && unprioritised.length === 0} />
-        </>
-      )}
+      {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} priorities={priorities} openAtFirst={todoCount === 0} /> : null}
 
       <Routines snapshot={snapshot} act={act} date={date} weekday={weekday} />
     </section>
-  );
-}
-
-// How many steps of progress today, unfolding into the steps ticked, each unticked with a click
-function DoneToday({ snapshot, model, act, date }: { snapshot: Snapshot; model: GraphModel; act: Act; date: ISODate }) {
-  // The count is from the last change; once the next day starts it belongs to yesterday until the next one
-  const progressToday = snapshot.progressToday.date === date ? snapshot.progressToday.count : 0;
-  // The steps ticked today, latest first, behind the progress line; level-ups count but have no title
-  const [doneOpen, setDoneOpen] = useState(false);
-  const doneToday = snapshot.nodes
-    .filter((node) => node.parentId && node.completedAt && dayOf(new Date(node.completedAt)) === date)
-    .sort((a, b) => b.completedAt!.localeCompare(a.completedAt!));
-
-  // There before the first tick too, so the cards below don't shift under the finger
-  return (
-    <div className="-mt-5 px-1">
-      <button
-        type="button"
-        onClick={() => setDoneOpen(!doneOpen)}
-        aria-expanded={doneOpen}
-        disabled={doneToday.length === 0}
-        className="flex items-center gap-1.5 text-[12px] text-muted enabled:hover:text-ink/85 pointer-coarse:min-h-8"
-      >
-        <span className={`h-1.5 w-1.5 rounded-full ${progressToday > 0 ? "bg-ember" : "border border-muted"}`} />
-        {progressToday === 0 ? "No steps of progress yet today" : `${progressToday} ${progressToday === 1 ? "step" : "steps"} of progress today`}
-        {doneToday.length > 0 ? <span className={`inline-block transition-transform ${doneOpen ? "rotate-90" : ""}`}>›</span> : null}
-      </button>
-      {doneOpen ? (
-        <ul aria-label="Done today" className="mt-2 space-y-1 border-l border-ember/30 pl-3 text-[12.5px] text-ink/75">
-          {doneToday.map((step) => (
-            <li key={step.id} className="flex items-baseline gap-2">
-              <Tick done onClick={() => void act("updateNode", step.id, { done: false })} className="translate-y-0.5" />
-              <span className="min-w-0 flex-1">{step.title}</span>
-              <span className="shrink-0 truncate text-[11px] text-muted">{questOf(model.byId, step).title}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
   );
 }
 

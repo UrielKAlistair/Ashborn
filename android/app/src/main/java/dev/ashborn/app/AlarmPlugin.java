@@ -42,7 +42,9 @@ public class AlarmPlugin extends Plugin {
             JSArray array = call.getArray("alarms", new JSArray());
             List<Alarm> alarms = new ArrayList<>();
             for (int i = 0; i < array.length(); i++) alarms.add(Alarm.fromJson(array.getJSONObject(i)));
-            AlarmScheduler.handOver(getContext(), alarms, "app");
+            // When the app's rows were read is not known (a pushed call may not have reached them yet), so
+            // they never drop a pushed call; only a background refresh, or the call's own time, does
+            AlarmScheduler.handOver(getContext(), alarms, "app", 0);
             // Restarts the refresh wakes after a force-stop or an update cancelled them
             RefreshWake.arm(getContext());
             call.resolve();
@@ -65,7 +67,8 @@ public class AlarmPlugin extends Plugin {
     }
 
     // What the phone holds: the next alarms in the stored schedule, when the app and the background
-    // refresh each last handed it over, and the next alarm clock Android itself will ring (any app's), with whether it is ours
+    // refresh each last handed it over, the next alarm clock Android itself will ring (any app's), with
+    // whether it is ours, and the background's log of wakes and pushes (Diagnostics)
     @PluginMethod
     public void held(PluginCall call) {
         JSObject result = new JSObject();
@@ -73,6 +76,7 @@ public class AlarmPlugin extends Plugin {
             JSArray alarms = new JSArray();
             for (Alarm alarm : AlarmScheduler.next(getContext(), HELD_SHOWN)) alarms.put(alarm.toJson());
             result.put("alarms", alarms);
+            result.put("log", Diagnostics.entries(getContext()));
         } catch (JSONException e) {
             call.reject("Bad stored schedule", e);
             return;

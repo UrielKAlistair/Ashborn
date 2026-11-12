@@ -210,11 +210,6 @@ test("kitchen", async () => {
     });
     expect(asked).toBe("You have unsaved changes to this recipe.");
     await expect(page.getByLabel("Rice amount")).toHaveValue("999");
-    // So does the capture shortcut, which opens Home
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send("app:capture"));
-    await expect(page.getByRole("alertdialog", { name: "Discard changes?" })).toBeVisible();
-    await page.getByRole("button", { name: "Keep editing" }).click();
-    await expect(page.getByLabel("Rice amount")).toHaveValue("999");
     await openScreen("Kitchen", "Planning");
     await page.getByRole("button", { name: "Discard" }).click();
 

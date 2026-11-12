@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { addDays, today } from "../../src/shared/dates";
+import { today } from "../../src/shared/dates";
 import { goneQuiet } from "../../src/shared/goneQuiet";
 import { buildGraphModel } from "../../src/shared/graphModel";
 import { emptyKitchen } from "../../src/shared/kitchen";
 import { derivePriorities } from "../../src/shared/priority";
-import type { Deadline, GraphEdge, GraphNode, Snapshot } from "../../src/shared/types";
+import type { GraphNode, Snapshot } from "../../src/shared/types";
 
 const date = today();
 const daysAgo = (days: number) => new Date(Date.now() - days * 864e5).toISOString();
@@ -25,21 +25,20 @@ const node = (id: string, parentId: string | null, lastActive: string, extra: Pa
   ...extra,
 });
 
-function quiet(nodes: GraphNode[], edges: GraphEdge[] = [], deadlines: Deadline[] = []) {
+function quiet(nodes: GraphNode[]) {
   const snapshot: Snapshot = {
     nodes,
-    edges,
-    deadlines,
+    edges: [],
+    deadlines: [],
     routines: [],
     routineChecks: [],
     alarms: [],
     progressToday: { date, count: 0 },
     kitchen: emptyKitchen,
     settings: { dayStartHour: 4, timeZone: null },
-    inboxId: "inbox",
   };
   const model = buildGraphModel(snapshot);
-  return goneQuiet(model, snapshot, derivePriorities(model, snapshot), date).map(({ quest, days, openSteps }) => [quest.id, days, openSteps]);
+  return goneQuiet(model, derivePriorities(model, snapshot), date).map(({ quest, days, openSteps }) => [quest.id, days, openSteps]);
 }
 
 test("a quest with open steps untouched for a week is quiet, longest first", () => {
@@ -61,22 +60,27 @@ test("activity anywhere inside keeps a quest alive, however deep", () => {
   expect(quiet([node("q", null, daysAgo(1)), node("a", "q", daysAgo(30))])).toEqual([]);
 });
 
-test("nothing to pick up, or put away already: no open steps, shelved, hidden, done, or the Inbox", () => {
+test("nothing to pick up, or put away already: no open steps, shelved, hidden or done", () => {
   const old = daysAgo(30);
   expect(quiet([node("empty", null, old)])).toEqual([]);
   expect(quiet([node("finished", null, old), node("a", "finished", old, { completedAt: old })])).toEqual([]);
   expect(quiet([node("shelved", null, old, { shelved: true }), node("a", "shelved", old)])).toEqual([]);
   expect(quiet([node("onlyShelved", null, old), node("a", "onlyShelved", old, { shelved: true })])).toEqual([]);
   expect(quiet([node("done", null, old, { completedAt: old }), node("a", "done", old)])).toEqual([]);
-  expect(quiet([node("inbox", null, old), node("a", "inbox", old)])).toEqual([]);
 });
 
-test("a quest on the to-do isn't dropping silently; a priority that reaches nothing ready doesn't save it", () => {
-  const old = daysAgo(30);
-  expect(quiet([node("q", null, old, { priority: 2 }), node("a", "q", old)])).toEqual([]);
-  // The priority sits on a step whose prerequisite is what is ready, so the walk covers that too: on the to-do
-  expect(quiet([node("q", null, old), node("a", "q", old), node("b", "q", old, { priority: 2 })], [{ from: "a", to: "b" }])).toEqual([]);
-  // A deadline raises nothing, so a near one linked to it leaves it quiet
-  const deadline: Deadline = { id: "d", title: "d", dueDate: addDays(date, 1), alarmTime: null, nodeId: "q" };
-  expect(quiet([node("q", null, old), node("a", "q", old)], [], [deadline]).map(([id]) => id)).toEqual(["q"]);
+test("on the to-do or not, a quest untouched is quiet; a P1 after three days, any other after seven", () => {
+  const p1 = (days: number) => [node("q", null, daysAgo(days), { priority: 1 }), node("a", "q", daysAgo(days))];
+  expect(quiet(p1(2))).toEqual([]);
+  expect(quiet(p1(3))).toEqual([["q", 3, 1]]);
+  const p2 = (days: number) => [node("q", null, daysAgo(days), { priority: 2 }), node("a", "q", daysAgo(days))];
+  expect(quiet(p2(6))).toEqual([]);
+  expect(quiet(p2(7))).toEqual([["q", 7, 1]]);
+  // A P1 on a step inside makes the quest a P1 one
+  expect(quiet([node("q", null, daysAgo(4)), node("a", "q", daysAgo(4), { priority: 1 })])).toEqual([["q", 4, 1]]);
+});
+
+test("the most urgent first, then the longest quiet", () => {
+  const old = (id: string, days: number, priority: GraphNode["priority"] = null) => [node(id, null, daysAgo(days), { priority }), node(`${id}-step`, id, daysAgo(days))];
+  expect(quiet([...old("none", 60), ...old("p3", 10, 3), ...old("p1", 4, 1), ...old("p3old", 20, 3)]).map(([id]) => id)).toEqual(["p1", "p3old", "p3", "none"]);
 });

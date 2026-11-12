@@ -1,6 +1,6 @@
 import { DayStartSelect } from "../components/DayStartSelect";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { connectBackgroundRefresh, fixPermission, useHeldSchedule, type AlarmPermissions } from "../lib/alarms";
+import { connectBackgroundRefresh, fixPermission, useHeldSchedule, type AlarmPermissions, type BackgroundEntry } from "../lib/alarms";
 import { db } from "../lib/client";
 import { currentTimeZone } from "../shared/dates";
 import { setTheme, themeNames, themes, useTheme } from "../lib/useTheme";
@@ -181,11 +181,45 @@ function Held({ sync }: { sync: () => Promise<void> }) {
               ))}
             </ul>
           )}
+          <BackgroundLog log={held.log} />
         </>
       ) : null}
     </div>
   );
 }
+
+// What the background did: counts that say whether wakes reach the network in Doze and whether FCM
+// lowers pushes' priority, then each wake and push, newest first
+function BackgroundLog({ log }: { log: BackgroundEntry[] }) {
+  const wakes = log.filter((entry) => entry.type === "wake");
+  const pushes = log.filter((entry) => entry.type === "push");
+  const lowered = pushes.filter((push) => push.originalPriority === "high" && push.priority !== "high").length;
+  const delays = pushes.filter((push) => push.sentAt > 0).map((push) => push.at - push.sentAt);
+  return (
+    <details className="text-[12px]">
+      <summary className="cursor-pointer text-muted">Background log</summary>
+      <p className="mt-1 text-ink/85">
+        Wakes: {wakes.length}, refreshed {wakes.filter((wake) => wake.outcome === "refreshed").length}, in Doze {wakes.filter((wake) => wake.idle).length}.
+        {" "}Pushes: {pushes.length}, high asked {pushes.filter((push) => push.originalPriority === "high").length}, lowered by FCM {lowered}
+        {delays.length > 0 ? `, longest delay ${seconds(Math.max(...delays))}` : ""}.
+      </p>
+      <ul aria-label="Background log" className="mt-1 space-y-0.5">
+        {[...log].reverse().map((entry, index) => (
+          <li key={index} className="flex gap-3 text-ink/85">
+            <span className="font-mono tabular-nums text-muted">{moment(entry.at)}</span>
+            <span className="min-w-0">
+              {entry.type === "wake"
+                ? `wake${entry.idle ? ", Doze" : ""}${entry.exempt ? "" : ", not exempt"}: ${entry.outcome}`
+                : `push ${entry.kind}, ${entry.originalPriority === entry.priority ? entry.priority : `${entry.originalPriority} lowered to ${entry.priority}`}${entry.sentAt > 0 ? `, after ${seconds(entry.at - entry.sentAt)}` : ""}: ${entry.outcome}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+const seconds = (ms: number) => (ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms / 60_000)} min`);
 
 // A moment as its weekday and clock time
 const moment = (at: number) => new Date(at).toLocaleString([], { timeZone: currentTimeZone(), weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });

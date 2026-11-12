@@ -6,10 +6,8 @@ import { paletteOf } from "../../lib/theme";
 import { isDone, statKeys } from "../../shared/graphModel";
 import { nodeLevel } from "../../shared/progression";
 import { type GraphNode, type Priority, type StatKey, type StatWeights } from "../../shared/types";
-import { MoveToPicker } from "./nodePickers";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
-import { SplitSteps } from "./SplitSteps";
 import { useIsNowStep } from "./nowMirror";
 import { Tick } from "./Tick";
 import { addRowHeight, canHover, labelSlot, plusOneButton, questTitleType, stepRow, stepTitleType } from "./graphLayout";
@@ -50,7 +48,6 @@ export type CardData = {
   menuOpen: boolean;
   look: PriorityLook;
   phone: boolean; // view-only placement, and one labelled menu instead of the small buttons
-  sortable: boolean; // a step in the Inbox: offers Move to…
   actions: CardActions;
 };
 
@@ -81,7 +78,7 @@ function QuestCard({ data }: NodeProps<Node<CardData>>) {
       <Handles phone={data.phone} />
       <div className="priority-mark rounded-2xl" />
 
-      <div className="absolute inset-0 overflow-hidden rounded-2xl border border-ink/12 bg-card shadow-[var(--node-shadow)]" />
+      <div className="quest-face absolute inset-0 overflow-hidden rounded-2xl border border-ink/12 bg-card shadow-[var(--node-shadow)]" />
 
       <div className="group relative flex flex-col justify-between px-4 pt-3 pb-3.5" style={{ height: data.header }}>
         <div className="flex items-start gap-2">
@@ -160,7 +157,7 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
     <div
       data-priority={data.look}
       className={`group relative h-full w-full rounded-xl border ${done ? "border-ink/[0.05]" : "border-ink/10"} ${
-        holdsSteps ? "bg-ink/[0.02]" : done ? "bg-ink/[0.012]" : "bg-panel"
+        holdsSteps ? "bg-ink/[0.02]" : done ? "bg-ink/[0.012]" : "step-face bg-panel"
       } ${data.shelved ? shelvedLook : ""}`}
     >
       <Handles height={stepRow.height} phone={data.phone} />
@@ -295,7 +292,7 @@ function Handles({ height, phone }: { height?: number; phone: boolean }) {
 }
 
 // The top-right buttons of every box: hide/show its steps, add a step inside, then the lock and ⋯ on
-// a quest, or Move to (in the Inbox), priority, shelve and delete on a step
+// a quest, priority, shelve and delete on a step
 function BoxButtons({ data }: { data: CardData }) {
   const { depth, hasSteps, collapsed, locked, adding } = data;
   const { onToggleCollapsed, onToggleLocked, onAdding } = boundActions(data);
@@ -356,25 +353,12 @@ function BoxButtons({ data }: { data: CardData }) {
         </>
       ) : (
         <>
-          {data.sortable ? <MoveButton data={data} /> : null}
           <PriorityButton data={data} />
           <ShelveButton data={data} />
           <DeleteButton data={data} />
         </>
       )}
     </div>
-  );
-}
-
-// The Move to… list opens from an arrow: the select lies invisibly over it
-function MoveButton({ data }: { data: CardData }) {
-  return (
-    <span title="Move to…" className={`nodrag relative ${iconButton} text-muted hover:bg-ink/8 hover:text-ink`}>
-      <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M1 5 H9 M5.5 1.5 L9 5 L5.5 8.5" />
-      </svg>
-      <MoveToPicker step={data.node} act={data.actions.act} className="absolute inset-0 w-full cursor-pointer opacity-0" />
-    </span>
   );
 }
 
@@ -501,17 +485,6 @@ function LockIcon({ open }: { open: boolean }) {
   );
 }
 
-function ListIcon() {
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
-      <path d="M4.5 3 H10.5 M4.5 6 H10.5 M4.5 9 H10.5" />
-      <circle cx="2" cy="3" r="0.6" fill="currentColor" />
-      <circle cx="2" cy="6" r="0.6" fill="currentColor" />
-      <circle cx="2" cy="9" r="0.6" fill="currentColor" />
-    </svg>
-  );
-}
-
 function PlusIcon() {
   return (
     <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -540,54 +513,22 @@ function HexDot({ className }: { className: string }) {
   );
 }
 
-// Boxes whose add row should open on the Split panel: a quest just made
-export const listWanted = new Set<string>();
-
 // The input row at the bottom of a box being added to; Enter adds and stays open, Escape closes
 function AddRow({ data }: { data: CardData }) {
   const { node, adding } = data;
   const { act, onAdding } = boundActions(data);
-  // A list being split into steps: what was pasted, or "" when opened from the button
-  const [list, setList] = useState<string | null>(null);
-  useEffect(() => {
-    if (adding && listWanted.delete(node.id)) setList("");
-  }, [adding, node.id]);
   if (!adding) return null;
 
   return (
-    <>
-      <div className="absolute right-0 bottom-0 left-0 flex items-center gap-1 px-3" style={{ height: addRowHeight }}>
-        <InlineInput
-          autoFocus
-          placeholder="Step name, Enter to add"
-          onSubmit={(title) => act("createNode", title, node.id)}
-          onEscape={() => onAdding(false)}
-          onPasteList={setList}
-          className="min-w-0 flex-1 px-2.5 py-1"
-        />
-        <button
-          type="button"
-          onClick={() => setList("")}
-          title="Split into steps: type or paste a list"
-          className={`nodrag ${iconButton} text-muted hover:bg-ink/8 hover:text-ink`}
-        >
-          <ListIcon />
-        </button>
-      </div>
-      <NodeToolbar isVisible={list !== null} position={Position.Bottom} align="start" offset={8}>
-        {list !== null ? (
-          <SplitSteps
-            act={act}
-            parentId={node.id}
-            initial={list}
-            onDone={() => {
-              setList(null);
-              onAdding(false);
-            }}
-          />
-        ) : null}
-      </NodeToolbar>
-    </>
+    <div className="absolute right-0 bottom-0 left-0 flex items-center gap-1 px-3" style={{ height: addRowHeight }}>
+      <InlineInput
+        autoFocus
+        placeholder="Step name, Enter to add"
+        onSubmit={(title) => act("createNode", title, node.id)}
+        onEscape={() => onAdding(false)}
+        className="min-w-0 flex-1 px-2.5 py-1"
+      />
+    </div>
   );
 }
 
@@ -675,7 +616,6 @@ function PhoneMenu({ data }: { data: CardData }) {
   const { node, depth, hasSteps, collapsed, menuOpen } = data;
   const { act, onMenu, onToggleCollapsed, onAdding } = boundActions(data);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [splitting, setSplitting] = useState(false);
   const isQuest = depth === 0;
   const choose = (action: () => unknown) => () => {
     action();
@@ -689,7 +629,6 @@ function PhoneMenu({ data }: { data: CardData }) {
         onClick={(event) => {
           event.stopPropagation();
           setConfirmDelete(false);
-          setSplitting(false);
           onMenu(!menuOpen);
         }}
         aria-label="Actions"
@@ -705,70 +644,49 @@ function PhoneMenu({ data }: { data: CardData }) {
               onClick={(event) => event.stopPropagation()}
               className="panel-scroll max-h-[85vh] w-full overflow-y-auto rounded-t-2xl border-t border-ink/10 bg-card p-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-[14px] text-ink/85 shadow-[var(--sheet-shadow)] transition-transform duration-200 ease-out starting:translate-y-full"
             >
-              {splitting ? (
-                <SplitSteps act={act} parentId={node.id} onDone={() => onMenu(false)} className="w-full" />
-              ) : (
+              <input
+                defaultValue={node.title}
+                aria-label="Rename"
+                onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                onBlur={(event) => {
+                  const title = event.currentTarget.value.trim();
+                  if (!title) event.currentTarget.value = node.title;
+                  else if (title !== node.title) void act("updateNode", node.id, { title });
+                }}
+                className="mb-1 min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 font-display text-[15px] font-semibold text-ink/90 focus:border-ember/60 focus:outline-none"
+              />
+              <button type="button" onClick={choose(() => onAdding(true))} className={phoneItem}>
+                <PlusIcon /> Add a step inside
+              </button>
+              {hasSteps ? (
+                <button type="button" onClick={choose(onToggleCollapsed)} className={phoneItem}>
+                  <EyeIcon crossed={!collapsed} /> {collapsed ? "Show steps" : "Hide steps"}
+                </button>
+              ) : null}
+              <div className={phoneRow}>
+                <p className="mb-1 text-[11.5px] text-muted">Priority</p>
+                <PriorityPicker node={node} act={act} />
+              </div>
+              {isQuest ? (
                 <>
-                  <input
-                    defaultValue={node.title}
-                    aria-label="Rename"
-                    onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-                    onBlur={(event) => {
-                      const title = event.currentTarget.value.trim();
-                      if (!title) event.currentTarget.value = node.title;
-                      else if (title !== node.title) void act("updateNode", node.id, { title });
-                    }}
-                    className="mb-1 min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 font-display text-[15px] font-semibold text-ink/90 focus:border-ember/60 focus:outline-none"
-                  />
-                  {data.sortable ? (
-                    <div className={phoneRow}>
-                      <MoveToPicker step={node} act={act} onMoved={() => onMenu(false)} className="min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 text-[14px] text-ink/85" />
-                    </div>
-                  ) : null}
-                  <button type="button" onClick={choose(() => onAdding(true))} className={phoneItem}>
-                    <PlusIcon /> Add a step inside
+                  <button type="button" onClick={choose(() => act("levelUp", node.id, crypto.randomUUID()))} className={phoneItem}>
+                    <span className="text-[11px] font-semibold text-red-300">++</span> Level up
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (collapsed) onToggleCollapsed();
-                      setSplitting(true);
-                    }}
-                    className={phoneItem}
-                  >
-                    <ListIcon /> Split into steps
-                  </button>
-                  {hasSteps ? (
-                    <button type="button" onClick={choose(onToggleCollapsed)} className={phoneItem}>
-                      <EyeIcon crossed={!collapsed} /> {collapsed ? "Show steps" : "Hide steps"}
-                    </button>
-                  ) : null}
                   <div className={phoneRow}>
-                    <p className="mb-1 text-[11.5px] text-muted">Priority</p>
-                    <PriorityPicker node={node} act={act} />
+                    <StatWeightsEditor node={node} act={act} />
                   </div>
-                  {isQuest ? (
-                    <>
-                      <button type="button" onClick={choose(() => act("levelUp", node.id, crypto.randomUUID()))} className={phoneItem}>
-                        <span className="text-[11px] font-semibold text-red-300">++</span> Level up
-                      </button>
-                      <div className={phoneRow}>
-                        <StatWeightsEditor node={node} act={act} />
-                      </div>
-                    </>
-                  ) : null}
-                  <button type="button" onClick={choose(() => act("updateNode", node.id, { shelved: !node.shelved }))} className={phoneItem}>
-                    <span className="text-[11px] text-ink/60">❚❚</span> {node.shelved ? "Unshelve: pursue it again" : "Shelve: keep it, but not now"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => (confirmDelete ? void act("deleteNode", node.id) : setConfirmDelete(true))}
-                    className={`${phoneItem} text-red-300`}
-                  >
-                    <CrossIcon /> {confirmDelete ? "Tap again to delete" : "Delete"}
-                  </button>
                 </>
-              )}
+              ) : null}
+              <button type="button" onClick={choose(() => act("updateNode", node.id, { shelved: !node.shelved }))} className={phoneItem}>
+                <span className="text-[11px] text-ink/60">❚❚</span> {node.shelved ? "Unshelve: pursue it again" : "Shelve: keep it, but not now"}
+              </button>
+              <button
+                type="button"
+                onClick={() => (confirmDelete ? void act("deleteNode", node.id) : setConfirmDelete(true))}
+                className={`${phoneItem} text-red-300`}
+              >
+                <CrossIcon /> {confirmDelete ? "Tap again to delete" : "Delete"}
+              </button>
             </div>
           </div>,
           document.body,

@@ -54,4 +54,35 @@ public class JoinedRingTest {
         assertEquals("Wake up + Pills + Walk", Alarm.joined(Arrays.asList(WAKE, PILLS, WALK)).title);
         assertEquals("Wake up + Pills + Walk + 2 more", Alarm.joined(Arrays.asList(WAKE, PILLS, WALK, WATER, BINS)).title);
     }
+
+    private static final Alarm CALL = new Alarm("alarm:call@6000", 6_000, "Claude needs you", "plain", Alarm.CALL);
+
+    @Test
+    public void aCallJoiningMakesTheRingACall() {
+        assertEquals(Alarm.CALL, Alarm.joined(Arrays.asList(PILLS, CALL)).sound);
+        assertEquals(Alarm.DEFAULT, Alarm.joined(Arrays.asList(PILLS, WATER)).sound);
+    }
+
+    // A call rings briefly, but never cuts a real alarm going off with it short
+    @Test
+    public void ringsForTheLongestOfItsParts() {
+        assertEquals(AlarmService.CALL_RING_MS, AlarmService.ringMs(Arrays.asList(CALL)));
+        assertEquals(AlarmService.RING_MS, AlarmService.ringMs(Arrays.asList(CALL, PILLS)));
+        assertEquals(AlarmService.CHALLENGE_RING_MS, AlarmService.ringMs(Arrays.asList(CALL, WAKE)));
+    }
+
+    @Test
+    public void aCallIsNeverSnoozed() {
+        assertEquals(true, AlarmService.snoozable(Alarm.joined(Arrays.asList(PILLS, WATER))));
+        assertEquals(false, AlarmService.snoozable(Alarm.joined(Arrays.asList(CALL))));
+        assertEquals(false, AlarmService.snoozable(Alarm.joined(Arrays.asList(PILLS, CALL))));
+        assertEquals(false, AlarmService.snoozable(Alarm.joined(Arrays.asList(PILLS, WAKE))));
+    }
+
+    @Test
+    public void onlyACallFiredTooLateIsStale() {
+        assertEquals(false, AlarmService.staleCall(CALL, CALL.at + AlarmService.CALL_STALE_MS));
+        assertEquals(true, AlarmService.staleCall(CALL, CALL.at + AlarmService.CALL_STALE_MS + 1));
+        assertEquals(false, AlarmService.staleCall(PILLS, PILLS.at + 60 * 60_000));
+    }
 }

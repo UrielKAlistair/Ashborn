@@ -32,12 +32,17 @@ import org.json.JSONObject;
 // shows the app over the lock screen. A plain alarm can also be dismissed or snoozed from its
 // notification; one with a challenge only stopped from the app, once the challenge is done. An
 // alarm that fires while another rings joins it: one ring, named for both, with the harder stop,
-// and stopping it stops both. Left alone, a ring stops itself after it last started (RING_MS, or
-// CHALLENGE_RING_MS for a challenge) and leaves a "Missed" notification, which sounds as a message
-// does, not as an alarm.
+// and stopping it stops both. Left alone, a ring stops itself after it last started (ringMs: the
+// longest of its parts') and leaves a "Missed" notification, which sounds as a message does, not as
+// an alarm. A call (an agent calling the user) plays the app's own clip once, as the ringer allows,
+// rings for the clip's length, and cannot be snoozed.
 public class AlarmService extends Service {
     static final long RING_MS = 5 * 60_000;
     static final long CHALLENGE_RING_MS = 15 * 60_000;
+    // The call clip (res/raw/call) lasts 23.5 s
+    static final long CALL_RING_MS = 24_000;
+    // A call this late (the phone was off or out of reach) is reported missed instead of ringing
+    static final long CALL_STALE_MS = 2 * 60_000;
     static final String ACTION_STOP = "dev.ashborn.app.STOP_ALARM";
     static final String ACTION_SNOOZE = "dev.ashborn.app.SNOOZE_ALARM";
     // The stop of the ring the user saw when stopping or snoozing it
@@ -52,7 +57,7 @@ public class AlarmService extends Service {
     // The latest start, which the ring's own timeout stops by
     private int lastStartId;
     private final Runnable timeout = () -> {
-        notifyMissed(Alarm.joined(this.parts));
+        notifyMissed(this, Alarm.joined(this.parts));
         stopRinging(lastStartId);
     };
     static final String MISSED_CHANNEL = "missed-alarms";
@@ -102,10 +107,10 @@ public class AlarmService extends Service {
         MainActivity.ringStarted();
         // The sound starts again for each ring that joins
         stopSound();
-        startSound(challenge);
+        startSound(challenge, ring.isCall());
         startVibrating();
         handler.removeCallbacks(timeout);
-        handler.postDelayed(timeout, challenge ? CHALLENGE_RING_MS : RING_MS);
+        handler.postDelayed(timeout, ringMs(parts));
         return START_STICKY;
     }
 
@@ -127,19 +132,36 @@ public class AlarmService extends Service {
         context.getSystemService(NotificationManager.class).createNotificationChannel(channel);
     }
 
-    // Says a ring went unanswered: on a channel of its own, which sounds as a message does and never rings
-    private void notifyMissed(Alarm alarm) {
-        NotificationManager notifications = getSystemService(NotificationManager.class);
+    // How long rings going off together ring unanswered: the longest of their parts', so a call never
+    // cuts a real alarm short
+    static long ringMs(List<Alarm> parts) {
+        long longest = 0;
+        for (Alarm part : parts) {
+            long ms = part.isCall() ? CALL_RING_MS : "plain".equals(part.kind) ? RING_MS : CHALLENGE_RING_MS;
+            longest = Math.max(longest, ms);
+        }
+        return longest;
+    }
+
+    // Whether `alarm`, firing at `now`, is a call too late to ring
+    static boolean staleCall(Alarm alarm, long now) {
+        return alarm.isCall() && now - alarm.at > CALL_STALE_MS;
+    }
+
+    // Says a ring went unanswered: on a channel of its own, which sounds as a message does and never
+    // rings. A call says who called, with the call's message.
+    static void notifyMissed(Context context, Alarm alarm) {
+        NotificationManager notifications = context.getSystemService(NotificationManager.class);
         notifications.createNotificationChannel(new NotificationChannel(MISSED_CHANNEL, "Missed alarms", NotificationManager.IMPORTANCE_DEFAULT));
         String time = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(new java.util.Date(alarm.at));
         try {
-            notifications.notify(missedNotificationId(alarm), new NotificationCompat.Builder(this, MISSED_CHANNEL)
+            notifications.notify(missedNotificationId(alarm), new NotificationCompat.Builder(context, MISSED_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_ashborn)
-                .setContentTitle("Missed: " + alarm.title)
-                .setContentText("Rang at " + time + ", unanswered")
+                .setContentTitle(alarm.isCall() ? "Missed call from Claude" : "Missed: " + alarm.title)
+                .setContentText(alarm.isCall() ? alarm.title + " (" + time + ")" : "Rang at " + time + ", unanswered")
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setAutoCancel(true)
-                .setContentIntent(AlarmScheduler.openAppIntent(this))
+                .setContentIntent(AlarmScheduler.openAppIntent(context))
                 .build());
         } catch (SecurityException e) {
             // Notifications not allowed
@@ -154,7 +176,7 @@ public class AlarmService extends Service {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_ashborn)
             .setContentTitle(alarm.title)
-            .setContentText("plain".equals(alarm.kind) ? "Alarm" : "Open Ashborn to stop it")
+            .setContentText(!"plain".equals(alarm.kind) ? "Open Ashborn to stop it" : alarm.isCall() ? "Call from Claude" : "Alarm")
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true)
@@ -165,6 +187,9 @@ public class AlarmService extends Service {
             int flags = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
             Intent stop = new Intent(this, AlarmService.class).setAction(ACTION_STOP).putExtra(EXTRA_SHOWN_KEY, alarm.key).putExtra(EXTRA_SHOWN_KIND, alarm.kind);
             builder.addAction(0, "Dismiss", PendingIntent.getService(this, 1, stop, flags));
+        }
+        if (snoozable(alarm)) {
+            int flags = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
             Intent snooze = new Intent(this, AlarmService.class).setAction(ACTION_SNOOZE).putExtra(EXTRA_SHOWN_KEY, alarm.key).putExtra(EXTRA_SHOWN_KIND, alarm.kind);
             builder.addAction(0, "Snooze", PendingIntent.getService(this, 2, snooze, flags));
         }
@@ -175,10 +200,11 @@ public class AlarmService extends Service {
     // ringer's volume and Do Not Disturb apply to it as to a call. A challenge alarm sounds in every
     // ringer mode, on the alarm stream: its own volume, and Do Not Disturb only if that blocks alarms.
     // Either plays on the phone's own speaker, even with earbuds or a Bluetooth speaker connected.
-    private void startSound(boolean challenge) {
+    // A call plays the app's tune (res/raw/call) instead of the phone's alarm sound.
+    private void startSound(boolean challenge, boolean call) {
         AudioManager audio = getSystemService(AudioManager.class);
         if (!challenge && audio.getRingerMode() != AudioManager.RINGER_MODE_NORMAL) return;
-        Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+        Uri sound = call ? Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.call) : RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
         if (sound == null) sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
         try {
             player = new MediaPlayer();
@@ -186,7 +212,15 @@ public class AlarmService extends Service {
             player.setAudioAttributes(new AudioAttributes.Builder().setUsage(usage).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
             if (Build.VERSION.SDK_INT >= 28) player.setPreferredDevice(builtInSpeaker(audio));
             player.setDataSource(this, sound);
-            player.setLooping(true);
+            player.setLooping(!call);
+            // A call rung together with a real alarm goes on with the alarm's sound once the clip ends
+            if (call) player.setOnCompletionListener(done -> {
+                if (ringMs(parts) > CALL_RING_MS) {
+                    stopSound();
+                    startSound(challenge, false);
+                    startVibrating();
+                }
+            });
             player.prepare();
             player.start();
         } catch (Exception e) {
@@ -220,9 +254,14 @@ public class AlarmService extends Service {
         if (vibrator != null) vibrator.cancel();
     }
 
-    // Only a plain ring snoozes (one whose every part is plain): a challenge alarm is meant to get the user up
+    // Only a plain ring that is not a call snoozes: a challenge alarm is meant to get the user up, and a
+    // call is over once missed. Snoozing one that can't stops it.
+    static boolean snoozable(Alarm ring) {
+        return "plain".equals(ring.kind) && !ring.isCall();
+    }
+
     private void snooze(int startId) {
-        if (!parts.isEmpty() && "plain".equals(Alarm.joined(parts).kind)) {
+        if (!parts.isEmpty() && snoozable(Alarm.joined(parts))) {
             try {
                 AlarmScheduler.snooze(this, parts);
             } catch (JSONException e) {

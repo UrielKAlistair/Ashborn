@@ -9,13 +9,14 @@ import path from "node:path";
 import { registerTools } from "../../mcp/tools";
 import { phoneWindow } from "../phoneWindow";
 
-// A quest with a priority and no steps shows in Today, asking for a first step rather than a tick.
+// A quest with a priority and no steps shows in Today with a + rather than a tick, which shows it on the
+// graph to be given its first steps.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 const shots = "research/lower-cost/shots";
 
 test("a quest with a priority and no steps", async () => {
-  const { data, error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
+  const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
   for (const table of ["graph_nodes", "routines", "deadlines", "alarms"]) await db.from(table).delete().not("id", "is", null);
   const idea = crypto.randomUUID();
@@ -26,7 +27,6 @@ test("a quest with a priority and no steps", async () => {
   ]);
   if (seedError) throw seedError;
   const completedAt = async (id: string) => (await db.from("graph_nodes").select("completed_at").eq("id", id).single()).data?.completed_at;
-  const stepsOf = async (id: string) => (await db.from("graph_nodes").select("title").eq("parent_id", id)).data?.map(({ title }) => title);
 
   const profile = mkdtempSync(path.join(tmpdir(), "ashborn-e2e-"));
   const env = { ...process.env } as Record<string, string>;
@@ -45,11 +45,8 @@ test("a quest with a priority and no steps", async () => {
 
   await test.step("Now asks for a first step, and has nothing to tick", async () => {
     const row = now.getByRole("listitem").filter({ hasText: "Talk on attention" });
-    await expect(row.getByRole("button", { name: "Add a first step" })).toBeVisible();
+    await expect(row.getByRole("button", { name: "Add its first steps on the graph" })).toBeVisible();
     await expect(row.getByTitle("Mark done")).toHaveCount(0);
-    await now.getByRole("button", { name: "Actions for Talk on attention" }).click();
-    await expect(now.getByRole("menuitem", { name: "Split it" })).toHaveCount(0);
-    await page.keyboard.press("Escape");
     await page.screenshot({ path: `${shots}/first-step.png` });
 
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -60,7 +57,7 @@ test("a quest with a priority and no steps", async () => {
 
   await test.step("the agent is told it needs one", async () => {
     const server = new McpServer({ name: "test", version: "0" });
-    registerTools(server, db, data.user.id);
+    registerTools(server, db);
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await server.connect(serverSide);
     const client = new Client({ name: "e2e", version: "0" });
@@ -71,56 +68,49 @@ test("a quest with a priority and no steps", async () => {
     await client.close();
   });
 
-  await test.step("the first steps replace it with the first of them", async () => {
-    await now.getByRole("listitem").filter({ hasText: "Talk on attention" }).getByRole("button", { name: "Add a first step" }).click();
-    await page.getByLabel("Steps, one per line").fill("Read the papers\nDraft an outline");
-    await expect(now.getByText("First steps", { exact: true })).toBeVisible();
-    await expect(now.getByText("Split into steps")).toHaveCount(0);
-    await now.getByRole("button", { name: "Add", exact: true }).click();
+  await test.step("the + shows it on the graph; its first steps, added there, replace it", async () => {
+    await now.getByRole("listitem").filter({ hasText: "Talk on attention" }).getByRole("button", { name: "Add its first steps on the graph" }).click();
+    await expect(page.locator(`.react-flow__node[data-id="${idea}"]`)).toHaveClass(/node-flash/);
+    const { error: stepError } = await db.from("graph_nodes").insert([
+      { title: "Read the papers", parent_id: idea },
+      { title: "Draft an outline", parent_id: idea },
+    ]);
+    if (stepError) throw stepError;
     await expect(now).toContainText("Read the papers");
     await expect(now.getByRole("listitem").first().getByTitle("Mark done")).toBeVisible();
-    await expect.poll(() => stepsOf(idea)).toEqual(expect.arrayContaining(["Read the papers", "Draft an outline"]));
+    await expect(now).not.toContainText("Talk on attention");
   });
 
   await test.step("further down Now it has a + where a tick would be", async () => {
-    const list = page.getByRole("region", { name: "Now" });
-    const row = list.getByRole("listitem").filter({ hasText: "Learn to sail" });
+    const row = now.getByRole("listitem").filter({ hasText: "Learn to sail" });
     await expect(row.getByTitle("Mark done")).toHaveCount(0);
-    await row.getByTitle("Add a first step").click();
-    await list.getByLabel("Steps, one per line").fill("Find a course");
+    await expect(row.getByTitle("Add its first steps on the graph")).toBeVisible();
     await page.screenshot({ path: `${shots}/first-step-row.png` });
-    await expect(list.getByText("First steps", { exact: true })).toBeVisible();
-    await list.getByRole("button", { name: "Add", exact: true }).click();
-    await expect.poll(() => stepsOf(other)).toEqual(["Find a course"]);
-    await expect(list).toContainText("Find a course");
   });
 
-  await test.step("with no priority it waits in Ready, chips and all; an empty Inbox doesn't", async () => {
-    const { error: insertError } = await db.from("graph_nodes").insert([
-      { id: crypto.randomUUID(), title: "Someday idea", parent_id: null },
-      { id: data.user.id, title: "Inbox", parent_id: null },
-    ]);
+  await test.step("with no priority it waits in Ready, chips and all", async () => {
+    const { error: insertError } = await db.from("graph_nodes").insert({ title: "Someday idea", parent_id: null });
     if (insertError) throw insertError;
     await expect(page.getByRole("button", { name: /Ready, no priority/ })).toContainText("1");
     await page.getByRole("button", { name: /Ready, no priority/ }).click();
     const chips = page.getByRole("group", { name: "Priority for Someday idea" });
     await expect(chips).toBeVisible();
-    await expect(page.getByRole("group", { name: "Priority for Inbox" })).toHaveCount(0);
     await expect(page.getByText("A quest with no steps yet")).toBeVisible();
     await page.screenshot({ path: `${shots}/first-step-ready.png` });
 
     await chips.getByRole("button", { name: "P4" }).click();
     await expect(chips).toHaveCount(0);
     const list = page.getByRole("region", { name: "Now" });
+    await list.getByRole("button", { name: /Show all \d+ ready/ }).click();
     await expect(list).toContainText("Someday idea");
-    await expect(list.getByTitle("Add a first step")).toBeVisible();
+    await expect(list.getByRole("listitem").filter({ hasText: "Someday idea" }).getByTitle("Add its first steps on the graph")).toBeVisible();
   });
 
   await test.step("on the phone too", async () => {
     const { error: insertError } = await db.from("graph_nodes").insert({ title: "Plan the move", parent_id: null, priority: 1 });
     if (insertError) throw insertError;
     await phoneWindow(app, page);
-    await expect(page.getByTitle("Add a first step").first()).toBeVisible();
+    await expect(page.getByTitle("Add its first steps on the graph").first()).toBeVisible();
     await page.screenshot({ path: `${shots}/first-step-phone.png` });
   });
 

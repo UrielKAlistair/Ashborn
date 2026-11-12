@@ -37,7 +37,6 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
     progressToday: delta.progressToday && !same(delta.progressToday, snapshot.progressToday) ? delta.progressToday : snapshot.progressToday,
     kitchen: delta.kitchen && !same(delta.kitchen, snapshot.kitchen) ? delta.kitchen : snapshot.kitchen,
     settings: delta.settings && !same(delta.settings, snapshot.settings) ? delta.settings : snapshot.settings,
-    inboxId: snapshot.inboxId,
   };
 
   return (Object.keys(next) as (keyof Snapshot)[]).every((key) => next[key] === snapshot[key]) ? snapshot : next;

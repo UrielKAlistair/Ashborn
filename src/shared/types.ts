@@ -14,6 +14,8 @@ export type ClockTime = string; // HH:MM, local time
 // How an alarm stops: a plain one is dismissed; the others only after walking or sit-ups,
 // counted by the phone's accelerometer
 export type AlarmKind = "none" | "plain" | "walk" | "situps";
+// What a ring plays: the phone's alarm sound, or the app's own tune for an agent calling the user
+export type AlarmSound = "default" | "call";
 
 // A node in the graph. Top-level nodes are quests; a node with a parent is a step inside it,
 // and steps can hold steps of their own. Siblings form a DAG through prerequisite edges.
@@ -63,6 +65,7 @@ export type Alarm = {
   id: string;
   label: string;
   kind: Exclude<AlarmKind, "none">;
+  sound: AlarmSound;
   at: string | null; // ISO timestamp, for a one-off
   time: ClockTime | null; // for a recurring alarm
   weekdays: Weekday[]; // empty for a one-off
@@ -177,7 +180,6 @@ export type Snapshot = {
   progressToday: ProgressToday;
   kitchen: Kitchen;
   settings: Settings;
-  inboxId: string; // the Inbox quest's id, which is the user's own; no such quest until the first capture
 };
 
 // dayStartHour 0–23; timeZone an IANA name, written by the user's devices, null until one has
@@ -217,7 +219,7 @@ export type Placement = { id: string; position: Point };
 // Everything the app and the agent server can ask of the data store. Reads return data; changes
 // return a Delta.
 export type AshbornApi = {
-  getSnapshot(userId: string): Promise<Snapshot>;
+  getSnapshot(): Promise<Snapshot>;
   createNode(title: string, parentId: string | null, id?: string): Promise<Delta>; // id: made offline
   updateNode(id: string, patch: NodePatch): Promise<Delta>;
   deleteNode(id: string): Promise<Delta>;

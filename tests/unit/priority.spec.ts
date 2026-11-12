@@ -34,7 +34,6 @@ function setup(nodes: GraphNode[], edges: GraphEdge[] = [], deadlines: Deadline[
     progressToday: { date: today, count: 0 },
     kitchen: emptyKitchen,
     settings: { dayStartHour: 4, timeZone: null },
-    inboxId: "user",
   } as unknown as Snapshot;
   const model = buildGraphModel(snapshot);
   return { snapshot, model, priorities: derivePriorities(model, snapshot) };
@@ -88,12 +87,11 @@ test("the to-do holds only ready covered steps, grouped most urgent first", () =
   expect(todo.map(({ priority, steps }) => [priority, steps.map(({ id }) => id)])).toEqual([[1, ["urgent"]], [2, ["a"]]]);
 });
 
-test("a quest with a priority and no steps is on the to-do; a finished one and an empty Inbox are not", () => {
+test("a quest with a priority and no steps is on the to-do; a finished one is not", () => {
   const { model, snapshot, priorities } = setup([
     node("idea", null, { priority: 2 }),
     node("finished", null, { priority: 1 }),
     node("doneStep", "finished", { completedAt: today }),
-    node("user", null, { priority: 1 }), // the Inbox: its id is the user's
     node("shelved", null, { priority: 1, shelved: true }),
     node("unset", null),
   ]);

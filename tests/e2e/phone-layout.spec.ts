@@ -122,18 +122,15 @@ test("the phone graph's own layout", async () => {
     expect(await saved(ids.urgent)).toEqual({ x: null, y: null });
   });
 
-  await test.step("another section keeps the graph built and a half-typed thought", async () => {
+  await test.step("another section keeps the graph built", async () => {
     await openGraph();
     await page.locator(".react-flow").evaluate((element) => ((element as HTMLElement).dataset.kept = "yes"));
     await page.getByRole("button", { name: "Home", exact: true }).click();
     await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "To-do" }).click();
-    await page.getByLabel("Capture a thought").fill("Half a thought");
-    await page.getByRole("button", { name: "Alarms", exact: true }).click();
-    await expect(page.getByLabel("Capture a thought")).toHaveCount(0);
+    await page.getByRole("button", { name: "Calendar", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
     await page.getByRole("button", { name: "Home", exact: true }).click();
     await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "To-do" }).click();
-    await expect(page.getByLabel("Capture a thought")).toHaveValue("Half a thought");
-    await page.getByLabel("Capture a thought").fill("");
     expect(await page.locator(".react-flow").getAttribute("data-kept")).toBe("yes");
   });
 

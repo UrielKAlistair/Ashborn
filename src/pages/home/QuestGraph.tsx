@@ -4,13 +4,10 @@ import { HexMark } from "../../components/HexTile";
 import { useToday } from "../../lib/useToday";
 import { isFinished, type GraphModel } from "../../shared/graphModel";
 import { dayOf } from "../../shared/dates";
-import { inboxLast } from "../../shared/inbox";
 import { byPriority, derivePriorities, linkPriority, type Priorities } from "../../shared/priority";
 import { type GraphEdge, type GraphNode, type ISODate, type Snapshot } from "../../shared/types";
-import { MoveTargets } from "./nodePickers";
 import type { Act } from "./HomePage";
 import { InlineInput } from "./InlineInput";
-import { SplitContext } from "./SplitSteps";
 import { onShowOnGraph, takeWaitingShow } from "./showOnGraph";
 import { sharpen, usePhonePanZoom } from "./phonePanZoom";
 import Territories, { setTerritoryFocus } from "./territory/Territories";
@@ -18,7 +15,7 @@ import type { TerritoryQuest } from "./territory/territoryGrid";
 import { fontsLoaded } from "./titleLines";
 import { readStored, writeStored } from "../../lib/storage";
 import { Box, CardShape, PHONE_MARGIN, canHover, layoutTree, phoneFocus, phoneViewport, questHeader, stepRow, zoomRange } from "./graphLayout";
-import { CardActions, CardData, listWanted, nodeTypes } from "./graphCards";
+import { CardActions, CardData, nodeTypes } from "./graphCards";
 
 /**
  * The quest graph: every shown quest as a box of its steps, linked by prerequisites, on a canvas over
@@ -55,11 +52,10 @@ const fitOptions = { padding: 0.15, maxZoom: 1.1 };
 
 const nodeElement = (id: string) => document.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
 
-// Marks a node on screen for a moment
+// Marks a node on screen for a moment, in its priority's colour (ember without one)
 function flash(id: string) {
   const element = nodeElement(id);
   if (!element) return;
-  // The glow takes the card's priority colour
   const card = element.querySelector<HTMLElement>("[data-priority]");
   const mark = card ? getComputedStyle(card).getPropertyValue("--mark").trim() : "";
   element.style.setProperty("--flash", mark || "var(--color-ember)");
@@ -77,17 +73,9 @@ type QuestGraphProps = {
 };
 
 export function QuestGraph(props: QuestGraphProps) {
-  const { model, snapshot } = props;
-  const { inboxId } = snapshot;
-  const moveTargets = useMemo(() => ({ model, inboxId }), [model, inboxId]);
-  const splitContext = useMemo(() => ({ model, snapshot }), [model, snapshot]);
   return (
     <ReactFlowProvider>
-      <MoveTargets.Provider value={moveTargets}>
-        <SplitContext.Provider value={splitContext}>
-          <GraphCanvas {...props} />
-        </SplitContext.Provider>
-      </MoveTargets.Provider>
+      <GraphCanvas {...props} />
     </ReactFlowProvider>
   );
 }
@@ -97,10 +85,9 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   const latestModel = useRef(model);
   latestModel.current = model;
 
-  // A new quest opens straight onto Split, its first steps being the obvious next question
+  // A new quest opens straight onto its add row, its first steps being the obvious next question
   const newQuest = (title: string) => {
     const id = crypto.randomUUID();
-    listWanted.add(id);
     void act("createNode", title, null, id);
     setAddingTo(id);
   };
@@ -163,7 +150,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   useEffect(() => void fontsLoaded.then(() => setFontsReady(true)), []);
   // Worked out again only when the graph or what is open changes, not per drag move
   const { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone, shelvedSteps } = useMemo(
-    () => drawnGraph(model, snapshot.edges, snapshot.inboxId, priorities, view, { addingTo, fontsReady, phone }),
+    () => drawnGraph(model, snapshot.edges, priorities, view, { addingTo, fontsReady, phone }),
     [model, snapshot.edges, collapsed, opened, showingShelved, today, dayStartHour, addingTo, priorities, fontsReady, phone],
   );
   // Each rendered node's quest, whose territory a hover keeps lit
@@ -377,7 +364,6 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         menuOpen: menuFor === node.id,
         look: depth === 0 ? priorities.best.get(node.id) : priorities.marked.get(node.id),
         phone,
-        sortable: depth > 0 && questId === snapshot.inboxId,
         actions,
       };
       const kept = previous.get(node.id);
@@ -414,7 +400,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       built.current.set(node.id, next);
       return next;
     });
-  }, [rendered, model, placements, moving, collapsed, opened, today, dayStartHour, unlocked, addingTo, menuFor, priorities, phone, snapshot.inboxId, actions]);
+  }, [rendered, model, placements, moving, collapsed, opened, today, dayStartHour, unlocked, addingTo, menuFor, priorities, phone, actions]);
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -584,7 +570,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       {quests.length > 0 ? (
         <Panel position="top-left" className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
-            <InlineInput placeholder="+ New quest" onSubmit={newQuest} className="w-52" />
+            <InlineInput placeholder="+ New quest" onSubmit={newQuest} className="graph-field w-52" />
             <button
               type="button"
               onClick={() => setQuestsOpen((open) => !open)}
@@ -628,7 +614,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
                 Start a quest: something you are learning or building.
               </p>
               <div className="pointer-events-auto">
-                <InlineInput placeholder="Name your first quest (Enter)" onSubmit={newQuest} className="w-72 py-2 text-center" />
+                <InlineInput placeholder="Name your first quest (Enter)" onSubmit={newQuest} className="graph-field w-72 py-2 text-center" />
               </div>
             </>
           ) : (
@@ -662,7 +648,7 @@ function showsDone({ opened, today }: ViewChoices, questId: string) {
   return (opened[questId] ?? "") >= today;
 }
 
-// What the graph draws. The quests shown: not shelved or folded, most urgent first, the Inbox last.
+// What the graph draws. The quests shown: not shelved or folded, most urgent first.
 // In each box, its steps most urgent first, less those of a collapsed or folded box, shelved steps
 // (unless the quest shows them) and steps finished on an earlier day (unless the quest was opened
 // today); per quest it counts the last two, shown or not, for the buttons that show them.
@@ -671,7 +657,6 @@ function showsDone({ opened, today }: ViewChoices, questId: string) {
 function drawnGraph(
   model: GraphModel,
   edges: GraphEdge[],
-  inboxId: string,
   priorities: Priorities,
   view: ViewChoices,
   { addingTo, fontsReady, phone }: { addingTo: string | null; fontsReady: boolean; phone: boolean },
@@ -682,7 +667,7 @@ function drawnGraph(
     return finished !== null && dayOf(new Date(finished), view.dayStartHour) < view.today;
   };
   const quests = model.children.get(null) ?? [];
-  const shown = inboxLast(byPriority(quests.filter((quest) => !quest.shelved && !isFolded(model, view, quest.id)), priorities), inboxId);
+  const shown = byPriority(quests.filter((quest) => !quest.shelved && !isFolded(model, view, quest.id)), priorities);
   const rendered: Array<{ node: GraphNode; depth: number; questId: string }> = [];
   const earlierDone = new Map<string, number>();
   // One inside a shelved box counts with the box

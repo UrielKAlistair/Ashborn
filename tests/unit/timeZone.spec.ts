@@ -46,7 +46,6 @@ test("the schedule's days and times follow the set zone", () => {
     progressToday: { date: "2026-10-28", count: 0 },
     kitchen: emptyKitchen,
     settings: { dayStartHour: 4, timeZone: "Asia/Kolkata" },
-    inboxId: "user",
   };
   // 22:00 IST on Wednesday 28 October; Thursday's 06:30 is 01:00 UTC on the 29th
   const alarms = upcomingAlarms(snapshot, new Date("2026-10-28T16:30:00Z"), 2);

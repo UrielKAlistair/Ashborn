@@ -3,15 +3,6 @@ import { useEffect, useState } from "react";
 // The desktop's keys, shown on "?" (never while typing in a field), closed by Escape or a click
 const keys: Array<[string, string]> = [
   ["D", "Done: tick the step in Now"],
-  ["N", "Not now: the step in Now goes to the end of the list for today"],
-  ["S", "Split the step in Now"],
-  ["T", "Start 15 minutes on the step in Now, or stop"],
-  ["/", "Capture a thought"],
-  ["M Q S", "Sorting the Inbox: move it, make it its own quest, split it"],
-  ["1–4", "Sorting: give it a priority (again to remove)"],
-  ["N X", "Sorting: skip it, delete it (X twice)"],
-  ["Ctrl+Alt+Space", "Capture from anywhere on the desktop"],
-  ["Ctrl+Enter", "Add the list in Split"],
   ["Esc", "Close a panel or menu"],
   ["?", "Show these keys"],
 ];

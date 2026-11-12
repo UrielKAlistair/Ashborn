@@ -56,6 +56,12 @@ float word(vec2 bytes) {
   return floor(bytes.x * 255.0 + 0.5) * 256.0 + floor(bytes.y * 255.0 + 0.5);
 }
 
+// A territory's light at distance fromBox from its quest's box: full at the edge, nothing at the reach
+float lightAt(float fromBox) {
+  float t = clamp(fromBox / u_reach, 0.0, 1.0);
+  return exp(-2.2 * t) * (1.0 - smoothstep(0.7, 1.0, t));
+}
+
 void main() {
   vec2 css = vec2(gl_FragCoord.x, u_size.y * u_ratio - gl_FragCoord.y) / u_ratio;
   vec2 p = (css - u_camera.xy) / u_camera.z;
@@ -111,11 +117,10 @@ void main() {
   vec2 low = vec2(word(corner.rg), word(corner.ba)) + u_rectInfo.yz;
   vec2 high = low + vec2(word(extent.rg), word(extent.ba));
   float fromBox = length(max(max(low - p, p - high), 0.0));
-  float t = clamp(fromBox / u_reach, 0.0, 1.0);
-  float light = paint.a * exp(-2.2 * t) * (1.0 - smoothstep(0.7, 1.0, t));
   // While a quest is hovered, every other territory dims, more on paper than in the dark
   float others = u_focus.x > 0.5 && abs(index - u_focus.x) > 0.5 ? u_focus.y : 0.0;
-  light *= 1.0 - (u_dark > 0.5 ? 0.3 : 0.4) * others;
+  float dim = 1.0 - (u_dark > 0.5 ? 0.3 : 0.4) * others;
+  float light = paint.a * dim * lightAt(fromBox);
   vec3 hue = paint.rgb;
   // The light pools round the card, whatever the cells, and shows up the grid's lines where it falls
   float core = line(abs(h - edge), 0.5 * cssPx, px);
@@ -125,9 +130,16 @@ void main() {
     colour = over(colour, hue, light * 0.24);
     colour = over(colour, mix(hue, vec3(1.0), 0.3), light * 0.5 * core);
   } else {
-    // On paper the hue is laid down as a wash, strong by the card, with lines a shade deeper
-    colour = over(colour, hue, light * 0.55);
-    colour = over(colour, hue * 0.6, light * 0.85 * core);
+    // On paper the hue is laid down as a pigment, a little browned so the four sit on the parchment
+    vec3 ink = u_fabric.rgb;
+    vec3 pigment = mix(hue, ink, 0.12);
+    // Board tiles: each cell a flat tile set in a gap, shaded by the light at its centre
+    float centreLight = paint.a * dim * lightAt(length(max(max(low - centre, centre - high), 0.0)));
+    float gap = 0.09 * u_radius;
+    float tile = clamp((edge - gap - h) / px + 0.5, 0.0, 1.0);
+    colour = over(colour, pigment, (0.1 + 0.5 * centreLight) * paint.a * dim * tile);
+    float rim = 0.75 * cssPx;
+    colour = over(colour, mix(pigment, ink, 0.3), (0.25 + 0.5 * centreLight) * paint.a * dim * line(abs(h - (edge - gap - rim)), rim, px));
   }
   gl_FragColor = colour;
 }

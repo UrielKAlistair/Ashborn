@@ -53,7 +53,7 @@ async function serve() {
   // again); unread (offline, say), the default stands until then
   await readSettings(db).then(({ dayStartHour }) => setDayStartHour(dayStartHour), () => undefined);
   const server = new McpServer({ name: "ashborn", version: "0.1.0" });
-  registerTools(server, db, data.session.user.id);
+  registerTools(server, db);
   await server.connect(new StdioServerTransport());
 }
 

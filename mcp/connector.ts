@@ -45,14 +45,14 @@ function oneAtATime(serve: () => Promise<Response>): Promise<Response> {
 // Each request builds its own server: an Edge Function keeps no state between requests. The
 // function runs in UTC, so dates and clock times are read in the user's zone from their settings.
 Deno.serve(
-  pipeline([withOAuthProtectedResource(), withSupabase({ auth: "user" })], (request, { supabase, userClaims }) =>
+  pipeline([withOAuthProtectedResource(), withSupabase({ auth: "user" })], (request, { supabase }) =>
     oneAtATime(async () => {
       const settings = await readSettings(supabase);
       setDayStartHour(settings.dayStartHour);
       setTimeZone(settings.timeZone);
 
       const server = new McpServer({ name: "ashborn", version: "0.1.0" });
-      registerTools(server, supabase, userClaims!.id, () => (settings.timeZone ? null : NO_TIME_ZONE));
+      registerTools(server, supabase, () => (settings.timeZone ? null : NO_TIME_ZONE));
       const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       await server.connect(transport);
       return transport.handleRequest(request);
