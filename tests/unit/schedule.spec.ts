@@ -16,7 +16,6 @@ const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   deadlines: [],
   alarms: [],
   skippedAlarms: [],
-  progressToday: { date: "2026-10-19", count: 0 },
   kitchen: emptyKitchen,
   settings: { dayStartHour: 4, timeZone: null },
   ...parts,

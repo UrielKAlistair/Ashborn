@@ -190,7 +190,7 @@ test("agent tools", async () => {
     const nap = await call("add_alarm", { label: "Nap", in_minutes: 40 });
     expect(nap.ok).toBe(true);
     // The agent is told the phone may not have it yet
-    expect(nap.body).toContain("open Ashborn on the phone");
+    expect(nap.body).toContain("The phone is pushed the change");
     expect((await call("add_alarm", { label: "Wake", time: "06:00", weekdays: ["Mon", "Wed"], kind: "situps" })).ok).toBe(true);
     expect((await call("add_alarm", { label: "Bad", weekdays: ["Mon"] })).ok).toBe(false);
     expect((await call("add_alarm", { label: "Past", time: "16:00", date: "2020-01-01" })).ok).toBe(false);
@@ -227,7 +227,7 @@ test("agent tools", async () => {
 
     const moved = await call("skip_ring", { id: routine, date: day, instead_at: "20:30" });
     expect(moved.ok, moved.body).toBe(true);
-    const replacement = (await db.from("alarms").select("label, at, kind").eq("label", "Portal check (moved from 19:00)").single()).data!;
+    const replacement = (await db.from("alarms").select("label, at, kind").eq("label", "Portal check (moved from 7:00 PM)").single()).data!;
     const at = new Date(replacement.at);
     expect([at.getDate(), at.getHours(), at.getMinutes(), replacement.kind]).toEqual([ahead.getDate(), 20, 30, "plain"]);
     // A second skip of the same date would leave the first move's alarm ringing too
@@ -236,7 +236,7 @@ test("agent tools", async () => {
     expect(again.body).toContain("already skipped");
     expect((await db.from("alarms").select("id").like("label", "Portal check (moved%")).data).toHaveLength(1);
     expect((await call("restore_ring", { id: routine, date: day })).ok).toBe(true);
-    expect((await db.from("alarms").select("id").eq("label", "Portal check (moved from 19:00)")).data).toEqual([]);
+    expect((await db.from("alarms").select("id").eq("label", "Portal check (moved from 7:00 PM)")).data).toEqual([]);
 
     const notThatDay = all.filter((name) => name !== weekday);
     expect((await call("update_routine", { id: routine, weekdays: notThatDay })).ok).toBe(true);

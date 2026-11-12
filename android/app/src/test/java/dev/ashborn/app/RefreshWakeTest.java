@@ -10,13 +10,13 @@ public class RefreshWakeTest {
 
     @Test
     public void wakesFifteenMinutesOn() {
-        assertEquals(NOW + 15 * 60_000L, RefreshWake.nextWake(NOW, 0));
+        assertEquals(NOW + 15 * 60_000L, RefreshWake.nextWake(NOW));
     }
 
     // Doze lets an app's allow-while-idle alarms through at most once per nine minutes
     @Test
     public void theWakeIsNoMoreOftenThanDozeAllows() {
-        assertEquals(true, RefreshWake.nextWake(NOW, 0) - NOW >= 9 * 60_000L);
+        assertEquals(true, RefreshWake.nextWake(NOW) - NOW >= 9 * 60_000L);
     }
 
     // The refresh stays out of a ring's way: going, fired but not yet ringing, or due within a minute
@@ -71,14 +71,5 @@ public class RefreshWakeTest {
     @Test
     public void anAccessTokenOfUnknownExpiryIsRenewed() {
         assertEquals(true, AlarmRefreshWorker.needsRenewing(0, NOW));
-    }
-
-    // A wake near a pending "Time's up" would hold it back in Doze, so it moves to nine minutes after it
-    @Test
-    public void aWakeKeepsClearOfATimeUp() {
-        assertEquals(NOW + 29 * 60_000L, RefreshWake.nextWake(NOW, NOW + 20 * 60_000L));
-        assertEquals(NOW + 19 * 60_000L, RefreshWake.nextWake(NOW, NOW + 10 * 60_000L));
-        assertEquals(NOW + 15 * 60_000L, RefreshWake.nextWake(NOW, NOW + 5 * 60_000L));
-        assertEquals(NOW + 15 * 60_000L, RefreshWake.nextWake(NOW, NOW + 40 * 60_000L));
     }
 }

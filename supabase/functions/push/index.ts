@@ -15,10 +15,10 @@ import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 
 // RefreshWake's 15-minute interval plus a margin: a ring further off reaches the phone by its wake
 const RING_HORIZON = "20 minutes";
-const RING_HORIZON_MS = 20 * 60_000;
 // A normal push waits this long and is dropped if a later one was asked for meanwhile
 const DEBOUNCE_MS = 1500;
 // A call this late no longer rings (the phone sends it straight to missed), so FCM may drop it
+const STALE_CALL = "2 minutes";
 const STALE_CALL_MS = 2 * 60_000;
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 
@@ -34,39 +34,52 @@ Deno.serve(async (request) => {
   }
   const { user_id: userId } = (await request.json()) as { user_id: string; table: string };
 
-  const messages = await messagesFor(userId);
-  if (!messages.some((message) => message.high) && !(await lastAsked(userId))) return Response.json({ sent: 0, debounced: true });
+  // The calls this request claims, and those a phone was sent
+  const claimed: string[] = [];
+  const delivered = new Set<string>();
+  try {
+    const messages = await messagesFor(userId, claimed);
+    // Only a call skips the debounce: a ring due soon is still pushed high, a moment later
+    if (claimed.length === 0 && !(await lastAsked(userId))) return Response.json({ sent: 0, debounced: true });
 
-  const tokens = must(await db.from("push_devices").select("token").eq("user_id", userId)).map((row: { token: string }) => row.token);
-  let sent = 0;
-  for (const token of tokens) {
-    for (const message of messages) {
-      const status = await send(token, message);
-      if (status === "gone") {
-        await db.from("push_devices").delete().eq("token", token);
-        break;
+    const tokens = must(await db.from("push_devices").select("token").eq("user_id", userId)).map((row: { token: string }) => row.token);
+    let sent = 0;
+    for (const token of tokens) {
+      for (const message of messages) {
+        const status = await send(token, message);
+        if (status === "gone") {
+          await db.from("push_devices").delete().eq("token", token);
+          break;
+        }
+        if (status === "sent") {
+          sent++;
+          if (message.data.kind === "call") delivered.add(message.data.id);
+        }
       }
-      if (status === "sent") sent++;
     }
+    return Response.json({ sent });
+  } finally {
+    // A call no phone was sent, whatever stopped it, is unclaimed, so the next push tries it again
+    const undelivered = claimed.filter((id) => !delivered.has(id));
+    if (undelivered.length > 0) must(await db.from("call_pushes").delete().in("alarm_id", undelivered));
   }
-  return Response.json({ sent });
 });
 
-// The refresh, and a message per call due soon. The calls are read here rather than from the
-// trigger, so a call set by any client is pushed alike.
-async function messagesFor(userId: string): Promise<Message[]> {
+// The refresh, and a message per call due soon, each call's id added to `claimed` as it is claimed.
+// The calls are read here rather than from the trigger, so a call set by any client is pushed alike.
+async function messagesFor(userId: string, claimed: string[]): Promise<Message[]> {
   const now = Date.now();
   const sentAt = String(now);
   const dueSoon = must(await db.rpc("push_ring_due_soon", { uid: userId, horizon: RING_HORIZON })) as boolean;
-  const dueCalls = must(
-    await db.from("alarms").select("id, at, label").eq("user_id", userId).eq("sound", "call").eq("enabled", true)
-      .gte("at", new Date(now - STALE_CALL_MS).toISOString()).lte("at", new Date(now + RING_HORIZON_MS).toISOString()),
-  ) as { id: string; at: string; label: string }[];
+  const dueCalls = must(await db.rpc("push_due_calls", { uid: userId, stale: STALE_CALL, horizon: RING_HORIZON })) as { id: string; at: string; label: string }[];
   // Each call once: those this request claims first
   const calls = [];
   for (const call of dueCalls) {
-    const claimed = must(await db.from("call_pushes").upsert({ alarm_id: call.id }, { onConflict: "alarm_id", ignoreDuplicates: true }).select("alarm_id"));
-    if (claimed.length > 0) calls.push(call);
+    const rows = must(await db.from("call_pushes").upsert({ alarm_id: call.id }, { onConflict: "alarm_id", ignoreDuplicates: true }).select("alarm_id"));
+    if (rows.length > 0) {
+      claimed.push(call.id);
+      calls.push(call);
+    }
   }
   const high = dueSoon || calls.length > 0;
   if (high) console.log(`high push for ${userId}: ${calls.length > 0 ? `${calls.length} call(s)` : "ring due soon"}`);
@@ -89,11 +102,17 @@ async function lastAsked(userId: string) {
 }
 
 async function send(token: string, message: Message): Promise<"sent" | "gone" | "failed"> {
-  const response = await fetch(`https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${await accessToken()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ message: { token, data: message.data, android: { priority: message.high ? "HIGH" : "NORMAL", ...(message.ttlMs !== undefined && { ttl: `${Math.ceil(message.ttlMs / 1000)}s` }) } } }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await accessToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: { token, data: message.data, android: { priority: message.high ? "HIGH" : "NORMAL", ...(message.ttlMs !== undefined && { ttl: `${Math.ceil(message.ttlMs / 1000)}s` }) } } }),
+    });
+  } catch (error) {
+    console.error(`FCM unreachable: ${error}`);
+    return "failed";
+  }
   if (response.ok) return "sent";
   const text = await response.text();
   // A token the phone no longer holds (app reinstalled, data cleared)

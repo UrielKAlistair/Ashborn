@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { today } from "../../src/shared/dates";
 import { doneAround, openInside } from "../../src/shared/graphModel";
 import { emptyKitchen } from "../../src/shared/kitchen";
 import { PROGRESS_UNIT } from "../../src/shared/progression";
@@ -44,7 +43,6 @@ const snapshot: Snapshot = {
   deadlines: [],
   alarms: [],
   skippedAlarms: [],
-  progressToday: { date: today(), count: 2 },
   kitchen: emptyKitchen,
   settings: { dayStartHour: 4, timeZone: null },
 };
@@ -54,12 +52,11 @@ test("the open nodes inside a box, at any depth, shelved ones included, done one
   expect(openInside(nodes, "a")).toEqual([]);
 });
 
-test("offline, ticking a box shows it and everything open in it done, each counted as progress", () => {
+test("offline, ticking a box shows it and everything open in it done, each with its XP", () => {
   const delta = previewChange(snapshot, "updateNode", ["box", { done: true }], AT);
   const ticked = new Map(delta.nodes!.map((ticked) => [ticked.id, ticked]));
   expect([...ticked.keys()].sort()).toEqual(["a", "box", "c", "d", "inner"]);
   for (const ticked of delta.nodes!) expect([ticked.completedAt, ticked.ownXp, ticked.lastActive]).toEqual([AT, PROGRESS_UNIT, AT]);
-  expect(delta.progressToday).toEqual({ date: today(), count: 2 + 5 });
 });
 
 test("offline, unticking a box reopens only the box", () => {
@@ -68,9 +65,9 @@ test("offline, unticking a box reopens only the box", () => {
   expect(delta.nodes!.map(({ id }) => id)).toEqual(["box"]);
 });
 
-// Everything ticked today: the box, the box inside it and its step
+// Everything done: the box, the box inside it and its step
 const NOW = new Date().toISOString();
-const allDone = { ...snapshot, progressToday: { date: today(), count: 5 }, nodes: snapshot.nodes.map((each) => (["box", "inner", "d"].includes(each.id) ? { ...each, completedAt: NOW, ownXp: PROGRESS_UNIT } : each)) };
+const allDone = { ...snapshot, nodes: snapshot.nodes.map((each) => (["box", "inner", "d"].includes(each.id) ? { ...each, completedAt: NOW, ownXp: PROGRESS_UNIT } : each)) };
 
 test("the done boxes around a node, out to its quest but never the quest", () => {
   expect(doneAround(allDone.nodes, "inner")).toEqual(["inner", "box"]);
@@ -82,7 +79,6 @@ test("the done boxes around a node, out to its quest but never the quest", () =>
 test("offline, reopening a step inside done boxes reopens them, and not its siblings", () => {
   const delta = previewChange(allDone, "updateNode", ["d", { done: false }], AT);
   expect(delta.nodes!.map(({ id, completedAt }) => [id, completedAt])).toEqual([["d", null], ["inner", null], ["box", null]]);
-  expect(delta.progressToday).toEqual({ date: today(), count: 5 - 3 });
 });
 
 test("offline, a step added or moved into a done box reopens it", () => {
@@ -99,11 +95,4 @@ test("offline, a link the server would refuse is refused at once: across boxes, 
   expect(() => previewChange(linked, "addEdge", [{ from: "inner", to: "a" }], AT)).toThrow("That link would make a loop.");
   expect(() => previewChange(linked, "addEdge", [{ from: "a", to: "a" }], AT)).toThrow("That link would make a loop.");
   expect(previewChange(linked, "addEdge", [{ from: "a", to: "c" }], AT).edges).toEqual([{ from: "a", to: "c" }]);
-});
-
-test("offline, today's count loses only today's ticks: unticking or deleting an older one leaves it", () => {
-  // "b" was ticked on 1 November
-  expect(previewChange(snapshot, "updateNode", ["b", { done: false }], AT).progressToday).toBeUndefined();
-  expect(previewChange(snapshot, "deleteNode", ["box"], AT).progressToday).toBeUndefined();
-  expect(previewChange(allDone, "deleteNode", ["inner"], AT).progressToday).toEqual({ date: today(), count: 5 - 2 });
 });

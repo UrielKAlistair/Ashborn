@@ -214,13 +214,6 @@ public class AlarmPlugin extends Plugin {
         call.resolve();
     }
 
-    // `at` (epoch ms) the end of Now's timer on the step `title`; 0 when no timer runs
-    @PluginMethod
-    public void timeUp(PluginCall call) {
-        TimeUp.set(getContext(), call.getLong("at", 0L), call.getString("title", ""));
-        call.resolve();
-    }
-
     // Keeps the screen on, or lets it sleep again (MainActivity.keepAwake)
     @PluginMethod
     public void keepAwake(PluginCall call) {

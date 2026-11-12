@@ -33,7 +33,6 @@ function quiet(nodes: GraphNode[]) {
     routines: [],
     routineChecks: [],
     alarms: [],
-    progressToday: { date, count: 0 },
     kitchen: emptyKitchen,
     settings: { dayStartHour: 4, timeZone: null },
   };

@@ -8,7 +8,7 @@ Ashborn is a desktop app built with Electron, React, Typescript, and Vite.
 2. Create a [Supabase](https://supabase.com) project, copy `.env.example` to `.env`, and fill in
    the project URL and publishable key (Project Settings → API keys).
 3. Apply the schema: `npx supabase login`, `npx supabase link --project-ref <ref>`,
-   `npx supabase db push`.
+   `npx supabase db push --remote`.
 4. Create your account in the Supabase dashboard (Authentication → Users → Add user, with "Auto
    Confirm User"), then `npm run electron:dev` and sign in.
 

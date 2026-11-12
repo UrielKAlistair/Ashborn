@@ -88,9 +88,6 @@ export type Deadline = {
 };
 export type DeadlinePatch = Partial<Omit<Deadline, "id">>;
 
-// Level-ups and completed steps on `date`
-export type ProgressToday = { date: ISODate; count: number };
-
 // The Kitchen. Amounts are in the base unit of their kind (g, ml, count); a unit says how an
 // amount is shown or was written.
 export const stockUnits = ["g", "kg", "ml", "l", "count"] as const;
@@ -177,7 +174,6 @@ export type Snapshot = {
   deadlines: Deadline[];
   alarms: Alarm[]; // recurring ones, and one-offs from a day back
   skippedAlarms: AlarmSkip[]; // rings skipped, from yesterday on
-  progressToday: ProgressToday;
   kitchen: Kitchen;
   settings: Settings;
 };
@@ -200,7 +196,6 @@ export type Delta = {
   alarms?: Alarm[];
   removedAlarmIds?: string[];
   alarmSkip?: AlarmSkip & { skipped: boolean };
-  progressToday?: ProgressToday;
   kitchen?: Kitchen; // replaces the whole Kitchen
   settings?: Settings;
 };

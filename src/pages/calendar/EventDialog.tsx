@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Popup } from "../../components/Popup";
 import { Switch } from "../../components/Switch";
+import { TimeField } from "../../components/TimeField";
 import { atTime, clockOf, daysBetween, toISODate } from "../../shared/dates";
 import type { GraphModel } from "../../shared/graphModel";
 import type { Alarm, Deadline, ISODate, Snapshot } from "../../shared/types";
-import { field, kindLabels } from "../AlarmsPage";
+import { field, kindLabels } from "../alarmParts";
 import type { Act } from "../home/HomePage";
 import { NodePicker } from "../home/nodePickers";
 import { dayLabel } from "./calendarViews";
@@ -74,7 +75,7 @@ function NewEvent({ date, model, today, act, onClose }: { date: ISODate; model: 
 // A one-time alarm's day, time, label and how it stops; with `alarm`, that alarm's, which can also be
 // switched off or deleted. Only what changed is sent, so a field sent as it was can't win over a change
 // made to it meanwhile on another device.
-function AlarmFields({ alarm, date: initialDate, act, onDone }: { alarm: Alarm | null; date: ISODate; act: Act; onDone: () => void }) {
+export function AlarmFields({ alarm, date: initialDate, act, onDone }: { alarm: Alarm | null; date: ISODate; act: Act; onDone: () => void }) {
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState(alarm ? clockOf(new Date(alarm.at!)) : "09:00");
   const [label, setLabel] = useState(alarm?.label ?? "");
@@ -102,7 +103,7 @@ function AlarmFields({ alarm, date: initialDate, act, onDone }: { alarm: Alarm |
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
         <input type="date" aria-label="Day" value={date} onChange={(event) => setDate(event.target.value)} className={`${field} min-w-0 flex-1`} />
-        <input type="time" aria-label="Time" value={time} onChange={(event) => setTime(event.target.value)} className={`${field} w-28 font-mono tabular-nums`} />
+        <TimeField label="Time" value={time} onChange={setTime} className={`${field} w-32`} />
       </div>
       <input value={label} onChange={(event) => setLabel(event.target.value)} onKeyDown={(event) => event.key === "Enter" && !event.nativeEvent.isComposing && save()} placeholder="What for (optional)" aria-label="Label" className={`${field} w-full`} />
       <div className="flex items-center gap-3">
@@ -165,7 +166,7 @@ function DeadlineFields({ deadline, date: initialDate, model, today, act, onDone
       <input autoFocus={!deadline} value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.key === "Enter" && !event.nativeEvent.isComposing && save()} placeholder="What is due" aria-label="Deadline" className={`${field} w-full`} />
       <div className="flex flex-wrap gap-2">
         <input type="date" aria-label="Due" value={date} onChange={(event) => setDate(event.target.value)} className={`${field} min-w-0 flex-1`} />
-        <input type="time" aria-label="Alarm on the day (optional)" title="Alarm on the day (optional)" value={alarmTime} onChange={(event) => setAlarmTime(event.target.value)} className={`${field} w-28 font-mono tabular-nums`} />
+        <TimeField label="Alarm on the day (optional)" optional value={alarmTime} onChange={setAlarmTime} className={`${field} w-32`} />
       </div>
       {date ? <p className="text-[12px] text-muted">{days < 0 ? `${-days}d late` : days === 0 ? "Due today" : `Due in ${days}d`}</p> : null}
       <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={nodeId} onChange={setNodeId} className={`${field} w-full`} />

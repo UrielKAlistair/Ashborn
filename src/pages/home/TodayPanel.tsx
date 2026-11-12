@@ -1,7 +1,8 @@
 import { DayStartSelect } from "../../components/DayStartSelect";
+import { TimeField } from "../../components/TimeField";
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
-import { daysBetween, today, week, weekdayOf } from "../../shared/dates";
+import { daysBetween, showTime, today, week, weekdayOf } from "../../shared/dates";
 import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../../shared/priority";
 import { byTime } from "../../shared/schedule";
@@ -175,7 +176,7 @@ function Routines({ snapshot, act, date, weekday }: { snapshot: Snapshot; act: A
         routines.map((routine) => (
           <div key={routine.id} className={`group ${rowClass}`}>
             <Tick done={checked.has(routine.id)} onClick={() => void act("setRoutineCheck", routine.id, date, !checked.has(routine.id))} className="mt-0.5" />
-            {timed ? <span className="mt-px w-10 shrink-0 font-mono text-[11.5px] text-muted tabular-nums">{routine.time}</span> : null}
+            {timed ? <span className="mt-px w-14 shrink-0 font-mono text-[11.5px] text-muted tabular-nums">{routine.time ? showTime(routine.time) : ""}</span> : null}
             <div className="min-w-0 flex-1">
               <p className={`text-[13px] leading-snug ${checked.has(routine.id) ? "text-muted line-through decoration-ink/25" : "text-ink/90"}`}>{routine.title}</p>
               {routine.alarm !== "none" || routine.cue ? (
@@ -336,7 +337,7 @@ function RoutineForm({ act }: { act: Act }) {
         ))}
       </div>
       <div className="flex gap-2">
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} title="Time (optional)" className={`${fieldClass} w-24 `} />
+        <TimeField label="Time (optional)" optional value={time} onChange={setTime} className={`${fieldClass} w-32`} />
         <select value={alarm} disabled={!time} onChange={(e) => setAlarm(e.target.value as AlarmKind)} className={`${fieldClass} disabled:opacity-40`}>
           {(Object.keys(alarmLabels) as AlarmKind[]).map((kind) => (
             <option key={kind} value={kind}>
@@ -381,7 +382,7 @@ function DeadlineFields({ deadline, act, model, onDone }: { deadline: Deadline |
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && submit()} placeholder="Deadline" className={fieldClass} />
       <div className="flex gap-2">
         <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={fieldClass} />
-        <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} title="Alarm on the day (optional)" className={`${fieldClass} w-24`} />
+        <TimeField label="Alarm on the day (optional)" optional value={alarmTime} onChange={setAlarmTime} className={`${fieldClass} w-32`} />
       </div>
       <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={nodeId} onChange={setNodeId} className={fieldClass} />
       <FormButtons onCancel={onDone} onSubmit={submit} submitLabel={deadline ? "Save" : "Add"} />

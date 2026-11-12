@@ -11,7 +11,7 @@ import type { RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/s
 import { addDays, today } from "../shared/dates";
 import { PROGRESS_UNIT } from "../shared/progression";
 import type { Delta, Snapshot } from "../shared/types";
-import { readKitchen, readProgressToday, readSettings, toAlarm, toDeadline, toEdge, toNode, toRoutine, type AlarmRow, type DeadlineRow, type NodeRow, type RoutineRow } from "./api";
+import { readKitchen, readSettings, toAlarm, toDeadline, toEdge, toNode, toRoutine, type AlarmRow, type DeadlineRow, type NodeRow, type RoutineRow } from "./api";
 import { isConnectionError } from "./offline";
 
 type Row = Record<string, unknown>;
@@ -43,7 +43,11 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     startedReads.set(key, started);
     return Promise.resolve(read).then((delta) => (startedReads.get(key) === started ? delta : {}));
   };
-  const emitProgress = () => emit(latest("progress", readProgressToday(db).then((progressToday) => ({ progressToday }))));
+  // A row deleted: a read of it still on its way would bring it back, so its result is dropped
+  const deleted = (key: string, delta: Delta) => {
+    startedReads.set(key, (startedReads.get(key) ?? 0) + 1);
+    emit(delta);
+  };
 
   // A row's change as it arrived if the row is on screen, or as it is now in the database
   const checked = <R>(key: string, onScreen: (snapshot: Snapshot) => boolean, row: R, read: () => PromiseLike<{ data: unknown }>, toDelta: (row: R) => Delta) => {
@@ -59,15 +63,12 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     const before = snapshot?.nodes.find((node) => node.id === row.id);
     if (!before) return readXp(row.id);
     const loggedXp = before.ownXp - (before.completedAt ? PROGRESS_UNIT : 0);
-    // Ticking or unticking elsewhere moves today's count
-    if (before.completedAt !== row.completed_at) emitProgress();
     return { nodes: [toNode({ ...row, logged_xp: loggedXp })] };
   };
 
   // The node with its XP as stored. A level-up elsewhere re-reads it rather than adding to it, so
   // the echo of our own level-up does not count twice.
   const readXp = (nodeId: string) => {
-    emitProgress();
     const read = db.from("nodes_with_xp").select().eq("id", nodeId).maybeSingle();
     return latest(`xp:${nodeId}`, Promise.resolve(read).then(({ data }) => ({ nodes: data ? [toNode(data as NodeRow)] : [] })));
   };
@@ -81,10 +82,10 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
   const on = (table: string, handle: (change: RealtimePostgresChangesPayload<Row>) => void) => ({ table, handle });
   const handlers = [
     on("graph_nodes", (change) =>
-      emit(change.eventType === "DELETE" ? { removedNodeIds: [change.old.id as string] } : nodeChanged(change.new as NodeRow)),
+      change.eventType === "DELETE" ? deleted(`xp:${change.old.id}`, { removedNodeIds: [change.old.id as string] }) : emit(nodeChanged(change.new as NodeRow)),
     ),
     on("graph_edges", (change) => {
-      if (change.eventType === "DELETE") return emit({ removedEdges: [toEdge(change.old as EdgeRow)] });
+      if (change.eventType === "DELETE") return deleted(`edge:${change.old.from_id}:${change.old.to_id}`, { removedEdges: [toEdge(change.old as EdgeRow)] });
       const row = change.new as EdgeRow;
       emit(
         checked(
@@ -100,7 +101,7 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
       if (change.eventType === "INSERT") emit(readXp(change.new.node_id as string));
     }),
     on("routines", (change) => {
-      if (change.eventType === "DELETE") return emit({ removedRoutineIds: [change.old.id as string] });
+      if (change.eventType === "DELETE") return deleted(`routine:${change.old.id}`, { removedRoutineIds: [change.old.id as string] });
       const row = change.new as RoutineRow;
       emit(
         checked(
@@ -123,7 +124,8 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     on("deadlines", (change) => {
       const row = change.new as DeadlineRow;
       if (change.eventType === "DELETE" || row.done_at) {
-        return emit({ removedDeadlineIds: [(change.eventType === "DELETE" ? change.old.id : row.id) as string] });
+        const id = (change.eventType === "DELETE" ? change.old.id : row.id) as string;
+        return deleted(`deadline:${id}`, { removedDeadlineIds: [id] });
       }
       emit(
         checked(
@@ -136,7 +138,7 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
       );
     }),
     on("alarms", (change) => {
-      if (change.eventType === "DELETE") return emit({ removedAlarmIds: [change.old.id as string] });
+      if (change.eventType === "DELETE") return deleted(`alarm:${change.old.id}`, { removedAlarmIds: [change.old.id as string] });
       const row = change.new as AlarmRow;
       emit(
         checked(

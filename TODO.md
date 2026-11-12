@@ -38,6 +38,9 @@ Only open work is listed here. What is built, and why it is built that way, is i
         HyperOS turns "Floating notifications" and "Lock screen notifications" off by default for
         a new channel, which on its own would leave only a quiet notification in the shade
         (inferred from HyperOS's known defaults, not checked on this phone).
+- [ ] Decide: the Alarms screen's Today lists rings before midnight, so a quick alarm set at 23:45 "in 30 min"
+      shows nowhere on that screen (only on the Calendar). Run Today to the day-start hour (04:00) instead,
+      as routines count their day?
 - [ ] Try sync across real devices: change something on the phone offline and the same thing on
       the desktop, and see the later change kept.
 - [ ] Check the AppImage starts at login: run `scripts/install-appimage.sh`, log out and in,
@@ -45,9 +48,6 @@ Only open work is listed here. What is built, and why it is built that way, is i
 
 ## Redesign follow-ups (from peer-c's reviews, 2026-11-03)
 
-- [ ] The phone's quiet "Time's up" (D4, built as design 231) is untested on a phone: run a time box with the
-      app closed and see the notice.
-- [ ] The timer and the put-off counts are per device, not synced (D5): fine unless it bothers in use.
 - [ ] The re-read after reconnecting waits for an undocumented Realtime message (D6); live-gap.spec catches a
       change in it.
 

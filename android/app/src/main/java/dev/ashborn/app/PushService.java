@@ -53,13 +53,19 @@ public class PushService extends FirebaseMessagingService {
             priorityName(message.getOriginalPriority()), priorityName(message.getPriority()), outcome);
     }
 
-    // Arms the call in the push; one already too late is reported missed instead
+    // Arms the call in the push; one already too late is reported missed instead, and one that has rung
+    // (a push delivered twice, or late after a refresh rang it) is left
     private void arm(Map<String, String> data, long now) throws JSONException {
         String label = data.get("label");
         long at = Long.parseLong(data.get("at"));
         Alarm call = new Alarm("alarm:" + data.get("id") + "@" + at, at, label == null || label.isEmpty() ? "Alarm" : label, "plain", Alarm.CALL);
-        if (AlarmService.staleCall(call, now)) AlarmService.notifyMissed(this, call);
-        else AlarmScheduler.push(this, call);
+        if (AlarmScheduler.rung(this, call.key)) return;
+        if (AlarmService.staleCall(call, now)) {
+            AlarmScheduler.fired(this, call.key);
+            AlarmService.notifyMissed(this, call);
+        } else {
+            AlarmScheduler.push(this, call);
+        }
     }
 
     // Runs the background refresh, as RefreshWake does: not near a ring, whose process it could take down.

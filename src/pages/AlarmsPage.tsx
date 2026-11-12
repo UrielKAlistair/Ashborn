@@ -1,31 +1,29 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Popup } from "../components/Popup";
 import { Switch } from "../components/Switch";
+import { TimeField } from "../components/TimeField";
 import { alarmsAvailable } from "../lib/alarms";
-import { SITUPS_TO_STOP, STEPS_TO_STOP } from "../lib/motion";
-import { addDays, clockOf, startOfDay, toISODate, week } from "../shared/dates";
-import { nextOccurrence, upcomingAlarms, type AlarmInstance } from "../shared/schedule";
+import { addDays, atTime, clockOf, showTime, startOfDay, toISODate, week } from "../shared/dates";
+import { movedLabel, nextOccurrence, upcomingAlarms, type AlarmInstance } from "../shared/schedule";
 import type { Alarm, Snapshot, Weekday } from "../shared/types";
 import type { Act } from "./home/HomePage";
+import { field, kindLabels } from "./alarmParts";
+import { AlarmFields } from "./calendar/EventDialog";
 
 /**
  * The Alarms screen, in two views. Today: everything still to ring today, from every source (the
  * user's alarms, routines, deadlines, meal reminders), each with a switch that skips that one ring.
- * Repeating: the user's repeating alarms, each with a switch that turns it off on every day; a tap
- * opens it to edit or delete. A new alarm is set in a pop-up from the round + button: a repeating
- * one, or a one-time one within the next day. One-time alarms further ahead, and editing any
- * one-time alarm, belong to the Calendar (calendar/CalendarPage.tsx).
+ * A tap there changes that ring alone: a one-time alarm opens in the Calendar's form
+ * (calendar/EventDialog.tsx), which can move it to another day; a ring of a repeating alarm or a
+ * routine can be moved to another time that day (MoveRing). Repeating: the user's repeating alarms,
+ * each with a switch that turns it off on every day; a tap edits it for every day.
+ * A new alarm is set in a pop-up from the round + button: a repeating one, or a one-time one within
+ * the next day; one-time alarms further ahead are set on the Calendar.
  * Rings are computed here from the snapshot (shared/schedule.ts), as the phone computes them.
  */
 
 // One-tap alarms, in minutes from now
 const QUICK_MINUTES = [10, 30, 60, 120];
-
-export const kindLabels: Record<Alarm["kind"], string> = {
-  plain: "Plain",
-  walk: `Walk ${STEPS_TO_STOP} steps`,
-  situps: `${SITUPS_TO_STOP} sit-ups`,
-};
 
 // Where a ring comes from, by its key's prefix
 const sourceLabels: Record<string, string> = { alarm: "Alarm", routine: "Routine", deadline: "Deadline", meal: "Meal" };
@@ -37,6 +35,8 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
   // The alarm as the pop-up opened on it, which the form starts from
   const opened = useRef<Alarm | null>(null);
   const editing = editingId === "new" ? "new" : (snapshot.alarms.find((alarm) => alarm.id === editingId) ?? null);
+  // The ring of a repeating alarm or a routine being moved, that day only
+  const [moving, setMoving] = useState<AlarmInstance | null>(null);
 
   const save = (alarm: Omit<Alarm, "id" | "enabled">) => {
     if (editing === "new") void act("createAlarm", { ...alarm, id: crypto.randomUUID(), enabled: true });
@@ -47,6 +47,11 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
       if (Object.keys(changed).length > 0) void act("updateAlarm", editing.id, changed);
     }
     setEditingId(null);
+  };
+
+  const edit = (alarm: Alarm) => {
+    opened.current = alarm;
+    setEditingId(alarm.id);
   };
 
   const toggle = "rounded-lg border border-ink/12 px-3 py-1.5 text-[12.5px] text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11";
@@ -71,10 +76,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
 
           {alarmsAvailable ? null : <p className="-mt-3 text-[11.5px] text-muted">They ring on your phone.</p>}
 
-          {view === "today" ? <TodayRings snapshot={snapshot} act={act} /> : <AllAlarms alarms={snapshot.alarms} act={act} onEdit={(alarm) => {
-                opened.current = alarm;
-                setEditingId(alarm.id);
-              }} />}
+          {view === "today" ? <TodayRings snapshot={snapshot} act={act} onEdit={edit} onMove={setMoving} /> : <AllAlarms alarms={snapshot.alarms} act={act} onEdit={edit} />}
         </section>
       </div>
 
@@ -87,7 +89,17 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
         +
       </button>
 
-      {editing ? (
+      {moving ? (
+        <Popup label="Move this ring" onClose={() => setMoving(null)}>
+          <MoveRing ring={moving} snapshot={snapshot} act={act} onDone={() => setMoving(null)} />
+        </Popup>
+      ) : null}
+
+      {editing && editing !== "new" && editing.at ? (
+        <Popup label="Edit alarm" onClose={() => setEditingId(null)}>
+          <AlarmFields alarm={editing} date={toISODate(new Date(editing.at))} act={act} onDone={() => setEditingId(null)} />
+        </Popup>
+      ) : editing ? (
         <Popup label={editing === "new" ? "New alarm" : "Edit alarm"} onClose={() => setEditingId(null)}>
           {editing === "new" ? (
             <div className="flex flex-wrap gap-2">
@@ -124,8 +136,9 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
 
 // What rings before midnight, skipped rings included (switched off), soonest first. Two days are
 // asked for, since a routine belongs to the app's day, which can start after midnight; each minute
-// drops the rings that have passed.
-function TodayRings({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
+// drops the rings that have passed. A ring switched back on rings at its own time again, so the
+// alarm a move made for it goes.
+function TodayRings({ snapshot, act, onEdit, onMove }: { snapshot: Snapshot; act: Act; onEdit: (alarm: Alarm) => void; onMove: (ring: AlarmInstance) => void }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -140,9 +153,19 @@ function TodayRings({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
     <RowList>
       {rings.map((ring) => {
         const on = !skipped.has(ring.key);
+        const alarm = ownAlarm(ring, snapshot);
+        const repeating = ring.key.startsWith("routine:") || Boolean(alarm?.time);
+        const onOpen = repeating ? () => onMove(ring) : alarm ? () => onEdit(alarm) : undefined;
         return (
-          <Row key={ring.key} time={clockOf(ring.at)} title={ring.title} detail={detailOf(ring, snapshot)} dim={!on}>
-            <Switch label={`${ring.title} rings today`} on={on} onChange={(rings) => void act("setAlarmSkip", ring.key, toISODate(ring.at), !rings)} />
+          <Row key={ring.key} time={clockOf(ring.at)} title={ring.title} detail={detailOf(ring, snapshot)} dim={!on} onOpen={onOpen}>
+            <Switch
+              label={`${ring.title} rings today`}
+              on={on}
+              onChange={(rings) => {
+                void act("setAlarmSkip", ring.key, toISODate(ring.at), !rings);
+                if (rings) for (const moved of movedCopies(ring, snapshot)) void act("deleteAlarm", moved.id);
+              }}
+            />
           </Row>
         );
       })}
@@ -175,11 +198,16 @@ function RowList({ children }: { children: ReactNode }) {
 
 // A ring or an alarm: its time and what it is, then its switch. With `onOpen`, the time and text
 // are a button that opens it. With `days` (a repeating alarm) it shows the days as a strip of the
-// week, then how it stops, in place of `detail`. The time is in Silkscreen, a square pixel face.
+// week, then how it stops, in place of `detail`. The time (HH:MM) shows on a 12-hour clock in
+// Silkscreen, a square pixel face.
 function Row({ time, title, detail, days, dim, onOpen, children }: { time: string; title: string; detail: string; days?: { weekdays: Weekday[]; stops: string }; dim: boolean; onOpen?: () => void; children: ReactNode }) {
+  const [clock, half] = showTime(time).split(" ");
   const content = (
     <>
-      <span className="w-[5.2ch] shrink-0 leading-none tabular-nums text-ember font-['Silkscreen'] text-[27px]">{time}</span>
+      <span className="flex shrink-0 items-baseline gap-1 leading-none text-ember font-['Silkscreen']">
+        <span className="w-[5.2ch] text-right tabular-nums text-[27px]">{clock}</span>
+        <span className="w-[2ch] text-[11px]">{half}</span>
+      </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] text-ink/85 [overflow-wrap:anywhere]">{title}</span>
         {days ? (
@@ -207,10 +235,54 @@ function Row({ time, title, detail, days, dim, onOpen, children }: { time: strin
   );
 }
 
+// Moves one ring of a repeating alarm or a routine to another time on its day: the ring is skipped
+// and a one-off alarm named for it (movedLabel) rings instead, replacing any an earlier move made
+function MoveRing({ ring, snapshot, act, onDone }: { ring: AlarmInstance; snapshot: Snapshot; act: Act; onDone: () => void }) {
+  const was = clockOf(ring.at);
+  const day = toISODate(ring.at);
+  const [time, setTime] = useState(was);
+  const at = time ? atTime(day, time) : null;
+  const passed = at !== null && at.getTime() <= Date.now();
+
+  const move = () => {
+    if (!at || passed) return;
+    for (const moved of movedCopies(ring, snapshot)) void act("deleteAlarm", moved.id);
+    void act("setAlarmSkip", ring.key, day, true);
+    void act("createAlarm", { id: crypto.randomUUID(), label: movedLabel(ring.title, was), kind: ring.kind, sound: ring.sound, at: at.toISOString(), time: null, weekdays: [], enabled: true });
+    onDone();
+  };
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[13px] text-ink/85">{ring.title}</p>
+      <p className="text-[11.5px] text-muted">Today only: it rings at {was} on its other days.</p>
+      <div className="flex items-center gap-3">
+        <TimeField label="Ring at" value={time} onChange={setTime} className={`${field} w-36 text-base`} />
+        <button type="button" onClick={move} disabled={!at || passed || time === was} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
+          Move
+        </button>
+      </div>
+      {passed ? <p className="text-[11.5px] text-muted">That time has passed.</p> : null}
+    </div>
+  );
+}
+
+// The one-off alarms moves of `ring` made, on its day
+function movedCopies(ring: AlarmInstance, snapshot: Snapshot) {
+  const label = movedLabel(ring.title, clockOf(ring.at));
+  return snapshot.alarms.filter((alarm) => alarm.at && alarm.label === label && toISODate(new Date(alarm.at)) === toISODate(ring.at));
+}
+
+// The user's own alarm a ring comes from, if it comes from one
+function ownAlarm(ring: AlarmInstance, snapshot: Snapshot) {
+  const [source, rest] = ring.key.split(":");
+  return source === "alarm" ? snapshot.alarms.find((candidate) => candidate.id === rest.split("@")[0]) : undefined;
+}
+
 // A ring's source, and for the user's own alarms how it stops
 function detailOf(ring: AlarmInstance, snapshot: Snapshot) {
-  const [source, rest] = ring.key.split(":");
-  const alarm = source === "alarm" ? snapshot.alarms.find((candidate) => candidate.id === rest.split("@")[0]) : undefined;
+  const source = ring.key.split(":")[0];
+  const alarm = ownAlarm(ring, snapshot);
   const stops = alarm && alarm.kind !== "plain" ? ` · ${kindLabels[alarm.kind].toLowerCase()}` : "";
   return `${sourceLabels[source] ?? "Alarm"}${stops}`;
 }
@@ -232,7 +304,7 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <input type="time" aria-label="Time" value={time} onChange={(event) => setTime(event.target.value)} className={`${field} w-28 font-mono text-base tabular-nums`} />
+        <TimeField label="Time" value={time} onChange={setTime} className={`${field} w-36 text-base`} />
         <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Label (optional)" aria-label="Label" className={`${field} min-w-0 flex-1`} />
       </div>
       <div className="flex gap-1">
@@ -285,6 +357,3 @@ function daysText(days: Weekday[]) {
   if (days.length === 7) return "every day";
   return week.filter((weekday) => days.includes(weekday)).join(" ");
 }
-
-export const field =
-  "rounded-lg border border-ink/10 bg-canvas/60 px-3 py-1.5 text-[13px] text-ink/90 placeholder:text-ink/35 focus:border-ember/60 focus:outline-none phone:min-h-11";

@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { addDays, daysBetween, week } from "../../shared/dates";
+import { addDays, daysBetween, showTime, week } from "../../shared/dates";
 import type { ISODate } from "../../shared/types";
 import type { Act } from "../home/HomePage";
 import { Tick } from "../home/Tick";
-import { kindLabels } from "../AlarmsPage";
+import { kindLabels } from "../alarmParts";
 import { monthGrid, overdue, weekStart, type CalendarEvent } from "./calendarEvents";
 
 /**
@@ -217,7 +217,7 @@ function EventRow({ event, today, onOpen, act }: { event: CalendarEvent; today: 
           <span className="block text-[13px] leading-snug text-ink/90 [overflow-wrap:anywhere]">{event.title}</span>
           <span className="block text-[11px] text-muted">{detailOf(event, today, off)}</span>
         </span>
-        {event.time ? <span className="shrink-0 font-mono text-[13px] tabular-nums text-ink/80">{event.time}</span> : null}
+        {event.time ? <span className="shrink-0 font-mono text-[13px] tabular-nums text-ink/80">{showTime(event.time)}</span> : null}
       </button>
     </div>
   );
@@ -315,9 +315,9 @@ function detailOf(event: CalendarEvent, today: ISODate, off: boolean) {
 
 // The same, shorter, for a narrow column: an alarm's time first, a deadline's alarm last
 function cardDetail(event: CalendarEvent, today: ISODate, off: boolean) {
-  if (event.kind === "alarm") return `${event.time}${event.alarm.kind === "plain" ? "" : ` · ${kindLabels[event.alarm.kind].toLowerCase()}`}${off ? " · off" : ""}`;
+  if (event.kind === "alarm") return `${showTime(event.time)}${event.alarm.kind === "plain" ? "" : ` · ${kindLabels[event.alarm.kind].toLowerCase()}`}${off ? " · off" : ""}`;
   const days = daysBetween(today, event.date);
-  return `${days < 0 ? `${-days}d late` : "Due"}${event.time ? ` · alarm ${event.time}` : ""}`;
+  return `${days < 0 ? `${-days}d late` : "Due"}${event.time ? ` · alarm ${showTime(event.time)}` : ""}`;
 }
 
 function BellMark() {

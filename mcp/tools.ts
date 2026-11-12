@@ -18,7 +18,7 @@ import { buildGraphModel, isDone, isFinished, questOf, statKeys, trainedStats, t
 import { addDays, atTime, currentTimeZone, dayOf, daysBetween, setDayStartHour, today, toISODate, week, weekdayOf } from "../src/shared/dates";
 import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, sameName, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
-import { byTime, nextOccurrence, onDayAt } from "../src/shared/schedule";
+import { byTime, movedLabel, nextOccurrence, onDayAt } from "../src/shared/schedule";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../src/shared/priority";
 import { goneQuiet } from "../src/shared/goneQuiet";
 import { mealDaysAhead, mealDaysBack, mealSlots, stockUnits, type Alarm, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type DeadlinePatch, type RoutinePatch, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
@@ -30,8 +30,7 @@ const TITLE_MAX = 300;
 const BODY_MAX = 20_000;
 const LIST_MAX = 300;
 
-// Ends every reply that sets something to ring (run adds the full stop): the phone learns of it when Ashborn is opened there or
-// on its background refresh, which Android can hold back for hours while the phone sleeps
+// Ends every reply that sets something to ring (run adds the full stop): how soon the phone learns of it
 const RINGS_ON_PHONE =
   "The phone is pushed the change at once; asleep, it gets it at once if a ring is due within 20 minutes, else within about 15 minutes (Settings > Sync now on the phone shows what it holds)";
 
@@ -519,7 +518,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
       if (moved && moved.getTime() <= Date.now()) return failure(`${day} ${instead_at} has passed.`);
       const alarmId = crypto.randomUUID();
       const changes = [() => api.setAlarmSkip(ring.key, day, true)];
-      if (moved) changes.push(() => api.createAlarm({ id: alarmId, label: movedLabel(ring), kind: ring.kind, at: moved.toISOString(), time: null, weekdays: [], enabled: true, sound: "default" }));
+      if (moved) changes.push(() => api.createAlarm({ id: alarmId, label: movedLabel(ring.title, ring.time), kind: ring.kind, at: moved.toISOString(), time: null, weekdays: [], enabled: true, sound: "default" }));
       const when = (at: Date) => at.toLocaleString(undefined, { timeZone: currentTimeZone() });
       return run(
         changes,
@@ -901,10 +900,9 @@ async function run(changes: Array<() => Promise<Delta>>, done: string, labels: s
 // `dayOf` gives the date a moment belongs to, as the ring counts days
 type Ring = { key: string; title: string; kind: Alarm["kind"] | null; time: string; weekdays: string[]; at: (time: string) => Date; dayOf: (at: Date) => string };
 
-// A moved ring's one-off alarm is named for the ring, so restore_ring can find it
-const movedLabel = (ring: Ring) => `${ring.title} (moved from ${ring.time})`;
+// The one-off alarms a move of the ring made (movedLabel), for restore_ring to delete
 const movedAlarms = (snapshot: Snapshot, ring: Ring, day: string) =>
-  snapshot.alarms.filter((alarm) => alarm.at && alarm.label === movedLabel(ring) && ring.dayOf(new Date(alarm.at)) === day);
+  snapshot.alarms.filter((alarm) => alarm.at && alarm.label === movedLabel(ring.title, ring.time) && ring.dayOf(new Date(alarm.at)) === day);
 
 // How far off a due date is, in words: an open deadline can be past
 const dueIn = (days: number) => (days === 0 ? "today" : days > 0 ? `in ${days} ${days === 1 ? "day" : "days"}` : `overdue by ${-days} ${days === -1 ? "day" : "days"}`);

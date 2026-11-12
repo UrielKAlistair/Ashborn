@@ -54,6 +54,12 @@ export function clockOf(moment: Date): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+// A clock time as it is shown, on a 12-hour clock: "19:05" reads "7:05 PM", "00:30" reads "12:30 AM"
+export function showTime(time: string): string {
+  const [hour, minute] = time.split(":").map(Number);
+  return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+}
+
 export function today(): ISODate {
   return dayOf(new Date());
 }

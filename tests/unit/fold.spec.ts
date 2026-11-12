@@ -27,7 +27,6 @@ const model = (nodes: GraphNode[]) =>
     routineChecks: [],
     deadlines: [],
     alarms: [],
-    progressToday: { date: "2026-10-28", count: 0 },
     kitchen: emptyKitchen,
     settings: { dayStartHour: 4, timeZone: null },
   } satisfies Snapshot);

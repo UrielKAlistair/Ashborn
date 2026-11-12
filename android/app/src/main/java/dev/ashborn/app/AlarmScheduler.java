@@ -20,7 +20,8 @@ import java.util.Set;
 // now are stored on the phone, so they survive the app closing and are re-armed after a reboot.
 // The app and the background refresh both schedule, so scheduling is synchronized. A call pushed to
 // the phone (PushService) is held apart from the schedule until it rings, so a schedule built from
-// rows read before the call existed does not drop it.
+// rows read before the call existed does not drop it. A call already due rings at once, from its push
+// or from a refresh that finds it, but only once: the calls that have rung are remembered (FIRED_CALLS).
 final class AlarmScheduler {
     private static final String PREFS = "ashborn-alarms";
     private static final String SCHEDULED = "scheduled";
@@ -30,6 +31,9 @@ final class AlarmScheduler {
     private static final String PUSHED = "pushed";
     private static final String PUSHED_AT = "pushedAt";
     private static final String HANDED_AT_PREFIX = "handedAt:";
+    private static final String FIRED_CALLS = "firedCalls";
+    // How long a rung (or missed) call is remembered: past this it is stale and never rings again anyway
+    private static final long FIRED_KEPT_MS = 2 * AlarmService.CALL_STALE_MS;
     private static final long SNOOZE_MS = 10 * 60_000;
 
     static final String EXTRA_ALARM = "alarm";
@@ -46,6 +50,7 @@ final class AlarmScheduler {
         long now = System.currentTimeMillis();
         List<Alarm> snoozed = load(context, SNOOZED);
         List<Pushed> pushed = loadPushed(context);
+        Set<String> fired = firedCalls(context, now).keySet();
         Map<String, Alarm> byKey = new LinkedHashMap<>();
         JSONArray scheduled = new JSONArray();
         for (Alarm alarm : alarms) {
@@ -76,8 +81,9 @@ final class AlarmScheduler {
         // Stored first, and each alarm set on its own, so one the system refuses (exact alarms not
         // allowed) neither loses the schedule nor stops the alarms after it from being set
         prefs(context).edit().putString(SCHEDULED, scheduled.toString()).putString(SNOOZED, stillSnoozed.toString()).putString(PUSHED, stillPushed.toString()).apply();
-        for (Alarm alarm : byKey.values()) {
-            if (alarm.at <= now) continue;
+        for (Alarm scheduledAlarm : byKey.values()) {
+            Alarm alarm = due(scheduledAlarm, now, fired);
+            if (alarm == null) continue;
             try {
                 manager.setAlarmClock(new AlarmManager.AlarmClockInfo(alarm.at, openAppIntent(context)), fireIntent(context, alarm));
             } catch (RuntimeException e) {
@@ -106,10 +112,12 @@ final class AlarmScheduler {
         return prefs(context).getLong(HANDED_AT_PREFIX + by, 0);
     }
 
-    // Arms a call pushed to the phone at once, ahead of any refresh; one already due rings now
+    // Arms a call pushed to the phone at once, ahead of any refresh; one that has rung already (the
+    // push delivered twice) is left
     static synchronized void push(Context context, Alarm call) throws JSONException {
         long now = System.currentTimeMillis();
-        Alarm armed = call.at > now ? call : new Alarm(call.key, now + 1000, call.title, call.kind, call.sound);
+        Alarm armed = due(call, now, firedCalls(context, now).keySet());
+        if (armed == null) return;
         List<Pushed> pushed = new ArrayList<>();
         for (Pushed other : loadPushed(context)) if (!other.alarm.key.equals(call.key)) pushed.add(other);
         pushed.add(new Pushed(armed, now));
@@ -117,6 +125,44 @@ final class AlarmScheduler {
         for (Pushed one : pushed) array.put(one.toJson());
         prefs(context).edit().putString(PUSHED, array.toString()).apply();
         schedule(context, load(context, SCHEDULED), 0);
+    }
+
+    // An alarm as armed at `now`, or null if it is not to ring: one still ahead as it is; a call already
+    // due, not yet rung (`fired`) and not stale, a second from now under its own key; anything else past, not
+    static Alarm due(Alarm alarm, long now, Set<String> fired) {
+        if (alarm.at > now) return alarm;
+        if (!alarm.isCall() || fired.contains(alarm.key) || AlarmService.staleCall(alarm, now)) return null;
+        return new Alarm(alarm.key, now + 1000, alarm.title, alarm.kind, alarm.sound);
+    }
+
+    // Records that the call `key` has rung or been reported missed, so neither a refresh nor a repeated
+    // push rings or reports it again
+    static synchronized void fired(Context context, String key) {
+        long now = System.currentTimeMillis();
+        Map<String, Long> fired = firedCalls(context, now);
+        fired.put(key, now);
+        prefs(context).edit().putString(FIRED_CALLS, new JSONObject(fired).toString()).apply();
+    }
+
+    // Whether the call `key` has rung (or been reported missed) within FIRED_KEPT_MS
+    static boolean rung(Context context, String key) {
+        return firedCalls(context, System.currentTimeMillis()).containsKey(key);
+    }
+
+    // The calls rung within FIRED_KEPT_MS of `now`, by key, with when
+    private static Map<String, Long> firedCalls(Context context, long now) {
+        Map<String, Long> fired = new LinkedHashMap<>();
+        try {
+            JSONObject stored = new JSONObject(prefs(context).getString(FIRED_CALLS, "{}"));
+            for (java.util.Iterator<String> keys = stored.keys(); keys.hasNext(); ) {
+                String key = keys.next();
+                long at = stored.getLong(key);
+                if (now - at < FIRED_KEPT_MS) fired.put(key, at);
+            }
+        } catch (JSONException e) {
+            Log.e("Ashborn", "Could not read the rung calls", e);
+        }
+        return fired;
     }
 
     // The pushed calls kept: those still to ring that the new schedule has too, or that arrived after

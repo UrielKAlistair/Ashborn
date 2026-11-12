@@ -11,7 +11,7 @@
  * snapshotMerge.ts.
  */
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { addDays, dayOf, DEFAULT_DAY_START_HOUR, startOfDay, today } from "../shared/dates";
+import { addDays, dayOf, DEFAULT_DAY_START_HOUR, today } from "../shared/dates";
 import { openInside } from "../shared/graphModel";
 import { recipeProblems, sameKind } from "../shared/kitchen";
 import { PROGRESS_UNIT } from "../shared/progression";
@@ -30,7 +30,6 @@ import {
   type MealSlot,
   type MealStatus,
   type Priority,
-  type ProgressToday,
   type Routine,
   type StatWeights,
   type StockUnit,
@@ -109,7 +108,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       // Which day it is depends on the day-start hour, so the reads of today's data wait for it
       const settings = readSettings(db);
       const date = settings.then(({ dayStartHour }) => dayOf(new Date(), dayStartHour));
-      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, skipRows, progressToday, kitchen, settingsRow] = await Promise.all([
+      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, skipRows, kitchen, settingsRow] = await Promise.all([
         // A second key for rows made at the same moment: without one, an update can move a row among them,
         // or a page boundary skip it
         allPages((from, to) => nodes().select().order("created_at").order("id").range(from, to)),
@@ -121,7 +120,6 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         db.from("alarms").select().or(`at.is.null,at.gt.${new Date(Date.now() - RING_LOOKBACK_MS).toISOString()}`).order("created_at"),
         // From yesterday: a routine's day can run past midnight
         date.then((day) => db.from("alarm_skips").select("key, date").eq("skipped", true).gte("date", addDays(day, -1))),
-        settings.then(({ dayStartHour }) => readProgressToday(db, dayStartHour)),
         date.then((day) => readKitchen(db, day)),
         settings,
       ]);
@@ -134,7 +132,6 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         deadlines: must(deadlineRows).map(toDeadline),
         alarms: must(alarmRows).map(toAlarm),
         skippedAlarms: must(skipRows).map((row) => ({ key: row.key, date: row.date })),
-        progressToday,
         kitchen,
         settings: settingsRow,
       };
@@ -146,7 +143,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       must(await db.from("graph_nodes").upsert({ id, title, parent_id: parentId, created_at: at }, { onConflict: "id", ignoreDuplicates: true }));
       // The reopen touches only the boxes above the new step, so the step is read meanwhile
       const [node, reopened] = await Promise.all([readNode(id), reopenAround(parentId, at)]);
-      return { nodes: [node, ...reopened], progressToday: reopened.length ? await readProgressToday(db) : undefined };
+      return { nodes: [node, ...reopened] };
     },
 
     async updateNode(id, { title, statWeights, done, shelved, priority }) {
@@ -179,13 +176,13 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       // A step reopened inside done boxes reopens them: a box is done only while everything in it is
       const reopened = done === false && row.completed_at === null ? await reopenAround(row.parent_id, at) : [];
 
-      return { nodes: [...[row as NodeRow, ...ticked].map(toNode), ...reopened], progressToday: done === undefined ? undefined : await readProgressToday(db) };
+      return { nodes: [...[row as NodeRow, ...ticked].map(toNode), ...reopened] };
     },
 
     async deleteNode(id) {
       const removed = must(await db.rpc("delete_node", { target: id })) as string[];
 
-      return { removedNodeIds: removed, progressToday: await readProgressToday(db) };
+      return { removedNodeIds: removed };
     },
 
     async moveNode(id, parentId) {
@@ -201,7 +198,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const reopen = async () => (after.completedAt ? [] : reopenAround(parentId, at));
       const [, reopened] = moved ? await Promise.all([unplace(), reopen()]) : [undefined, []];
 
-      return { nodes: [await readNode(id), ...reopened], removedEdges: removed.map(toEdge), progressToday: reopened.length ? await readProgressToday(db) : undefined };
+      return { nodes: [await readNode(id), ...reopened], removedEdges: removed.map(toEdge) };
     },
 
     async placeNodes(places) {
@@ -242,9 +239,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     async levelUp(nodeId, id) {
       const row = { event_id: id, node_id: nodeId, amount: PROGRESS_UNIT, logged_at: clock().toISOString() };
       deletedIfMissing(await db.from("progress_log").upsert(row, { onConflict: "event_id", ignoreDuplicates: true }), "This step");
-      const [node, progressToday] = await Promise.all([readNode(nodeId), readProgressToday(db)]);
-
-      return { nodes: [node], progressToday };
+      return { nodes: [await readNode(nodeId)] };
     },
 
     async createRoutine({ id, title, cue, weekdays, time, alarm }) {
@@ -336,9 +331,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       const fields = { day_start_hour: dayStartHour, time_zone: timeZone };
       must(await db.from("user_settings").upsert({ ...fields, changed_at: stamps(fields, at) }, { onConflict: "user_id" }));
 
-      // Today's count is of the ticks since the day started, so a new hour counts again
-      const settings = await readSettings(db);
-      return { settings, progressToday: dayStartHour === undefined ? undefined : await readProgressToday(db, settings.dayStartHour) };
+      return { settings: await readSettings(db) };
     },
 
     // Every Kitchen change returns the whole Kitchen, read again
@@ -533,18 +526,6 @@ function toStockItem(row: StockRow) {
   return { id: row.id, name: row.name, unit: row.unit, target: Number(row.target), onHand: Number(row.on_hand), readAt: row.read_at };
 }
 
-// Level-ups and completed steps today. Times are stored in UTC, so the local day becomes a range.
-export async function readProgressToday(db: SupabaseClient, dayStartHour?: number): Promise<ProgressToday> {
-  const date = dayOf(new Date(), dayStartHour);
-  const [from, to] = [startOfDay(date, dayStartHour).toISOString(), startOfDay(addDays(date, 1), dayStartHour).toISOString()];
-
-  const [levelUps, completions] = await Promise.all([
-    db.from("progress_log").select("*", { count: "exact", head: true }).gte("logged_at", from).lt("logged_at", to),
-    db.from("graph_nodes").select("*", { count: "exact", head: true }).gte("completed_at", from).lt("completed_at", to),
-  ]);
-
-  return { date, count: countOf(levelUps) + countOf(completions) };
-}
 
 // A user with no settings row has the defaults
 export async function readSettings(db: SupabaseClient): Promise<Settings> {
@@ -650,9 +631,4 @@ async function allPages<T>(page: (from: number, to: number) => PromiseLike<Resul
 function must<T>(result: Result & { data: T }): NonNullable<T> {
   if (result.error) fail(result);
   return result.data as NonNullable<T>;
-}
-
-function countOf(result: Result & { count: number | null }) {
-  if (result.error) fail(result);
-  return result.count ?? 0;
 }

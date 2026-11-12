@@ -30,13 +30,12 @@ const snapshot: Snapshot = {
   routineChecks: [{ routineId: "r", date: "2026-10-20" }],
   deadlines: [],
   alarms: [],
-  progressToday: { date: "2026-10-20", count: 2 },
   kitchen: emptyKitchen,
   settings: { dayStartHour: 4, timeZone: null },
 };
 
 test("an echo equal to what is shown returns the snapshot itself", () => {
-  const echo = { nodes: [node("b", { position: { x: 10, y: 20 } })], edges: [{ from: "a", to: "b" }], progressToday: { date: "2026-10-20", count: 2 } };
+  const echo = { nodes: [node("b", { position: { x: 10, y: 20 } })], edges: [{ from: "a", to: "b" }] };
   expect(applyDelta(snapshot, echo)).toBe(snapshot);
   expect(applyDelta(snapshot, { routineCheck: { routineId: "r", date: "2026-10-20", checked: true } })).toBe(snapshot);
   expect(applyDelta(snapshot, { kitchen: { ...emptyKitchen } })).toBe(snapshot);

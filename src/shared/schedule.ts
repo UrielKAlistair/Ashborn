@@ -5,7 +5,7 @@
  * time, and recipe reminders of planned meals. Each ring has a stable key, which is how a skip, a
  * snooze and the phone's stored schedule name it.
  */
-import { addDays, atTime, dayOf, startOfDay, toISODate, weekdayOf } from "./dates.js";
+import { addDays, atTime, dayOf, showTime, startOfDay, toISODate, weekdayOf } from "./dates.js";
 import { mealReminders } from "./kitchen.js";
 import type { AlarmKind, AlarmSound, ISODate, Routine, Snapshot } from "./types.js";
 
@@ -23,6 +23,10 @@ export type AlarmInstance = {
   kind: Exclude<AlarmKind, "none">;
   sound: AlarmSound;
 };
+
+// A ring moved to another time on its day is skipped, and rings as a one-off alarm named for it, so
+// putting it back can find and delete that alarm
+export const movedLabel = (title: string, time: string) => `${title} (moved from ${showTime(time)})`;
 
 // Timed routines first, in time order; untimed ones after, in the order they were made
 export function byTime(a: Routine, b: Routine) {

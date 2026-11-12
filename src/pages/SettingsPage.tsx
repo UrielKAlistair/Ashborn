@@ -222,4 +222,4 @@ function BackgroundLog({ log }: { log: BackgroundEntry[] }) {
 const seconds = (ms: number) => (ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms / 60_000)} min`);
 
 // A moment as its weekday and clock time
-const moment = (at: number) => new Date(at).toLocaleString([], { timeZone: currentTimeZone(), weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const moment = (at: number) => new Date(at).toLocaleString([], { timeZone: currentTimeZone(), weekday: "short", hour: "numeric", minute: "2-digit", hourCycle: "h12" });

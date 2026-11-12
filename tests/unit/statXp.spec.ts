@@ -28,7 +28,6 @@ const snapshot = (nodes: GraphNode[]): Snapshot => ({
   routineChecks: [],
   deadlines: [],
   alarms: [],
-  progressToday: { date: "2026-10-20", count: 0 },
   kitchen: emptyKitchen,
   settings: { dayStartHour: 4, timeZone: null },
 });

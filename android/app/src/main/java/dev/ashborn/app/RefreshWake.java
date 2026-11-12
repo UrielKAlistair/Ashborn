@@ -20,9 +20,6 @@ import org.json.JSONException;
 // rings move only once a refresh gets through (or the app is opened).
 public class RefreshWake extends BroadcastReceiver {
     static final long INTERVAL_MS = 15 * 60_000L;
-    // In Doze one app's allow-while-idle alarms fire at most once per nine minutes, and TimeUp uses one
-    // too, so a wake is kept this far from a pending "Time's up", which would otherwise wait for it
-    static final long IDLE_SPACING_MS = 9 * 60_000L;
     // A receiver has about 10 s before Android counts it unresponsive, goAsync included; the refresh
     // gives up before that and the next wake tries again
     private static final long RUN_MS = 9_000;
@@ -36,18 +33,15 @@ public class RefreshWake extends BroadcastReceiver {
     static void arm(Context context) {
         if (!AlarmRefreshWorker.connected(context)) return;
         try {
-            context.getSystemService(AlarmManager.class).setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextWake(System.currentTimeMillis(), TimeUp.pendingAt(context)), wakeIntent(context));
+            context.getSystemService(AlarmManager.class).setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextWake(System.currentTimeMillis()), wakeIntent(context));
         } catch (RuntimeException e) {
             // Exact alarms refused: the hourly job is left
             Log.e("Ashborn", "Could not set the refresh wake", e);
         }
     }
 
-    // `timeUpAt` is the pending "Time's up" in epoch ms, 0 if none
-    static long nextWake(long now, long timeUpAt) {
-        long wake = now + INTERVAL_MS;
-        if (timeUpAt > now && Math.abs(wake - timeUpAt) < IDLE_SPACING_MS) wake = timeUpAt + IDLE_SPACING_MS;
-        return wake;
+    static long nextWake(long now) {
+        return now + INTERVAL_MS;
     }
 
     @Override

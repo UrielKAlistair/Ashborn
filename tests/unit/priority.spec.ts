@@ -31,7 +31,6 @@ function setup(nodes: GraphNode[], edges: GraphEdge[] = [], deadlines: Deadline[
     routines: [],
     routineChecks: [],
     alarms: [],
-    progressToday: { date: today, count: 0 },
     kitchen: emptyKitchen,
     settings: { dayStartHour: 4, timeZone: null },
   } as unknown as Snapshot;

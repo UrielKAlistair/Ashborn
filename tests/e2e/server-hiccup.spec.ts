@@ -29,7 +29,7 @@ test("a server error on reading shows the last data and is tried again", async (
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Hiccup quest").first()).toBeVisible({ timeout: 15_000 });
 
-  await page.route("**/rest/v1/graph_nodes*", (route) =>
+  await page.route("**/rest/v1/nodes_with_xp*", (route) =>
     route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "Service Unavailable" }) }),
   );
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
@@ -37,7 +37,7 @@ test("a server error on reading shows the last data and is tried again", async (
   await expect(page.getByText("Hiccup quest").first()).toBeVisible();
 
   // Tried again on the app's own timer once the server answers
-  await page.unroute("**/rest/v1/graph_nodes*");
+  await page.unroute("**/rest/v1/nodes_with_xp*");
   await expect(page.getByText(/^Offline: /)).toHaveCount(0, { timeout: 40_000 });
 
   await app.close();

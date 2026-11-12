@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { RingingAlarm } from "../../lib/alarms";
-import { clockOf } from "../../shared/dates";
+import { clockOf, showTime } from "../../shared/dates";
 import { SITUPS_TO_STOP, STEPS_TO_STOP, situpCounter, stepCounter } from "../../lib/motion";
 
 // How long the motion sensor may stay silent before Stop is offered: a phone without one, or a
@@ -10,7 +10,7 @@ const SENSOR_WAIT_MS = 10_000;
 // Shown over everything while an alarm rings. A plain alarm stops or snoozes with a button (a call
 // only stops); a challenge alarm stops only once the accelerometer has counted enough steps or sit-ups.
 export function AlarmScreen({ alarm, onStop, onSnooze }: { alarm: RingingAlarm; onStop: () => void; onSnooze: () => void }) {
-  const time = clockOf(new Date(alarm.at));
+  const time = showTime(clockOf(new Date(alarm.at)));
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-canvas px-6 py-8 text-center text-ink">

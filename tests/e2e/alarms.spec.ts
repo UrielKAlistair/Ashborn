@@ -3,10 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { toISODate } from "../../src/shared/dates";
+import { showTime, toISODate } from "../../src/shared/dates";
+import { weekStart } from "../../src/pages/calendar/calendarEvents";
 
-// The Alarms page: today's rings, each skipped for today alone by its switch; the repeating alarms,
-// turned off, and opened to edit or delete; a quick alarm set from the pop-up. The Calendar: a
+// The Alarms page: today's rings, each skipped for today alone by its switch or moved that day alone
+// by a tap; the repeating alarms,
+// turned off, and opened to edit or delete; a quick alarm set from the pop-up and opened from Today
+// to relabel. The Calendar: a
 // one-time alarm edited there, and a deadline added. The alarm rings a few minutes from
 // now, so this fails if run in the last minutes before midnight.
 
@@ -50,13 +53,34 @@ test("alarms", async () => {
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page.getByRole("button", { name: "Calendar", exact: true }).click();
     await page.getByRole("menuitem", { name: "Alarms", exact: true }).click({ timeout: 20_000 });
-    await expect(ring("Stretch")).toContainText(time);
+    // A row shows the time and AM/PM in separate spans
+    await expect(ring("Stretch")).toContainText(showTime(time).replace(" ", ""));
     await ring("Stretch").getByRole("switch").click();
     await expect.poll(skipOf).toBe(true);
     await expect(ring("Stretch").getByRole("switch")).toHaveAttribute("aria-checked", "false");
     expect((await alarmRow())?.enabled).toBe(true);
     await ring("Stretch").getByRole("switch").click();
     await expect.poll(skipOf).toBe(false);
+  });
+
+  await test.step("a tap on today's ring moves it, today only; switched back on, it rings at its own time", async () => {
+    const later = new Date(soon.getTime() + 2 * 60_000);
+    const laterTime = `${String(later.getHours()).padStart(2, "0")}:${String(later.getMinutes()).padStart(2, "0")}`;
+    const moved = `Stretch (moved from ${showTime(time)})`;
+    const movedRows = async () => (await db.from("alarms").select("at").eq("label", moved)).data ?? [];
+    await ring("Stretch").getByRole("button", { name: "Edit Stretch" }).click();
+    const dialog = page.getByRole("dialog", { name: "Move this ring" });
+    await dialog.getByLabel("Ring at").fill(laterTime);
+    await dialog.getByRole("button", { name: "Move" }).click();
+    await expect.poll(skipOf).toBe(true);
+    await expect.poll(async () => (await movedRows()).map((row) => new Date(row.at).getMinutes())).toEqual([later.getMinutes()]);
+    await expect(ring(moved)).toContainText(showTime(laterTime).replace(" ", ""));
+    // The repeating alarm itself is unchanged
+    expect((await db.from("alarms").select("time").eq("id", id).single()).data?.time.slice(0, 5)).toBe(time);
+
+    await ring("Stretch").getByRole("switch").click();
+    await expect.poll(skipOf).toBe(false);
+    await expect.poll(async () => (await movedRows()).length).toBe(0);
   });
 
   await test.step("repeating: turned off, edited, deleted; a one-off is not listed", async () => {
@@ -80,6 +104,8 @@ test("alarms", async () => {
     await page.getByRole("button", { name: "Calendar", exact: true }).click();
     await page.getByRole("menuitem", { name: "Calendar", exact: true }).click();
     await expect(page.getByText("Rang this morning")).toBeVisible(); // still in the snapshot, on today
+    // The Calendar shows a week, Monday to Sunday: from Friday on, three days ahead is the next one
+    if (weekStart(toISODate(new Date(laterAt))) !== weekStart(toISODate(new Date()))) await page.getByRole("button", { name: "Next week" }).click();
     await ring("Dentist").getByRole("button", { name: "Open Dentist" }).click();
     const dialog = page.getByRole("dialog", { name: "Alarm" });
     await dialog.getByPlaceholder("What for (optional)").fill("Dentist, bring the form");
@@ -111,7 +137,7 @@ test("alarms", async () => {
     await expect.poll(async () => (await db.from("deadlines").select("title").eq("title", "Hand in the essay draft")).data?.length).toBe(1);
   });
 
-  await test.step("the + pop-up sets a quick alarm, which rings today", async () => {
+  await test.step("the + pop-up sets a quick alarm, which rings today and opens from there", async () => {
     await page.getByRole("button", { name: "Calendar", exact: true }).click();
     await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
     const count = async () => (await db.from("alarms").select("id")).data?.length;
@@ -119,7 +145,19 @@ test("alarms", async () => {
     await page.getByRole("button", { name: "New alarm" }).click();
     await page.getByRole("dialog", { name: "New alarm" }).getByRole("button", { name: "In 10 min" }).click();
     await expect.poll(count).toBe(before! + 1);
+    // Today lists the rings before midnight: in the day's last minutes the alarm is on the Calendar only
+    if (new Date(Date.now() + 10 * 60_000).getDate() !== new Date().getDate()) {
+      test.info().annotations.push({ type: "skip", description: "Opening from Today not checked: the alarm rings after midnight" });
+      return;
+    }
     await expect(ring("Alarm")).toBeVisible();
+
+    await ring("Alarm").getByRole("button", { name: "Edit Alarm" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit alarm" });
+    await dialog.getByPlaceholder("What for (optional)").fill("Tea");
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect.poll(async () => (await db.from("alarms").select("label").eq("label", "Tea")).data?.length).toBe(1);
+    await expect(ring("Tea")).toBeVisible();
   });
 
   await app.close();

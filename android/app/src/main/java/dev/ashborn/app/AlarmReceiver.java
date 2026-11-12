@@ -23,7 +23,6 @@ public class AlarmReceiver extends BroadcastReceiver {
             } catch (JSONException e) {
                 Log.e("Ashborn", "Could not re-arm alarms", e);
             }
-            TimeUp.rearm(context);
             RefreshWake.arm(context);
             return;
         }
@@ -32,6 +31,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         String json = intent.getStringExtra(AlarmScheduler.EXTRA_ALARM);
         try {
             Alarm alarm = Alarm.fromJson(new JSONObject(json));
+            if (alarm.isCall()) AlarmScheduler.fired(context, alarm.key);
             if (AlarmService.staleCall(alarm, firedAt)) {
                 AlarmService.notifyMissed(context, alarm);
                 return;

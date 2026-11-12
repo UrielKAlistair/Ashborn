@@ -8,8 +8,8 @@
  * - useAlarmPermissions and fixPermission report and open the settings rings depend on.
  * - useHeldSchedule reads back what the phone holds, for Settings.
  * - connectBackgroundRefresh gives that background refresh a session of its own.
- * - setTimeUpNotice and keepScreenAwake ask the phone for the end-of-timer notice and a screen kept on
- *   (let go when the module loads, in case a reloaded page held it).
+ * - keepScreenAwake keeps the phone's screen on (let go when the module loads, in case a reloaded
+ *   page held it).
  * Off the phone every hook returns null or does nothing.
  */
 import { Capacitor, registerPlugin } from "@capacitor/core";
@@ -70,18 +70,12 @@ type AlarmPlugin = {
   requestBatteryExemption(): Promise<void>;
   openAutostart(): Promise<void>;
   connectBackground(options: { url: string; publishableKey: string; refreshToken: string }): Promise<void>;
-  // `at` (epoch ms) the end of Now's timer on the step `title`, 0 when none runs; replaces the last
-  timeUp(options: { at: number; title: string }): Promise<void>;
   keepAwake(options: { on: boolean }): Promise<void>;
 };
 
 // Alarms exist only in the Android app
 export const alarmsAvailable = Capacitor.isNativePlatform();
 const plugin = registerPlugin<AlarmPlugin>("AshbornAlarm");
-
-// Has the phone say "Time's up" at `at` (epoch ms) about `title`, as a notification; 0 clears it.
-// Phone only: the caller checks alarmsAvailable.
-export const setTimeUpNotice = (at: number, title: string) => void plugin.timeUp({ at, title });
 
 // Keeps the phone's screen on, or lets it sleep again; nothing off the phone
 export const keepScreenAwake = (on: boolean) => {
