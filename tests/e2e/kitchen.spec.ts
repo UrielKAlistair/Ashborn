@@ -252,7 +252,7 @@ test("kitchen", async () => {
   await test.step("Back out of an edit: Discard closes the editor; Save opens what was saved, at its address", async () => {
     const asked = page.getByRole("alertdialog", { name: "Discard changes?" });
     await openScreen(page, "Cookbook");
-    await page.getByRole("button", { name: "Rice and beans" }).click();
+    await page.getByRole("button", { name: /^Rice and beans/ }).click();
     await editRecipe("Rice and beans");
     await page.getByLabel("Rice amount").fill("999");
     await page.goBack();
@@ -290,7 +290,7 @@ test("kitchen", async () => {
     await expect(step).toHaveAttribute("aria-checked", "false");
     await step.click();
     // The route last read is the one shown next time, its struck steps still struck
-    await page.getByRole("button", { name: "Rice and beans" }).click();
+    await page.getByRole("button", { name: /^Rice and beans/ }).click();
     await page.getByRole("button", { name: "Backed out" }).click();
     await expect(page.getByRole("tab", { name: "2", selected: true })).toBeVisible();
     await expect(step).toHaveAttribute("aria-checked", "true");
@@ -308,12 +308,12 @@ test("kitchen", async () => {
     await openScreen(page, "Meal plan");
     await expect(meal("lunch")).toBeInViewport();
     await openScreen(page, "Recipes");
-    await page.getByRole("button", { name: "Rice and beans" }).click();
+    await page.getByRole("button", { name: /^Rice and beans/ }).click();
     await expect(page.getByRole("heading", { name: "Rice and beans" })).toBeVisible();
     // The phone's Back button (MainActivity) asks the page first: an open recipe goes back to the list
     expect(await page.evaluate(() => window.ashbornBack?.())).toBe(true);
     await expect(page.getByRole("heading", { name: "Rice and beans" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Rice and beans" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Rice and beans/ })).toBeVisible();
     expect(await page.evaluate(() => window.ashbornBack === undefined)).toBe(true);
   });
 
