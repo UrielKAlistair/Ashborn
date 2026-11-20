@@ -123,6 +123,9 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
   const cooked = meal.status === "cooked";
   const cancelled = meal.status === "cancelled";
   const empty = !meal.description && meal.recipeIds.length === 0;
+  // A dish named the same as its one recipe is said once, by the recipe's link
+  const linked = kitchen.recipes.filter((recipe) => meal.recipeIds.includes(recipe.id));
+  const saysRecipe = linked.length === 1 && linked[0].title.trim().toLowerCase() === meal.description.trim().toLowerCase();
   const id = () => meal.id || crypto.randomUUID();
 
   const tick = () => {
@@ -152,7 +155,13 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
   }
 
   return (
-    <div role="group" aria-label={`${meal.slot} on ${meal.date}`} className={`group relative rounded-lg px-2.5 py-2 ${empty ? "border border-dashed border-ink/8" : "bg-ink/[0.035] hover:bg-ink/[0.055]"} ${cooked ? "opacity-55" : ""}`}>
+    <div
+      role="group"
+      aria-label={`${meal.slot} on ${meal.date}`}
+      // An empty slot is only its name; a press anywhere on it plans it
+      onClick={empty ? () => setEditing(true) : undefined}
+      className={`group relative rounded-lg px-2.5 py-2 ${empty ? "cursor-pointer border border-dashed border-ink/8 hover:border-ink/20" : "bg-ink/[0.035] hover:bg-ink/[0.055]"} ${cooked ? "opacity-55" : ""}`}
+    >
       <div className="flex items-center gap-2">
         {empty || cancelled ? null : <Tick done={cooked} onClick={tick} />}
         <p className="min-w-0 flex-1 text-[11.5px] capitalize text-muted">
@@ -178,10 +187,10 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
         </div>
       </div>
 
-      <p className={`mt-1 text-[13px] leading-snug ${cancelled ? "text-ink/35 line-through" : "text-ink/85"} ${meal.fromDefault ? "italic" : ""}`}>
-        {meal.description || (empty ? <span className="text-muted not-italic">Nothing planned</span> : null)}
-      </p>
-      <RecipeLinks kitchen={kitchen} recipeIds={meal.recipeIds} onOpenRecipe={onOpenRecipe} />
+      {meal.description && !saysRecipe ? (
+        <p className={`mt-1 text-[13px] leading-snug ${cancelled ? "text-ink/35 line-through" : "text-ink/85"} ${meal.fromDefault ? "italic" : ""}`}>{meal.description}</p>
+      ) : null}
+      <RecipeLinks kitchen={kitchen} recipeIds={meal.recipeIds} onOpenRecipe={onOpenRecipe} asTitle={saysRecipe} />
 
       {untracked.length > 0 ? (
         <button
@@ -196,7 +205,8 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
   );
 }
 
-function RecipeLinks({ kitchen, recipeIds, onOpenRecipe }: { kitchen: Kitchen; recipeIds: string[]; onOpenRecipe: (id: string) => void }) {
+// The meal's recipes as links; one standing for the dish's name reads at the name's size
+function RecipeLinks({ kitchen, recipeIds, onOpenRecipe, asTitle = false }: { kitchen: Kitchen; recipeIds: string[]; onOpenRecipe: (id: string) => void; asTitle?: boolean }) {
   const recipes = kitchen.recipes.filter((recipe) => recipeIds.includes(recipe.id));
   if (recipes.length === 0) return null;
 
@@ -207,7 +217,11 @@ function RecipeLinks({ kitchen, recipeIds, onOpenRecipe }: { kitchen: Kitchen; r
           key={recipe.id}
           type="button"
           onClick={() => onOpenRecipe(recipe.id)}
-          className="rounded-md bg-ink/8 px-1.5 py-0.5 text-[11px] text-ink/75 hover:bg-ink/12 phone:px-2 phone:py-1 relative before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-['']"
+          className={`relative before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-[''] ${
+            asTitle
+              ? "text-left text-[13px] leading-snug text-ink/85 underline decoration-ink/25 underline-offset-4 hover:decoration-ember"
+              : "rounded-md bg-ink/8 px-1.5 py-0.5 text-[11px] text-ink/75 hover:bg-ink/12 phone:px-2 phone:py-1"
+          }`}
         >
           {recipe.title}
         </button>

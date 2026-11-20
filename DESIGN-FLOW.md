@@ -42,3 +42,12 @@ The e2e tests that open a section's menu by its button may need updating here (s
   the width, while today's titles wrapped a word a line.
 - **Change**: a past day is half a future day's width, and its items one line each with an ellipsis.
 - **Wrong if**: you look back over the week as much as ahead.
+
+## 5. A quieter meal plan
+- **Seen**: "Nothing planned" twelve times on the desktop plan; a dish named like its recipe said
+  twice, as text and again as a chip right under it.
+- **Why it hurts**: repeated filler is read every time and says nothing the empty dashed slot
+  doesn't; the eye has to skip it to find the meals.
+- **Change**: an empty slot is just its name and time in a dashed outline, and a press anywhere on
+  it plans it; a dish whose name is its one recipe's shows once, as the recipe's link at title size.
+- **Wrong if**: an empty slot without words reads as broken rather than free.
