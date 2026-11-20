@@ -5,7 +5,8 @@ import { askToLeave, holdUnsaved } from "../../lib/unsaved";
 import { HexMark } from "../../components/HexTile";
 import { RowMenu } from "../../components/RowMenu";
 import { DEFAULT_REMINDER, fromBase, roundShown, recipeProblems, recipeRoutes, sameKind, toBase } from "../../shared/kitchen";
-import { stockUnits, type Kitchen, type Recipe, type RecipeIngredient, type RecipeReminder, type StockUnit } from "../../shared/types";
+import { useToday } from "../../lib/useToday";
+import { mealSlots, stockUnits, type ISODate, type Kitchen, type Recipe, type RecipeIngredient, type RecipeReminder, type StockUnit } from "../../shared/types";
 import type { Act } from "../home/HomePage";
 
 // A step: a bulleted line (•, -, *) or a numbered one (1. or 1))
@@ -34,8 +35,10 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
   // Leaving the editor asks first when it holds changes (lib/unsaved.ts)
   const leaveEditor = (then: () => void) => void askToLeave().then((leave) => leave && then());
   const recipes = [...kitchen.recipes].sort((a, b) => a.title.localeCompare(b.title));
-  // The desktop, with room for both panes, shows the first recipe until another is chosen
-  const open = recipes.find((recipe) => recipe.id === recipeId) ?? (phone ? null : (recipes[0] ?? null));
+  const today = useToday();
+  // The desktop, with room for both panes, shows the next recipe to cook (else the first) until
+  // another is chosen
+  const open = recipes.find((recipe) => recipe.id === recipeId) ?? (phone ? null : (nextToCook(kitchen, today) ?? recipes[0] ?? null));
 
   const startNew = () =>
     leaveEditor(() => {
@@ -613,6 +616,14 @@ function Remove({ onClick }: { onClick: () => void }) {
       ×
     </button>
   );
+}
+
+// The recipe of the soonest meal from today on that is still to cook
+function nextToCook(kitchen: Kitchen, today: ISODate): Recipe | undefined {
+  const next = kitchen.meals
+    .filter((meal) => meal.date >= today && meal.status === "planned" && meal.recipeIds.length > 0)
+    .sort((a, b) => a.date.localeCompare(b.date) || mealSlots.indexOf(a.slot) - mealSlots.indexOf(b.slot))[0];
+  return next && kitchen.recipes.find((recipe) => recipe.id === next.recipeIds[0]);
 }
 
 function loadRoute(recipeId: string) {

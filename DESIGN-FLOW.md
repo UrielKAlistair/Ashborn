@@ -78,8 +78,9 @@ Reverted: design.md 188 is the user's Settings tab on the phone.
   "Choose a recipe" / "Choose an entry".
 - **Why it hurts**: the largest area on the screen held nothing, and one more press was needed
   before anything could be read.
-- **Change**: the desktop shows the first recipe (alphabetically) or the first Atlas entry until
-  another is chosen. Combined with 1, the Kitchen button returns to the recipe last read. The phone,
+- **Change**: the desktop shows the recipe of the soonest meal still to cook (else the first
+  alphabetically), or the first Atlas entry, until another is chosen. Shortcut: a meal that only the
+  default week supplies isn't counted. Combined with 1, the Kitchen button returns to the recipe last read. The phone,
   which shows the list or a recipe, is unchanged.
 
 ## 10. Reset layout only once something is placed by hand
