@@ -5,7 +5,7 @@ import type { Act } from "../home/HomePage";
 import { Tick } from "../home/Tick";
 import { kindLabels } from "../alarmParts";
 import { NowLine } from "../DayRings";
-import { monthGrid, overdue, weekStart, type CalendarEvent } from "./calendarEvents";
+import { dayEvents, monthGrid, overdue, weekStart, type CalendarDays, type CalendarEvent } from "./calendarEvents";
 
 /**
  * The Calendar's two views of the same events. Each gets the events by day and the week in view, and
@@ -23,7 +23,7 @@ import { monthGrid, overdue, weekStart, type CalendarEvent } from "./calendarEve
  */
 
 export type CalendarViewProps = {
-  byDay: Map<ISODate, CalendarEvent[]>;
+  calendar: CalendarDays;
   today: ISODate;
   // The Monday of the week in view
   monday: ISODate;
@@ -43,21 +43,21 @@ export function dayLabel(date: ISODate, options: Intl.DateTimeFormatOptions = { 
 }
 
 // A day's events. An overdue deadline moves to today, and leaves the day it was due on.
-function eventsOn(date: ISODate, byDay: Map<ISODate, CalendarEvent[]>, today: ISODate) {
-  const own = byDay.get(date) ?? [];
-  if (date === today) return [...overdue(byDay, today), ...own];
+function eventsOn(date: ISODate, calendar: CalendarDays, today: ISODate) {
+  const own = dayEvents(calendar, date);
+  if (date === today) return [...overdue(calendar.byDay, today), ...own];
   return date < today ? own.filter((event) => event.kind !== "deadline") : own;
 }
 
 // An alarm whose moment has passed, or an event that has ended
 function over(event: CalendarEvent, now: Date) {
-  return event.kind === "alarm" && Date.parse(event.alarm.at!) + (event.alarm.minutes ?? 0) * 60_000 <= now.getTime();
+  return event.kind === "alarm" && event.at.getTime() + (event.alarm.minutes ?? 0) * 60_000 <= now.getTime();
 }
 
 // Where the line for now goes among today's events: before the first alarm or event still to start
 // (one already on stays above it), else last
 function nowIndex(events: CalendarEvent[], now: Date) {
-  const next = events.findIndex((event) => event.kind === "alarm" && Date.parse(event.alarm.at!) > now.getTime());
+  const next = events.findIndex((event) => event.kind === "alarm" && event.at > now);
   return next === -1 ? events.length : next;
 }
 
@@ -76,7 +76,7 @@ function dayName(date: ISODate, today: ISODate) {
 
 // ---- The desktop's week ----
 
-export function WeekColumns({ byDay, today, monday, onWeek, onOpen, onDay, now, act }: CalendarViewProps) {
+export function WeekColumns({ calendar, today, monday, onWeek, onOpen, onDay, now, act }: CalendarViewProps) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
@@ -97,7 +97,7 @@ export function WeekColumns({ byDay, today, monday, onWeek, onOpen, onDay, now, 
         </Arrow>
         <div className="grid min-h-0 min-w-0 flex-1 grid-cols-7 gap-2">
           {days.map((date) => (
-            <DayColumn key={date} date={date} events={eventsOn(date, byDay, today)} today={today} now={now} onOpen={onOpen} onDay={onDay} act={act} />
+            <DayColumn key={date} date={date} events={eventsOn(date, calendar, today)} today={today} now={now} onOpen={onOpen} onDay={onDay} act={act} />
           ))}
         </div>
         <Arrow label="Next week" onClick={() => onWeek(addDays(monday, 7))}>
@@ -159,7 +159,7 @@ function Arrow({ label, onClick, children }: { label: string; onClick: () => voi
 
 // ---- The phone's weeks ----
 
-export function WeekList({ byDay, today, monday, onWeek, onOpen, onDay, now, act }: CalendarViewProps) {
+export function WeekList({ calendar, today, monday, onWeek, onOpen, onDay, now, act }: CalendarViewProps) {
   const [weeks, setWeeks] = useState(WEEKS_SHOWN);
   return (
     <div className="flex flex-col gap-7">
@@ -171,14 +171,14 @@ export function WeekList({ byDay, today, monday, onWeek, onOpen, onDay, now, act
       {Array.from({ length: weeks }, (_, index) => {
         const first = addDays(monday, 7 * index);
         // Days gone by are left out, unless something is still on them
-        const days = Array.from({ length: 7 }, (_, offset) => addDays(first, offset)).filter((date) => date >= today || eventsOn(date, byDay, today).length > 0);
-        const busy = days.filter((date) => date === today || eventsOn(date, byDay, today).length > 0);
+        const days = Array.from({ length: 7 }, (_, offset) => addDays(first, offset)).filter((date) => date >= today || eventsOn(date, calendar, today).length > 0);
+        const busy = days.filter((date) => date === today || eventsOn(date, calendar, today).length > 0);
         const free = days.filter((date) => !busy.includes(date));
         return (
           <section key={first} aria-label={`Week of ${dayLabel(first)}`} className="space-y-5">
             <p className="caps font-['Silkscreen'] text-[11px] text-muted">{weekTitle(first, today)}</p>
             {busy.map((date) => {
-              const events = eventsOn(date, byDay, today);
+              const events = eventsOn(date, calendar, today);
               const nowAt = date === today ? nowIndex(events, now) : -1;
               return (
                 <div key={date} className="space-y-2">
@@ -244,7 +244,7 @@ function EventRow({ event, today, past, onOpen, act }: { event: CalendarEvent; t
 
 // A month's grid, paged; each day a number over a dot per event (up to four). The week in view is
 // banded; a tap on a day picks its week. `large` fills the phone's screen.
-export function MonthDots({ byDay, today, monday, onWeek, large }: CalendarViewProps & { large?: boolean }) {
+export function MonthDots({ calendar, today, monday, onWeek, large }: CalendarViewProps & { large?: boolean }) {
   const [month, setMonth] = useState(monday.slice(0, 7));
   const days = monthGrid(`${month}-01`);
   const shift = (by: number) => setMonth(addDays(`${month}-15`, by * 30).slice(0, 7));
@@ -272,7 +272,7 @@ export function MonthDots({ byDay, today, monday, onWeek, large }: CalendarViewP
         {rows.map((row) => (
           <div key={row[0]} className={`grid grid-cols-7 rounded-lg ${row[0] === monday ? "bg-ember/10 ring-1 ring-ember/30" : ""}`}>
             {row.map((date) => {
-              const events = eventsOn(date, byDay, today);
+              const events = eventsOn(date, calendar, today);
               const isToday = date === today;
               return (
                 <button

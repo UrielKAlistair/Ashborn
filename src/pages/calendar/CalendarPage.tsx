@@ -27,7 +27,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
   const narrow = useNarrow();
   const today = useToday();
   const now = useNow();
-  const byDay = useMemo(() => calendarEvents(snapshot), [snapshot.alarms, snapshot.deadlines]);
+  const calendar = useMemo(() => calendarEvents(snapshot), [snapshot.alarms, snapshot.deadlines]);
   // The quests a deadline can be linked to; read only while the pop-up is open
   const model = useMemo(() => buildGraphModel(snapshot), [snapshot.nodes, snapshot.edges]);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -38,7 +38,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
   const [moving, setMoving] = useState<AlarmInstance | null>(null);
 
   const view: CalendarViewProps = {
-    byDay,
+    calendar,
     today,
     monday,
     onWeek: (picked) => {

@@ -141,8 +141,8 @@ export function ringsIn(at: Date, now: Date) {
 // The current time, as a blue rule across the list
 export function NowLine({ now }: { now: Date }) {
   return (
-    <div role="separator" aria-label="Now" className="flex items-center gap-3 py-1 font-['Silkscreen'] text-sky-400">
-      <span className="h-0.5 flex-1 rounded-full bg-sky-400" />
+    <div role="separator" aria-label="Now" className="flex items-center gap-2 py-1 font-['Silkscreen'] whitespace-nowrap text-sky-400">
+      <span className="h-0.5 min-w-2 flex-1 rounded-full bg-sky-400" />
       <span className="text-[12px] tracking-wider">NOW</span>
       <span className="text-[11px] tabular-nums">{showTime(clockOf(now))}</span>
       <span className="h-0.5 flex-1 rounded-full bg-sky-400" />
