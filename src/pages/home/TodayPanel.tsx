@@ -172,7 +172,7 @@ function Deadlines({ snapshot, model, act, date }: { snapshot: Snapshot; model: 
                 <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
                   <span className="shrink-0 font-mono tabular-nums">
                     {deadline.dueDate}
-                    {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""} ·
+                    {deadline.alarmTime ? ` · alarm ${showTime(deadline.alarmTime)}` : ""} ·
                   </span>
                   <NodePicker model={model} label="Deadline for" none="No quest" value={deadline.nodeId} onChange={(nodeId) => void act("updateDeadline", deadline.id, { nodeId })} className="-mx-1 min-w-0 flex-1 cursor-pointer appearance-none truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6 hover:text-ink/80 pointer-coarse:min-h-8" />
                 </div>
