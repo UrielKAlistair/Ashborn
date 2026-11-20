@@ -23,6 +23,8 @@ The e2e tests that open a section's menu by its button may need updating here (s
   doesn't redirect Kitchen for good); the open section's button keeps its section's icon and is labelled
   with the shown screen's name (TO-DO, ALARMS, STOCKS); pressing it again opens the menu, as before.
   (It first took the screen's icon too; the Meal plan's calendar then stood beside the Calendar's.)
+  A small ▲ (phone) or ▼ (desktop) after the open button's label marks that a second press opens its
+  other screens (review 3: with the first press no longer opening the menu, nothing showed it was there).
 - **Wrong if**: you mostly want a section's first screen rather than the last one, or the changing
   label reads as the button moving.
 
@@ -106,8 +108,7 @@ Reverted: design.md 188 is the user's Settings tab on the phone.
   today's heading follows. Also the narrow desktop's list, which is the same list.
 - **Wrong if**: looking back over the week's past events is a common use of this list.
 
-## 13. The phone's meal plan shows the days either side
-- **Seen**: the phone showed one day's card filling the strip, and nothing said it swipes to other days.
-- **Change**: each day's card is 88% of the strip, centred, so the edges of yesterday and tomorrow
-  show at its sides.
-- **Wrong if**: the slivers read as clutter, or the narrower card wraps meal names.
+## 13. (Withdrawn) The phone's meal plan shows the days either side
+Tried at 88% of the strip: the ~20 px slivers showed clipped letters of the next day's title and read
+as a rendering fault, not as days; the bet's own "wrong if". A swipe cue would need its own shape
+(dots, or the neighbour's name in the header).

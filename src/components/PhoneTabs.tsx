@@ -41,7 +41,10 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
               <HexTile active={isActive} className="h-9 w-[42px] short:h-7 short:w-[33px]">
                 <Icon />
               </HexTile>
-              <span className="caps font-display text-[10px] font-semibold whitespace-nowrap">{isActive ? (screenAt(currentPath, section.phone)?.label ?? section.label) : section.label}</span>
+              <span className="caps font-display text-[10px] font-semibold whitespace-nowrap">{isActive ? (screenAt(currentPath, section.phone)?.label ?? section.label) : section.label}
+                {/* The open section's other screens are a second press away, up from the tab */}
+                {isActive && section.phone.length > 1 ? <span aria-hidden className="ml-1 text-[8px]">▲</span> : null}
+              </span>
             </button>
 
             {openSection === section ? (

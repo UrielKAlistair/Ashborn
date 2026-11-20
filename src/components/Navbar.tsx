@@ -80,7 +80,10 @@ export function Navbar({
                 <HexTile active={isActive} className="h-12 w-14">
                   <Icon className={isActive ? "text-ember" : ""} />
                 </HexTile>
-                <span className={`caps font-display text-[10px] font-semibold ${isActive ? "text-ink/90" : ""}`}>{isActive ? (screenAt(currentPath, section.desktop)?.label ?? section.label) : section.label}</span>
+                <span className={`caps font-display text-[10px] font-semibold ${isActive ? "text-ink/90" : ""}`}>{isActive ? (screenAt(currentPath, section.desktop)?.label ?? section.label) : section.label}
+                  {/* The open section's other pages are a second press away, under the button */}
+                  {isActive && section.desktop.length > 1 ? <span aria-hidden className="ml-1 text-[8px]">▼</span> : null}
+                </span>
               </button>
 
               {section.desktop.length > 1 ? (
