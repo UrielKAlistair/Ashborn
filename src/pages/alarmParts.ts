@@ -8,6 +8,7 @@ export const kindLabels: Record<Alarm["kind"], string> = {
   plain: "Plain",
   walk: `Walk ${STEPS_TO_STOP} steps`,
   situps: `${SITUPS_TO_STOP} sit-ups`,
+  none: "Doesn't ring",
 };
 
 export const field =

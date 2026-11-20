@@ -354,8 +354,9 @@ test("home graph", async () => {
   await test.step("alarms: a quick one, a recurring one with a challenge, switched off and on", async () => {
     await page.getByRole("button", { name: "Calendar", exact: true }).click();
     await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
-    await page.getByRole("button", { name: "New alarm" }).click();
-    await page.getByRole("dialog", { name: "New alarm" }).getByRole("button", { name: "In 30 min" }).click();
+    await page.getByRole("button", { name: "New on this day" }).click();
+    await page.getByRole("dialog", { name: /^New on/ }).getByRole("tab", { name: "Alarm" }).click();
+    await page.getByRole("dialog", { name: /^New on/ }).getByRole("button", { name: "In 30 min" }).click();
     // A one-time alarm is listed with today's rings (those before midnight), not with the repeating ones
     if (new Date(Date.now() + 30 * 60_000).getDate() === new Date().getDate()) {
       await expect(page.getByRole("group", { name: "Alarm", exact: true })).toBeVisible();
@@ -363,8 +364,8 @@ test("home graph", async () => {
     await page.getByRole("button", { name: "Repeating ›" }).click();
     await expect(page.getByRole("group", { name: "Alarm", exact: true })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "New alarm" }).click();
-    const dialog = page.getByRole("dialog", { name: "New alarm" });
+    await page.getByRole("button", { name: "New repeating alarm" }).click();
+    const dialog = page.getByRole("dialog", { name: "New repeating alarm" });
     await dialog.getByLabel("Time", { exact: true }).fill("06:00");
     await dialog.getByPlaceholder("Label (optional)").fill("Wake up");
     for (const day of ["Mon", "Tue"]) await dialog.getByRole("button", { name: day, exact: true }).click();

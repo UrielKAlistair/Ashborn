@@ -183,7 +183,7 @@ function App() {
       {phone ? (
         <div className="relative flex h-full min-h-0 flex-col">
           {/* On the desktop's phone view, the content starts below the window's title strip */}
-          <div className={`flex min-h-0 flex-1 overflow-hidden p-3 ${window.ashborn ? "pt-7" : "pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>{page}</div>
+          <div className={`flex min-h-0 flex-1 overflow-hidden px-4 py-3 ${window.ashborn ? "pt-7" : "pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>{page}</div>
           {userId ? <PhoneTabs currentPath={currentPath} onNavigate={navigate} /> : null}
         </div>
       ) : (

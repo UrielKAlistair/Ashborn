@@ -1,6 +1,7 @@
 /**
- * What the calendar shows, by day: the one-time alarms and the open deadlines. Repeating alarms,
- * routines and meal reminders stay off it: they would fill every day, and the Alarms screen lists them.
+ * What the calendar shows, by day: the one-time alarms and events (an event is an alarm that doesn't
+ * ring) and the open deadlines. Repeating alarms and events, routines and meal reminders stay off it:
+ * they would fill every day, and a day's own view (DayRings) lists them.
  * A one-time alarm falls on the calendar date of its moment; a deadline on its due date, which is a
  * day as the app counts days. Done deadlines are never in the snapshot, so every deadline here is open.
  */

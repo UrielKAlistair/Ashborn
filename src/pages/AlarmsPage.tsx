@@ -4,7 +4,7 @@ import { Switch } from "../components/Switch";
 import { TimeField } from "../components/TimeField";
 import { alarmsAvailable } from "../lib/alarms";
 import { useToday } from "../lib/useToday";
-import { addDays, week } from "../shared/dates";
+import { addDays, clockAfter, minutesFrom, week } from "../shared/dates";
 import { buildGraphModel } from "../shared/graphModel";
 import { nextOccurrence, type AlarmInstance } from "../shared/schedule";
 import type { Alarm, ISODate, Snapshot, Weekday } from "../shared/types";
@@ -14,18 +14,16 @@ import { EventDialog, type Editing } from "./calendar/EventDialog";
 import { DayRings, MoveRing, Row, RowList } from "./DayRings";
 
 /**
- * The Alarms screen, in two views. The day: today's or tomorrow's rings and deadlines (DayRings, the
- * same view as a day of the Calendar), each ring with a switch that skips it alone; a tap changes that
- * ring alone: a one-time alarm or a deadline opens in the Calendar's form (calendar/EventDialog.tsx),
- * a ring of a repeating alarm or a routine can be moved to another time that day (MoveRing).
+ * The Alarms screen, in two views. The day: today's or tomorrow's schedule, rings, events and
+ * deadlines (DayRings, the same view as a day of the Calendar), each ring with a switch that skips it
+ * alone; a tap changes that one alone: a one-time alarm or event or a deadline opens in the Calendar's
+ * form (calendar/EventDialog.tsx), a ring of a repeating alarm or a routine can be moved to another
+ * time that day (MoveRing), a repeating event opens for every day.
  * Repeating: the user's repeating alarms, each with a switch that turns it off on every day; a tap
  * edits it for every day.
- * A new alarm is set in a pop-up from the round + button: a repeating one, or a one-time one within
- * the next day; one-time alarms further ahead are set on the Calendar.
+ * The round + adds to the day shown, in the Calendar's pop-up: an event, an alarm (one-tap ones for
+ * soon among them) or a deadline; on the repeating view it adds a repeating alarm or event.
  */
-
-// One-tap alarms, in minutes from now
-const QUICK_MINUTES = [10, 30, 60, 120];
 
 export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
   const today = useToday();
@@ -61,13 +59,13 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
     setEditingId(alarm.id);
   };
 
-  const toggle = "rounded-lg border border-ink/12 px-3 py-1.5 text-[12.5px] text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11";
+  const toggle = "shrink-0 whitespace-nowrap rounded-lg border border-ink/12 px-3 py-1.5 font-['Silkscreen'] text-[11px] uppercase text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11";
   // The panel scrolls inside itself on the desktop. On the phone the screen scrolls instead, and the
   // panel is as tall as its rows (at least the screen): a column that neither shrinks it nor stretches it.
   return (
     <div className="relative mx-auto flex min-h-0 w-full min-w-0 max-w-xl flex-1 phone:max-w-none">
       <div className="panel-scroll flex min-h-0 min-w-0 flex-1 phone:flex-col phone:overflow-y-auto">
-        <section className="panel-lift rounded-2xl border border-ink/8 bg-panel panel-scroll flex min-h-0 w-full flex-col gap-5 overflow-y-auto p-5 pb-20 phone:shrink-0 phone:grow phone:overflow-visible">
+        <section className="panel-scroll flex min-h-0 w-full flex-col gap-5 overflow-y-auto px-1 pt-2 pb-24 phone:shrink-0 phone:grow phone:overflow-visible phone:px-0">
           <div className="flex items-center justify-between gap-3">
             {view === "day" ? (
               <div className="flex items-center gap-1">
@@ -93,14 +91,14 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
             )}
           </div>
 
-          {alarmsAvailable ? null : <p className="-mt-3 text-[11.5px] text-muted">They ring on your phone.</p>}
+          {alarmsAvailable ? null : <p className="-mt-3 text-[11.5px] text-muted">Alarms ring on your phone.</p>}
 
           {view === "day" ? (
             <DayRings
               snapshot={snapshot}
               date={date}
               act={act}
-              onOpenAlarm={(alarm) => setOpening({ kind: "alarm", id: alarm.id })}
+              onOpenAlarm={(alarm) => (alarm.time ? edit(alarm) : setOpening({ kind: "alarm", id: alarm.id }))}
               onOpenDeadline={(deadline) => setOpening({ kind: "deadline", id: deadline.id })}
               onMove={setMoving}
             />
@@ -112,8 +110,8 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
 
       <button
         type="button"
-        onClick={() => setEditingId("new")}
-        aria-label="New alarm"
+        onClick={() => (view === "day" ? setOpening({ kind: "new", date }) : setEditingId("new"))}
+        aria-label={view === "day" ? "New on this day" : "New repeating alarm"}
         className="absolute right-4 bottom-4 flex h-14 w-14 items-center justify-center rounded-full bg-ember text-3xl leading-none text-canvas shadow-[var(--card-shadow)] hover:brightness-110"
       >
         +
@@ -128,21 +126,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
       {opening ? <EventDialog editing={opening} snapshot={snapshot} model={model} today={today} act={act} onClose={() => setOpening(null)} /> : null}
 
       {editing ? (
-        <Popup label={editing === "new" ? "New alarm" : "Edit alarm"} onClose={() => setEditingId(null)}>
-          {editing === "new" ? (
-            <div className="flex flex-wrap gap-2">
-              {QUICK_MINUTES.map((minutes) => (
-                <button
-                  key={minutes}
-                  type="button"
-                  onClick={() => save({ label: "", kind: "plain", sound: "default", at: new Date(Date.now() + minutes * 60_000).toISOString(), time: null, weekdays: [] })}
-                  className="rounded-lg border border-ink/12 px-3.5 py-1.5 text-[13px] text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11"
-                >
-                  In {minutes < 60 ? `${minutes} min` : `${minutes / 60} h`}
-                </button>
-              ))}
-            </div>
-          ) : null}
+        <Popup label={editing === "new" ? "New repeating alarm" : editing.kind === "none" ? "Edit event" : "Edit alarm"} onClose={() => setEditingId(null)}>
           <AlarmForm alarm={editing === "new" ? null : editing} onSave={save} />
           {editing === "new" ? null : (
             <button
@@ -153,7 +137,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
               }}
               className="text-[12.5px] text-muted hover:text-red-300 phone:min-h-11"
             >
-              Delete this alarm
+              Delete this {editing.kind === "none" ? "event" : "alarm"}
             </button>
           )}
         </Popup>
@@ -208,16 +192,21 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
   const [days, setDays] = useState<Weekday[]>(alarm?.weekdays ?? []);
   const [label, setLabel] = useState(alarm?.label ?? "");
   const [kind, setKind] = useState<Alarm["kind"]>(alarm?.kind ?? "plain");
+  const [end, setEnd] = useState(alarm?.time && alarm.minutes ? clockAfter(alarm.time, alarm.minutes) : "");
 
   const submit = () => {
     if (!time) return;
     const at = days.length === 0 ? nextOccurrence(time).toISOString() : null;
-    onSave({ label: label.trim(), kind, sound: alarm?.sound ?? "default", at, time: at ? null : time, weekdays: days });
+    onSave({ label: label.trim(), kind, sound: alarm?.sound ?? "default", at, time: at ? null : time, weekdays: days, minutes: end ? minutesFrom(time, end) : null });
   };
 
   return (
     <div className="space-y-3">
-      <TimeField label="Time" value={time} onChange={setTime} className={`${field} w-36 text-base`} />
+      <div className="flex items-center gap-2">
+        <TimeField label={kind === "none" ? "Starts" : "Time"} value={time} onChange={setTime} className={`${field} min-w-0 flex-1 text-base`} />
+        <span className="text-[12px] text-muted">to</span>
+        <TimeField label="Ends (optional)" optional value={end} onChange={setEnd} className={`${field} min-w-0 flex-1 text-base`} />
+      </div>
       <textarea value={label} onChange={(event) => setLabel(event.target.value)} rows={4} placeholder="Label (optional)" aria-label="Label" className={`${field} block w-full resize-y leading-5`} />
       <div className="flex gap-1">
         {week.map((weekday) => (
@@ -234,7 +223,7 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
         ))}
       </div>
       <div className="flex items-center gap-3">
-        <select value={kind} aria-label="How it stops" onChange={(event) => setKind(event.target.value as Alarm["kind"])} className={`${field} flex-1`}>
+        <select value={kind} aria-label="How it rings" onChange={(event) => setKind(event.target.value as Alarm["kind"])} className={`${field} flex-1`}>
           {(Object.keys(kindLabels) as Alarm["kind"][]).map((option) => (
             <option key={option} value={option}>
               {kindLabels[option]}

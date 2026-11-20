@@ -23,6 +23,7 @@ export type GraphNode = {
   id: string;
   parentId: string | null;
   title: string;
+  description: string; // free text, such as where its details are kept; "" for none
   statWeights: StatWeights; // quests only: the stats work in the quest trains; empty trains none
   createdAt: string;
   completedAt: string | null; // a step is done when this is set
@@ -64,8 +65,9 @@ export type RoutineCheck = {
 export type Alarm = {
   id: string;
   label: string;
-  kind: Exclude<AlarmKind, "none">;
+  kind: AlarmKind; // "none": a time on the schedule that doesn't ring (an event)
   sound: AlarmSound;
+  minutes: number | null; // how long what it marks lasts; null for a moment
   at: string | null; // ISO timestamp, for a one-off
   time: ClockTime | null; // for a recurring alarm
   weekdays: Weekday[]; // empty for a one-off
@@ -202,6 +204,7 @@ export type Delta = {
 
 export type NodePatch = {
   title?: string;
+  description?: string;
   statWeights?: StatWeights;
   shelved?: boolean;
   priority?: Priority | null;

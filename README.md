@@ -90,7 +90,7 @@ ideas, plan it for me"). Changes show up live in the app.
 
 Tools: `overview`, `add_plan` (nested, linked steps in one call), `complete`, `reopen`,
 `rename`, `move`, `delete`, `link`, `unlink`, `level_up`, `update_quest` (stat weights, colour,
-shown), `add_deadline`, `add_routine`, `add_alarm`.
+shown), `add_deadline`, `add_routine`, `add_alarm`, `update_alarm`, `add_event`.
 
 ## Recommended IDE Setup
 

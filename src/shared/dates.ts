@@ -68,6 +68,20 @@ export function weekdayOf(date: ISODate): Weekday {
 }
 
 // Whole days from `from` to `to`; negative when `to` is earlier
+// Minutes from `start` to `end` (clock times), past midnight if `end` is earlier; null if they are equal
+export function minutesFrom(start: string, end: string): number | null {
+  const minutes = (toMinutes(end) - toMinutes(start) + 1440) % 1440;
+  return minutes === 0 ? null : minutes;
+}
+
+// The clock time `minutes` after `start`
+export function clockAfter(start: string, minutes: number): string {
+  const total = (toMinutes(start) + minutes) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+
 export function daysBetween(from: ISODate, to: ISODate) {
   return Math.round((utcMidnight(to) - utcMidnight(from)) / 86_400_000);
 }

@@ -15,7 +15,7 @@ const FIXTURES = "android/app/src/test/resources/schedule-fixtures.json";
 
 const routine = (overrides: Partial<Routine>): Routine => ({ id: "r", title: "Routine", cue: "", weekdays: [], time: null, alarm: "none", ...overrides });
 const deadline = (overrides: Partial<Deadline>): Deadline => ({ id: "d", nodeId: null, title: "Deadline", dueDate: "2026-10-20", alarmTime: null, ...overrides });
-const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", sound: "default", at: null, time: null, weekdays: [], enabled: true, ...overrides });
+const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", sound: "default", minutes: null, at: null, time: null, weekdays: [], enabled: true, ...overrides });
 const reminder = (id: string, offsetMinutes: number, anchorId: string | null = null): RecipeReminder => ({ id, label: id, offsetMinutes, anchorId });
 const recipe = (id: string, title: string, reminders: RecipeReminder[]): Recipe => ({ id, title, body: "", ingredients: [], reminders });
 const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
@@ -82,7 +82,7 @@ const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] 
     days: 2,
   },
   {
-    name: "standalone alarms: recurring, one-off as Postgres writes it, a call, switched off, beyond the window, past",
+    name: "standalone alarms: recurring, one-off as Postgres writes it, a call, switched off, beyond the window, past, and events, which never ring",
     snapshot: snapshot({
       alarms: [
         alarm({ id: "wake", label: "Wake up", kind: "situps", time: "06:00", weekdays: ["Tue", "Wed"] }),
@@ -94,6 +94,8 @@ const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] 
         alarm({ id: "offOnce", at: "2026-10-20T03:00:00+00:00", enabled: false }),
         alarm({ id: "far", at: "2026-11-30T09:00:00+00:00" }),
         alarm({ id: "gone", at: "2026-10-19T00:00:00+00:00" }),
+        alarm({ id: "test", label: "Aptitude test", kind: "none", minutes: 120, at: "2026-10-19T11:00:00+00:00" }),
+        alarm({ id: "lecture", label: "Lecture", kind: "none", minutes: 60, time: "09:00", weekdays: ["Tue"] }),
       ],
     }),
     from: "2026-10-19T06:00:00",

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { addDays, daysBetween, showTime, week } from "../../shared/dates";
-import type { ISODate } from "../../shared/types";
+import { addDays, clockAfter, daysBetween, showTime, week } from "../../shared/dates";
+import type { Alarm, ISODate } from "../../shared/types";
 import type { Act } from "../home/HomePage";
 import { Tick } from "../home/Tick";
 import { kindLabels } from "../alarmParts";
@@ -9,16 +9,17 @@ import { monthGrid, overdue, weekStart, type CalendarEvent } from "./calendarEve
 
 /**
  * The Calendar's two views of the same events. Each gets the events by day and the week in view, and
- * reports taps up to the page: + on a day (onAdd), an event (onOpen), a week picked (onWeek), a day's
- * name to see the whole day, every ring in it (onDay).
+ * reports taps up to the page: an event (onOpen), a week picked (onWeek), a day's name to see the whole
+ * day, every ring in it (onDay). Adding is the page's one + button.
  *   WeekColumns (desktop): the week's seven days side by side, as the meal plan lays out its days,
  *     with arrows to the weeks either side.
- *   WeekList (phone): the weeks from the one in view down, each day with something on it a block and
- *     the free days a row of small dates to add on.
+ *   WeekList (phone, narrow desktop): the weeks from the one in view down, each day with something on
+ *     it a heading over its events, the free days a row of small dates.
  *   MonthDots: a month's grid with a dot per event; a tap picks that day's week. Beside the columns on
  *     the desktop, and the phone's other view.
  * Overdue deadlines sit on today until ticked or deleted. Colours say the kind: ember a deadline, sky an
- * alarm; red, a deadline past due. On today a blue line marks now, and the alarms that have rung are greyed.
+ * alarm, green an event (a time that doesn't ring); red, a deadline past due. On today a blue line marks
+ * now, and the alarms that have rung and the events that have ended are greyed.
  */
 
 export type CalendarViewProps = {
@@ -27,7 +28,6 @@ export type CalendarViewProps = {
   // The Monday of the week in view
   monday: ISODate;
   onWeek: (monday: ISODate) => void;
-  onAdd: (date: ISODate) => void;
   onOpen: (event: CalendarEvent) => void;
   onDay: (date: ISODate) => void;
   now: Date;
@@ -49,14 +49,15 @@ function eventsOn(date: ISODate, byDay: Map<ISODate, CalendarEvent[]>, today: IS
   return date < today ? own.filter((event) => event.kind !== "deadline") : own;
 }
 
-// An alarm whose moment has passed
+// An alarm whose moment has passed, or an event that has ended
 function over(event: CalendarEvent, now: Date) {
-  return event.kind === "alarm" && Date.parse(event.alarm.at!) <= now.getTime();
+  return event.kind === "alarm" && Date.parse(event.alarm.at!) + (event.alarm.minutes ?? 0) * 60_000 <= now.getTime();
 }
 
-// Where the line for now goes among today's events: before the first alarm still to ring, else last
+// Where the line for now goes among today's events: before the first alarm or event still to start
+// (one already on stays above it), else last
 function nowIndex(events: CalendarEvent[], now: Date) {
-  const next = events.findIndex((event) => event.kind === "alarm" && !over(event, now));
+  const next = events.findIndex((event) => event.kind === "alarm" && Date.parse(event.alarm.at!) > now.getTime());
   return next === -1 ? events.length : next;
 }
 
@@ -75,10 +76,10 @@ function dayName(date: ISODate, today: ISODate) {
 
 // ---- The desktop's week ----
 
-export function WeekColumns({ byDay, today, monday, onWeek, onAdd, onOpen, onDay, now, act }: CalendarViewProps) {
+export function WeekColumns({ byDay, today, monday, onWeek, onOpen, onDay, now, act }: CalendarViewProps) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
   return (
-    <section className="panel-lift flex min-h-0 min-w-0 flex-1 flex-col gap-3 rounded-2xl border border-ink/8 bg-panel p-4">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       <div className="flex items-center gap-2">
         <h1 className="caps mr-auto font-display text-[15px] font-bold text-ink/90">{weekTitle(monday, today)}</h1>
         <span className="font-mono text-[11.5px] text-muted">
@@ -96,7 +97,7 @@ export function WeekColumns({ byDay, today, monday, onWeek, onAdd, onOpen, onDay
         </Arrow>
         <div className="grid min-h-0 min-w-0 flex-1 grid-cols-7 gap-2">
           {days.map((date) => (
-            <DayColumn key={date} date={date} events={eventsOn(date, byDay, today)} today={today} now={now} onAdd={onAdd} onOpen={onOpen} onDay={onDay} act={act} />
+            <DayColumn key={date} date={date} events={eventsOn(date, byDay, today)} today={today} now={now} onOpen={onOpen} onDay={onDay} act={act} />
           ))}
         </div>
         <Arrow label="Next week" onClick={() => onWeek(addDays(monday, 7))}>
@@ -108,8 +109,8 @@ export function WeekColumns({ byDay, today, monday, onWeek, onAdd, onOpen, onDay
 }
 
 // One day of the week, as the meal plan draws one: its name and date (a tap opens the day), its
-// events, then + to add on it
-function DayColumn({ date, events, today, now, onAdd, onOpen, onDay, act }: { date: ISODate; events: CalendarEvent[]; today: ISODate; now: Date; onAdd: (date: ISODate) => void; onOpen: (event: CalendarEvent) => void; onDay: (date: ISODate) => void; act: Act }) {
+// events
+function DayColumn({ date, events, today, now, onOpen, onDay, act }: { date: ISODate; events: CalendarEvent[]; today: ISODate; now: Date; onOpen: (event: CalendarEvent) => void; onDay: (date: ISODate) => void; act: Act }) {
   const offset = daysBetween(today, date);
   const nowAt = offset === 0 ? nowIndex(events, now) : -1;
   return (
@@ -128,9 +129,6 @@ function DayColumn({ date, events, today, now, onAdd, onOpen, onDay, act }: { da
         </div>
       ))}
       {nowAt === events.length && events.length > 0 ? <NowLine now={now} /> : null}
-      <button type="button" onClick={() => onAdd(date)} aria-label={`Add on ${dayLabel(date)}`} className="mt-auto rounded-lg border border-dashed border-ink/10 py-1.5 text-[13px] leading-none text-muted hover:border-ember/40 hover:text-ember">
-        +
-      </button>
     </div>
   );
 }
@@ -141,7 +139,7 @@ function EventCard({ event, today, past, onOpen, act }: { event: CalendarEvent; 
   return (
     <div role="group" aria-label={event.title} className={`rounded-lg border-l-[3px] bg-ink/[0.035] px-2 py-1.5 hover:bg-ink/[0.06] ${edgeClass(event, today)} ${off || past ? "opacity-50" : ""}`}>
       <div className="flex items-start gap-1.5">
-        {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <BellMark />}
+        {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <TimeMark alarm={event.alarm} />}
         <button type="button" onClick={() => onOpen(event)} aria-label={`Open ${event.title}`} className="min-w-0 flex-1 text-left">
           <span className="block text-[12.5px] leading-snug text-ink/90 [overflow-wrap:anywhere]">{event.title}</span>
           <span className="block text-[10.5px] text-muted">{cardDetail(event, today, off)}</span>
@@ -161,10 +159,10 @@ function Arrow({ label, onClick, children }: { label: string; onClick: () => voi
 
 // ---- The phone's weeks ----
 
-export function WeekList({ byDay, today, monday, onWeek, onAdd, onOpen, onDay, now, act }: CalendarViewProps) {
+export function WeekList({ byDay, today, monday, onWeek, onOpen, onDay, now, act }: CalendarViewProps) {
   const [weeks, setWeeks] = useState(WEEKS_SHOWN);
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-7">
       {monday === weekStart(today) ? null : (
         <button type="button" onClick={() => onWeek(weekStart(today))} className="self-start rounded-lg border border-ink/12 px-3 py-1.5 text-[12.5px] text-ink/80 hover:bg-ink/6 phone:min-h-11">
           ‹ Back to this week
@@ -177,38 +175,30 @@ export function WeekList({ byDay, today, monday, onWeek, onAdd, onOpen, onDay, n
         const busy = days.filter((date) => date === today || eventsOn(date, byDay, today).length > 0);
         const free = days.filter((date) => !busy.includes(date));
         return (
-          <section key={first} aria-label={`Week of ${dayLabel(first)}`} className="space-y-3">
-            <div className="flex items-center gap-3">
-              <p className="caps shrink-0 font-display text-[12px] font-semibold text-muted">{weekTitle(first, today)}</p>
-              <span className="h-px flex-1 bg-ink/10" />
-            </div>
+          <section key={first} aria-label={`Week of ${dayLabel(first)}`} className="space-y-5">
+            <p className="caps font-['Silkscreen'] text-[11px] text-muted">{weekTitle(first, today)}</p>
             {busy.map((date) => {
               const events = eventsOn(date, byDay, today);
               const nowAt = date === today ? nowIndex(events, now) : -1;
               return (
-              <div key={date} className="flex gap-3">
-                <DateBadge date={date} today={today} onClick={() => onDay(date)} />
-                <div className="min-w-0 flex-1 space-y-1.5">
+                <div key={date} className="space-y-2">
+                  <DayHeader date={date} today={today} onClick={() => onDay(date)} />
                   {events.map((event, index) => (
-                    <div key={event.id} className="space-y-1.5">
+                    <div key={event.id} className="space-y-2">
                       {index === nowAt ? <NowLine now={now} /> : null}
                       <EventRow event={event} today={today} past={date === today && over(event, now)} onOpen={onOpen} act={act} />
                     </div>
                   ))}
                   {nowAt === events.length && events.length > 0 ? <NowLine now={now} /> : null}
-                  {events.length ? null : <p className="px-1 py-2.5 text-[12px] text-muted">Nothing on today.</p>}
+                  {events.length ? null : <p className="px-1 py-1 text-[12px] text-muted">Nothing on today.</p>}
                 </div>
-                <button type="button" onClick={() => onAdd(date)} aria-label={`Add on ${dayLabel(date)}`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-muted hover:bg-ink/6 hover:text-ember">
-                  +
-                </button>
-              </div>
               );
             })}
             {free.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-1.5 pl-1">
-                <span className="mr-1 text-[11px] text-muted">Free</span>
+              <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[11.5px] text-muted">
+                <span className="mr-1">Free</span>
                 {free.map((date) => (
-                  <button key={date} type="button" onClick={() => onAdd(date)} title={`Add on ${dayLabel(date)}`} className="min-h-9 rounded-md border border-ink/10 px-2 py-1 font-mono text-[11px] text-muted hover:border-ember/40 hover:text-ember">
+                  <button key={date} type="button" onClick={() => onDay(date)} aria-label={`See ${dayLabel(date)}`} className="min-h-9 rounded-md px-2 font-mono hover:bg-ink/6 hover:text-ink/85">
                     {dayLabel(date, { weekday: "short", day: "numeric" })}
                   </button>
                 ))}
@@ -224,29 +214,27 @@ export function WeekList({ byDay, today, monday, onWeek, onAdd, onOpen, onDay, n
   );
 }
 
-// A day's date as a block: its weekday over its number, ember for today; a tap opens the day
-function DateBadge({ date, today, onClick }: { date: ISODate; today: ISODate; onClick: () => void }) {
+// A day's heading across the list: its name and date over a rule, ember for today; a tap opens the day
+function DayHeader({ date, today, onClick }: { date: ISODate; today: ISODate; onClick: () => void }) {
   const isToday = date === today;
   return (
-    <button type="button" onClick={onClick} aria-label={`See ${isToday ? "today" : dayLabel(date)}`} className={`flex w-12 shrink-0 flex-col items-center self-start rounded-xl py-1.5 hover:brightness-110 ${isToday ? "bg-ember/15 text-ember" : "bg-ink/[0.04] text-ink/80"}`}>
-      <span className="caps text-[9.5px]">{dayLabel(date, { weekday: "short" })}</span>
-      <span className="font-display text-[26px] leading-none">{Number(date.slice(8))}</span>
+    <button type="button" onClick={onClick} aria-label={`See ${isToday ? "today" : dayLabel(date)}`} className={`flex w-full items-baseline gap-3 border-b pb-1.5 text-left hover:border-ink/30 ${isToday ? "border-ember/50 text-ember" : "border-ink/12 text-ink/85"}`}>
+      <span className="font-['Silkscreen'] text-[14px]">{dayName(date, today)}</span>
+      <span className="font-mono text-[11.5px] text-muted">{dayLabel(date, { day: "numeric", month: "short" })}</span>
     </button>
   );
 }
 
-// An event as a row: a deadline with its tick, an alarm with its bell; a tap on the text opens it
+// An event as a row across the day: a deadline with its tick, an alarm with its bell, the title, and
+// under it the time and what it is; a tap on the text opens it
 function EventRow({ event, today, past, onOpen, act }: { event: CalendarEvent; today: ISODate; past: boolean; onOpen: (event: CalendarEvent) => void; act: Act }) {
   const off = event.kind === "alarm" && !event.alarm.enabled;
   return (
-    <div role="group" aria-label={event.title} className={`flex items-center gap-3 rounded-xl border-l-[3px] bg-ink/[0.03] py-2 pr-3 pl-3 hover:bg-ink/[0.06] ${edgeClass(event, today)} ${off || past ? "opacity-50" : ""}`}>
-      {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <BellMark />}
-      <button type="button" onClick={() => onOpen(event)} aria-label={`Open ${event.title}`} className="flex min-h-9 min-w-0 flex-1 items-center gap-3 text-left">
-        <span className="min-w-0 flex-1">
-          <span className="block text-[13px] leading-snug text-ink/90 [overflow-wrap:anywhere]">{event.title}</span>
-          <span className="block text-[11px] text-muted">{detailOf(event, today, off)}</span>
-        </span>
-        {event.time ? <span className="shrink-0 font-mono text-[13px] tabular-nums text-ink/80">{showTime(event.time)}</span> : null}
+    <div role="group" aria-label={event.title} className={`flex items-center gap-3 rounded-lg border-l-[3px] bg-ink/[0.03] py-2 pr-3 pl-3 hover:bg-ink/[0.06] ${edgeClass(event, today)} ${off || past ? "opacity-50" : ""}`}>
+      {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <TimeMark alarm={event.alarm} />}
+      <button type="button" onClick={() => onOpen(event)} aria-label={`Open ${event.title}`} className="min-h-9 min-w-0 flex-1 text-left">
+        <span className="line-clamp-2 text-[13px] leading-snug text-ink/90 [overflow-wrap:anywhere]">{event.title}</span>
+        <span className="mt-0.5 block text-[11px] text-muted">{cardDetail(event, today, off)}</span>
       </button>
     </div>
   );
@@ -306,9 +294,10 @@ export function MonthDots({ byDay, today, monday, onWeek, large }: CalendarViewP
           </div>
         ))}
       </div>
-      <p className="flex gap-3 text-[10.5px] text-muted">
+      <p className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-muted">
         <Legend dot="bg-ember">Deadline</Legend>
         <Legend dot="bg-sky-400">Alarm</Legend>
+        <Legend dot="bg-emerald-400">Event</Legend>
         <Legend dot="bg-red-400">Overdue</Legend>
       </p>
     </div>
@@ -334,19 +323,28 @@ function Legend({ dot, children }: { dot: string; children: ReactNode }) {
 
 // ---- Shared ----
 
-function detailOf(event: CalendarEvent, today: ISODate, off: boolean) {
-  if (event.kind === "alarm") return `Alarm${event.alarm.kind === "plain" ? "" : ` · ${kindLabels[event.alarm.kind].toLowerCase()}`}${off ? " · off" : ""}`;
-  // A deadline's time, shown beside it, is when its alarm rings on the day
-  const days = daysBetween(today, event.date);
-  const when = days < 0 ? `Due ${dayLabel(event.date)}, ${-days}d late` : "Due";
-  return `${when}${event.time ? " · alarm" : ""}`;
-}
-
-// The same, shorter, for a narrow column: an alarm's time first, a deadline's alarm last
+// What an event is, short: an alarm's or event's time first, a deadline's alarm last
 function cardDetail(event: CalendarEvent, today: ISODate, off: boolean) {
-  if (event.kind === "alarm") return `${showTime(event.time)}${event.alarm.kind === "plain" ? "" : ` · ${kindLabels[event.alarm.kind].toLowerCase()}`}${off ? " · off" : ""}`;
+  if (event.kind === "alarm") {
+    const { kind, minutes } = event.alarm;
+    const span = minutes ? `${showTime(event.time)} – ${showTime(clockAfter(event.time, minutes))}` : showTime(event.time);
+    return `${span}${kind === "plain" || kind === "none" ? "" : ` · ${kindLabels[kind].toLowerCase()}`}${off ? " · off" : ""}`;
+  }
   const days = daysBetween(today, event.date);
   return `${days < 0 ? `${-days}d late` : "Due"}${event.time ? ` · alarm ${showTime(event.time)}` : ""}`;
+}
+
+// A bell for an alarm; a clock face for an event, which doesn't ring
+function TimeMark({ alarm }: { alarm: Alarm }) {
+  if (alarm.kind === "none") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true" className="mt-px h-4 w-4 shrink-0 text-emerald-300" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+        <circle cx="8" cy="8" r="5.5" />
+        <path d="M8 5v3l2 1.5" />
+      </svg>
+    );
+  }
+  return <BellMark />;
 }
 
 function BellMark() {
@@ -358,11 +356,11 @@ function BellMark() {
 }
 
 function edgeClass(event: CalendarEvent, today: ISODate) {
-  if (event.kind === "alarm") return "border-sky-400/70";
+  if (event.kind === "alarm") return event.alarm.kind === "none" ? "border-emerald-400/70" : "border-sky-400/70";
   return event.date < today ? "border-red-400/80" : "border-ember/70";
 }
 
 function dotClass(event: CalendarEvent, today: ISODate) {
-  if (event.kind === "alarm") return event.alarm.enabled ? "bg-sky-400" : "bg-ink/25";
+  if (event.kind === "alarm") return !event.alarm.enabled ? "bg-ink/25" : event.alarm.kind === "none" ? "bg-emerald-400" : "bg-sky-400";
   return event.date < today ? "bg-red-400" : "bg-ember";
 }

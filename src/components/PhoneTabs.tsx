@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { HexTile } from "./HexTile";
 import { phoneSections, screenAt, sectionAt, type Section } from "./sections";
 
@@ -57,8 +57,11 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
   );
 }
 
-// The section's screens, stacked upward and centred above its tab. The tabs sit close together
-// in the middle of the bar, so even the outer tabs' menus keep clear of the screen's edges.
+// Phone glass curves away at the screen's sides, so a menu keeps this far from either edge
+const EDGE_GAP_PX = 16;
+
+// The section's screens, stacked upward and centred above its tab, slid inward where centring would
+// bring it within EDGE_GAP_PX of a screen edge.
 function ScreenMenu({
   section,
   currentPath,
@@ -69,9 +72,17 @@ function ScreenMenu({
   onChoose: (path: string) => void;
 }) {
   const current = screenAt(currentPath, section.phone);
+  const menu = useRef<HTMLDivElement>(null);
+  const [slide, setSlide] = useState(0);
+  useLayoutEffect(() => {
+    const box = menu.current!.getBoundingClientRect();
+    setSlide(Math.max(0, EDGE_GAP_PX - box.left) - Math.max(0, box.right - (window.innerWidth - EDGE_GAP_PX)));
+  }, []);
 
   return (
     <div
+      ref={menu}
+      style={slide ? { marginLeft: slide } : undefined}
       role="menu"
       aria-label={section.label}
       className={`absolute bottom-full z-50 mb-3 flex left-1/2 -translate-x-1/2 flex-col-reverse gap-0.5 rounded-xl border border-ink/10 bg-card p-1 shadow-[var(--card-shadow)]`}

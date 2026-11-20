@@ -63,6 +63,7 @@ const preview: Record<Mutation, Preview> = {
       id,
       parentId,
       title,
+      description: "",
       statWeights: {},
       createdAt: at,
       completedAt: null,

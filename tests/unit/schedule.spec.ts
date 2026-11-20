@@ -1,13 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { emptyKitchen } from "../../src/shared/kitchen";
-import { upcomingAlarms } from "../../src/shared/schedule";
+import { eventsOn, upcomingAlarms } from "../../src/shared/schedule";
 import type { Alarm, Deadline, Routine, Snapshot } from "../../src/shared/types";
 
 // Which alarms the phone should schedule, from routines and deadlines
 
 const routine = (overrides: Partial<Routine>): Routine => ({ id: "r", title: "Routine", cue: "", weekdays: [], time: null, alarm: "none", ...overrides });
 const deadline = (overrides: Partial<Deadline>): Deadline => ({ id: "d", nodeId: null, title: "Deadline", dueDate: "2026-10-20", alarmTime: null, ...overrides });
-const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", at: null, time: null, weekdays: [], enabled: true, ...overrides });
+const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", sound: "default", minutes: null, at: null, time: null, weekdays: [], enabled: true, ...overrides });
 const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   nodes: [],
   edges: [],
@@ -113,4 +113,14 @@ test("meal reminders join the schedule as plain alarms; those already past are d
   // At 08:00 the breakfast reminder (07:15) is past; lunch's (12:15) is still to ring
   expect(times(upcomingAlarms(snapshot({ kitchen }), new Date("2026-10-19T08:00:00"), 1))).toEqual(["meal:2026-10-19:lunch:prep Mon Oct 19 2026 12:15"]);
   expect(upcomingAlarms(snapshot({ kitchen }), new Date("2026-10-19T08:00:00"), 1)[0]).toMatchObject({ kind: "plain", title: "Start prep (lunch: Dal)" });
+});
+
+test("an event never rings, and is on its day's schedule: repeating on its weekdays, a one-off on its date", () => {
+  const exam = alarm({ id: "exam", label: "Exam", kind: "none", minutes: 120, at: new Date("2026-10-19T11:00:00").toISOString() });
+  const lecture = alarm({ id: "lecture", kind: "none", minutes: 60, time: "09:00", weekdays: ["Mon", "Wed"] });
+  const off = alarm({ id: "off", kind: "none", time: "10:00", weekdays: ["Mon"], enabled: false });
+  const all = snapshot({ alarms: [exam, lecture, off] });
+  expect(upcomingAlarms(all, monday6am, 3)).toEqual([]);
+  expect(eventsOn(all, "2026-10-19").map((event) => `${event.title} ${event.at.toString().slice(16, 21)} ${event.minutes}`)).toEqual(["Event 09:00 60", "Exam 11:00 120"]);
+  expect(eventsOn(all, "2026-10-20")).toEqual([]);
 });
