@@ -90,3 +90,9 @@ The e2e tests that open a section's menu by its button may need updating here (s
 - **Change**: the desktop shows the first recipe (alphabetically) or the first Atlas entry until
   another is chosen. Combined with 1, the Kitchen button returns to the recipe last read. The phone,
   which shows the list or a recipe, is unchanged.
+
+## 10. Reset layout only once something is placed by hand
+- **Seen**: the graph's toolbar always had three buttons, one of them Reset layout, which does
+  nothing until a quest or step has been dragged.
+- **Change**: the button appears once any node has a hand-placed position, and goes after a full reset.
+- **Wrong if**: a button that comes and goes reads as unstable; then dim it instead.

@@ -29,7 +29,7 @@ import { CardActions, CardData, nodeTypes } from "./graphCards";
  * quests changes (and after a resize or a layout reset, unless the user has moved the view), and
  * turns the result into React Flow nodes and edges, kept
  * as the same objects while unchanged so a drag redraws one card. The cards themselves are in
- * graphCards.tsx. Around the canvas: the toolbar (+ New quest, the Quests panel, Reset layout), a
+ * graphCards.tsx. Around the canvas: the toolbar (+ New quest, the Quests panel, Reset layout once anything is placed by hand), a
  * chosen link's Remove panel, and the empty states. Drags save placements; dragging between dots adds
  * a link, or removes one dragged back along.
  * What is collapsed, unlocked or opened today is kept on this device.
@@ -579,9 +579,8 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
             >
               Quests <span className="ml-1 font-mono text-muted tabular-nums">{shown.length}/{quests.length}</span>
             </button>
-            {phone ? null : (
-              <ResetLayoutButton onReset={resetLayout} />
-            )}
+            {/* Shown only once something has been placed by hand, as there is nothing to reset before */}
+            {phone || !snapshot.nodes.some((node) => node.position) ? null : <ResetLayoutButton onReset={resetLayout} />}
           </div>
 
           {questsOpen ? <QuestsPanel quests={quests} completed={completed} archived={archived} act={act} onReopen={(id) => actions.open(id)} /> : null}
