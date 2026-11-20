@@ -95,3 +95,12 @@ Reverted: design.md 188 is the user's Settings tab on the phone.
 - **Change**: the phone shows only Fit (pinching can't return to the overview in one move); the
   desktop keeps all three.
 - **Wrong if**: one-handed use needs the buttons to zoom.
+
+## 12. The phone's week opens on today
+- **Seen**: by Saturday the phone's week list began with Monday's and Wednesday's finished
+  lectures; today, the day the screen is opened for, was below the first screen of past events.
+- **Why it hurts**: the first thing read is what is over; the eye scrolls past it every time.
+- **Change**: this week's past days that held something are named in one line under the week's
+  title ("Earlier Mon 16 Wed 18"), each opening its day, as the "Free" line does for empty ones;
+  today's heading follows. Also the narrow desktop's list, which is the same list.
+- **Wrong if**: looking back over the week's past events is a common use of this list.

@@ -170,13 +170,16 @@ export function WeekList({ calendar, today, monday, onWeek, onOpen, onDay, now, 
       )}
       {Array.from({ length: weeks }, (_, index) => {
         const first = addDays(monday, 7 * index);
-        // Days gone by are left out, unless something is still on them
-        const days = Array.from({ length: 7 }, (_, offset) => addDays(first, offset)).filter((date) => date >= today || eventsOn(date, calendar, today).length > 0);
+        // Days gone by that held something are named in one line above, so the list opens on today
+        const all = Array.from({ length: 7 }, (_, offset) => addDays(first, offset));
+        const earlier = all.filter((date) => date < today && eventsOn(date, calendar, today).length > 0);
+        const days = all.filter((date) => date >= today);
         const busy = days.filter((date) => date === today || eventsOn(date, calendar, today).length > 0);
         const free = days.filter((date) => !busy.includes(date));
         return (
           <section key={first} aria-label={`Week of ${dayLabel(first)}`} className="space-y-5">
             <p className="caps font-['Silkscreen'] text-[11px] text-muted">{weekTitle(first, today)}</p>
+            {earlier.length > 0 ? <DayLinks label="Earlier" dates={earlier} onDay={onDay} /> : null}
             {busy.map((date) => {
               const events = eventsOn(date, calendar, today);
               const nowAt = date === today ? nowIndex(events, now) : -1;
@@ -194,22 +197,27 @@ export function WeekList({ calendar, today, monday, onWeek, onOpen, onDay, now, 
                 </div>
               );
             })}
-            {free.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[11.5px] text-muted">
-                <span className="mr-1">Free</span>
-                {free.map((date) => (
-                  <button key={date} type="button" onClick={() => onDay(date)} aria-label={`See ${dayLabel(date)}`} className="min-h-9 rounded-md px-2 font-mono hover:bg-ink/6 hover:text-ink/85">
-                    {dayLabel(date, { weekday: "short", day: "numeric" })}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            {free.length > 0 ? <DayLinks label="Free" dates={free} onDay={onDay} /> : null}
           </section>
         );
       })}
       <button type="button" onClick={() => setWeeks(weeks + WEEKS_SHOWN)} className="min-h-11 self-center rounded-lg border border-ink/12 px-3 py-1.5 text-[12.5px] text-ink/80 hover:bg-ink/6">
         Show {WEEKS_SHOWN} more weeks
       </button>
+    </div>
+  );
+}
+
+// Days named in one line, each opening that day
+function DayLinks({ label, dates, onDay }: { label: string; dates: ISODate[]; onDay: (date: ISODate) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[11.5px] text-muted">
+      <span className="mr-1">{label}</span>
+      {dates.map((date) => (
+        <button key={date} type="button" onClick={() => onDay(date)} aria-label={`See ${dayLabel(date)}`} className="min-h-9 rounded-md px-2 font-mono hover:bg-ink/6 hover:text-ink/85">
+          {dayLabel(date, { weekday: "short", day: "numeric" })}
+        </button>
+      ))}
     </div>
   );
 }
