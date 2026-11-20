@@ -57,15 +57,6 @@ Only open work is listed here. What is built, and why it is built that way, is i
       (`try/electron-45`). Build it, check the tray, Ctrl+Alt+Space and the window controls under native
       Wayland, and merge if they hold; Electron 37 is out of support.
 
-- [ ] Sign-ups are still open on the server (`disable_signup: false`, read again 2026-11-06 08:10): commit
-      086c67e removed sign-up from the app's screen only, so anyone with the publishable key can create
-      an account. Row-level security keeps them out of the user's data, but close it in the Supabase
-      dashboard: Authentication > Sign In / Providers > "Allow new users to sign up" off.
-
-- [ ] Decide (design 293): the connector's consent page lets any https redirect host through with a red
-      warning, so a phished consent link is one click from full access. Accept Claude's callback only (other
-      agents then can't connect), or keep the warning?
-
 ## Agent access
 
 - [ ] The hosted connector (design 98) carries the overnight fixes (design 234, 238) only once deployed:
