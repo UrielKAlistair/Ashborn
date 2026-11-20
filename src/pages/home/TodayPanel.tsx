@@ -30,8 +30,8 @@ type TodayPanelProps = {
 
 /**
  * Today: the desktop's right-hand panel, and the phone's To-do screen. Top to bottom: the date; what is on
- * now and next on today's schedule; the quests gone quiet, asking what's up; deadlines overdue or due
- * within three weeks; Now, the to-do; the ready steps no priority covers yet; and today's routines.
+ * now and next on today's schedule; Now, the to-do; deadlines overdue or due within three weeks; the
+ * quests gone quiet, asking what's up; the ready steps no priority covers yet; and today's routines.
  */
 export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   const date = useToday();
@@ -70,10 +70,6 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 
       <UpNext snapshot={snapshot} />
 
-      <GoneQuiet quiet={quiet} act={act} />
-
-      <Deadlines snapshot={snapshot} model={model} act={act} date={date} />
-
       <FocusCard
         steps={todo.flatMap(({ steps }) => steps)}
         priorities={priorities}
@@ -89,6 +85,10 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
           </p>
         }
       />
+
+      <Deadlines snapshot={snapshot} model={model} act={act} date={date} />
+
+      <GoneQuiet quiet={quiet} act={act} />
 
       {unprioritised.length > 0 ? <Unprioritised steps={unprioritised} model={model} act={act} priorities={priorities} openAtFirst={todoCount === 0} /> : null}
 
