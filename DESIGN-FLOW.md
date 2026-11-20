@@ -24,13 +24,9 @@ The e2e tests that open a section's menu by its button may need updating here (s
 - **Wrong if**: you mostly want a section's first screen rather than the last one, or the changing
   label reads as the button moving.
 
-## 2. Now first on Today
-- **Seen**: on the desktop's Today panel and the phone's To-do, Now (what to do next) sat below gone
-  quiet quests and every deadline, about two thirds of the way down the desktop panel.
-- **Why it hurts**: the panel's first question is "what do I do now"; the answer was below the
-  fold of attention, after items you check rather than act on.
-- **Change**: order is Coming up (today's times), Now, deadlines, gone quiet, unprioritised, routines.
-- **Wrong if**: your first look each day is really "what is due", not "what do I do".
+## 2. (Withdrawn) Now first on Today
+Reverted: design.md 304 is the user's order (Gone quiet first, as "a danger zone", then Deadlines,
+then Now). A bet must not undo a user's decision.
 
 ## 3. Coming up today; descriptions in Now
 - Coming up: what is on now and the next two times today, rings and events, at the top of Today.
@@ -73,16 +69,8 @@ The e2e tests that open a section's menu by its button may need updating here (s
   foot, as large as before, and Today scrolls between them.
 - **Wrong if**: seeing the character first is what makes opening the app feel like the game.
 
-## 8. Alarms gets a phone tab; Settings moves into Home's menu
-- **Seen**: the phone's four tabs were Home, Calendar, Kitchen, Settings. Settings is opened a few
-  times ever (theme, alarm permissions); Alarms, the day's schedule, sat in Calendar's menu.
-- **Why it hurts**: a tab is the most expensive place on the screen, and it was spent on the least
-  used screen while a daily one cost two taps.
-- **Change**: tabs are Home, Alarms, Calendar, Kitchen; Settings is the last item in Home's menu
-  (To-do, Graph, Character, Settings), and Home never returns to it as a "last screen". The desktop
-  is unchanged.
-- **Wrong if**: Settings is opened more than it seems. (A missing alarm permission doesn't need it:
-  the app shows a banner on every screen, which fixes it in one tap.)
+## 8. (Withdrawn) Alarms gets a phone tab; Settings moves into Home's menu
+Reverted: design.md 188 is the user's Settings tab on the phone.
 
 ## 9. The Cookbook and the Atlas open on their first entry
 - **Seen**: on the desktop both opened with two thirds of the window an empty pane saying

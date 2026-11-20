@@ -64,18 +64,12 @@ const calendarScreens: Screen[] = [
 ];
 const calendar: Section = { label: "Calendar", icon: CalendarIcon, phone: calendarScreens, desktop: calendarScreens };
 const atlas = single("Atlas", "/atlas", AtlasIcon);
-const settingsScreen: Screen = { label: "Settings", path: "/settings", icon: SettingsIcon };
-
-// On the phone the day's alarms have a tab of their own, the calendar is one screen, and the rarely
-// opened Settings sits last in Home's menu
-const phoneHome: Section = { ...home, phone: [...home.phone, settingsScreen] };
-const phoneAlarms = single("Alarms", "/alarms", AlarmsIcon);
-const phoneCalendar = single("Calendar", "/calendar", CalendarIcon);
+const settings = single("Settings", "/settings", SettingsIcon);
 
 // Each device's sections, most used first. The phone has no Atlas; only the phone has Settings
 // (the desktop's rail has its theme switch, and alarms ring only on the phone).
 export const desktopSections: Section[] = [home, kitchen, calendar, atlas];
-export const phoneSections: Section[] = [phoneHome, phoneAlarms, phoneCalendar, kitchen];
+export const phoneSections: Section[] = [home, calendar, kitchen, settings];
 // The screen `path` shows: the longest screen path it starts with ("/" only matches itself)
 export function screenAt(path: string, screens: Screen[]): Screen | undefined {
   return screens
@@ -83,18 +77,17 @@ export function screenAt(path: string, screens: Screen[]): Screen | undefined {
     .sort((a, b) => b.path.length - a.path.length)[0];
 }
 
-// The section of `sections` that `path` belongs to, looking at its screens on both devices
-export function sectionAt(path: string, sections: Section[]): Section | undefined {
-  return sections.find((section) => screenAt(path, [...section.phone, ...section.desktop]));
+// The section `path` belongs to, looking at its screens on both devices
+export function sectionAt(path: string): Section | undefined {
+  return [...desktopSections, settings].find((section) => screenAt(path, [...section.phone, ...section.desktop]));
 }
 
 // The screen last open in each section, kept on this device, so a section's button returns to it
 const lastScreenKey = "ashborn-last-screen";
 
-export function rememberScreen(path: string, sections: Section[]) {
-  const section = sectionAt(path, sections);
-  // Settings is visited and left, so Home returns to the screen before it
-  if (!section || path === settingsScreen.path) return;
+export function rememberScreen(path: string) {
+  const section = sectionAt(path);
+  if (!section) return;
   try {
     const last = JSON.parse(localStorage.getItem(lastScreenKey) ?? "{}") as Record<string, string>;
     localStorage.setItem(lastScreenKey, JSON.stringify({ ...last, [section.label]: path }));
