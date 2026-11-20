@@ -19,12 +19,14 @@ export function AtlasPage({
   onNavigate,
 }: AtlasPageProps) {
   const [designOpen, setDesignOpen] = useState(true);
+  // The Atlas opens on its first entry rather than an empty pane
+  const shownPath = currentPath === "/atlas" ? designEntries[0].path : currentPath;
 
   const renderAtlasEntry = () => {
-    if (currentPath === "/atlas/cognitive-offloading") {
+    if (shownPath === "/atlas/cognitive-offloading") {
       return <CognitiveOffloadingPage eyebrow="Design" />;
     }
-    if (currentPath === "/atlas/progress") return <ProgressPage eyebrow="Design" />;
+    if (shownPath === "/atlas/progress") return <ProgressPage eyebrow="Design" />;
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-[13px] text-muted">
         <HexMark className="h-10 w-12 text-ink/15" />
@@ -44,7 +46,7 @@ export function AtlasPage({
             label="Design"
             onNavigate={onNavigate}
             onToggle={() => setDesignOpen((open) => !open)}
-            selectedPath={currentPath}
+            selectedPath={shownPath}
           />
         </div>
       </aside>

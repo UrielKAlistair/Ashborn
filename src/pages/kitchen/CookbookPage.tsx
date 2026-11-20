@@ -34,7 +34,8 @@ export function CookbookPage({ kitchen, act, phone, recipeId, onOpenRecipe }: Co
   // Leaving the editor asks first when it holds changes (lib/unsaved.ts)
   const leaveEditor = (then: () => void) => void askToLeave().then((leave) => leave && then());
   const recipes = [...kitchen.recipes].sort((a, b) => a.title.localeCompare(b.title));
-  const open = recipes.find((recipe) => recipe.id === recipeId) ?? null;
+  // The desktop, with room for both panes, shows the first recipe until another is chosen
+  const open = recipes.find((recipe) => recipe.id === recipeId) ?? (phone ? null : (recipes[0] ?? null));
 
   const startNew = () =>
     leaveEditor(() => {

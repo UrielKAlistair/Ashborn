@@ -81,3 +81,12 @@ The e2e tests that open a section's menu by its button may need updating here (s
   is unchanged.
 - **Wrong if**: Settings is opened more than it seems. (A missing alarm permission doesn't need it:
   the app shows a banner on every screen, which fixes it in one tap.)
+
+## 9. The Cookbook and the Atlas open on their first entry
+- **Seen**: on the desktop both opened with two thirds of the window an empty pane saying
+  "Choose a recipe" / "Choose an entry".
+- **Why it hurts**: the largest area on the screen held nothing, and one more press was needed
+  before anything could be read.
+- **Change**: the desktop shows the first recipe (alphabetically) or the first Atlas entry until
+  another is chosen. Combined with 1, the Kitchen button returns to the recipe last read. The phone,
+  which shows the list or a recipe, is unchanged.
