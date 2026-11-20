@@ -88,3 +88,10 @@ Reverted: design.md 188 is the user's Settings tab on the phone.
   nothing until a quest or step has been dragged.
 - **Change**: the button appears once any node has a hand-placed position, and goes after a full reset.
 - **Wrong if**: a button that comes and goes reads as unstable; then dim it instead.
+
+## 11. The phone graph keeps only Fit
+- **Seen**: the + and − zoom buttons sat over the cards at the graph's bottom left on the phone,
+  where pinching already zooms.
+- **Change**: the phone shows only Fit (pinching can't return to the overview in one move); the
+  desktop keeps all three.
+- **Wrong if**: one-handed use needs the buttons to zoom.

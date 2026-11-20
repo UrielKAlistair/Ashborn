@@ -558,9 +558,11 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     >
       <Territories quests={territories} camera={phone ? phonePanZoom.feed : undefined} />
       {phone ? null : <GraphScrollbar />}
+      {/* The phone zooms by pinching, so it keeps only Fit, which pinching can't do in one move */}
       <Controls
         position="bottom-left"
         showInteractive={false}
+        showZoom={!phone}
         fitViewOptions={{ ...fitOptions, duration: 300 }}
         onFitView={() => (userMoved.current = false)}
         // The zoom buttons move the view without an event, so onMoveStart doesn't count them
