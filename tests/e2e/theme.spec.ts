@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { phoneWindow } from "../phoneWindow";
+import { openScreen } from "../openScreen";
 
 // The redesign's shell: no navigation until signed in, and the theme switch, which lasts across a
 // reload and switches back; on the phone, Settings holds the theme.
@@ -48,7 +49,7 @@ test("rail and theme switch", async () => {
 
   await test.step("on the phone, Settings holds the theme", async () => {
     await phoneWindow(app, page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await openScreen(page, "Settings");
     await page.getByRole("radiogroup", { name: "Theme" }).getByRole("radio", { name: "Dark" }).click();
     await expect.poll(theme).toBe("dark");
   });

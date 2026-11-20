@@ -35,6 +35,7 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
               type="button"
               onClick={() => choose(section)}
               aria-expanded={section.phone.length > 1 ? openSection === section : undefined}
+              aria-current={isActive ? "page" : undefined}
               className={`group flex min-h-11 flex-col items-center gap-0.5 px-3 py-0.5 short:flex-row short:gap-2 ${isActive ? "text-ember" : "text-muted"}`}
             >
               <HexTile active={isActive} className="h-9 w-[42px] short:h-7 short:w-[33px]">

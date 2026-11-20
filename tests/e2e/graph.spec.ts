@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { phoneWindow } from "../phoneWindow";
+import { openScreen } from "../openScreen";
 
 // One walk through the home graph in a fresh profile, signed in as the test user: quests,
 // steps, links, ticking, hiding, XP, renaming, deleting, live changes from elsewhere, and state
@@ -352,8 +353,7 @@ test("home graph", async () => {
   });
 
   await test.step("alarms: a quick one, a recurring one with a challenge, switched off and on", async () => {
-    await page.getByRole("button", { name: "Calendar", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
+    await openScreen(page, "Alarms");
     await page.getByRole("button", { name: "New on this day" }).click();
     await page.getByRole("dialog", { name: /^New on/ }).getByRole("tab", { name: "Alarm" }).click();
     await page.getByRole("dialog", { name: /^New on/ }).getByRole("button", { name: "In 30 min" }).click();
@@ -408,17 +408,13 @@ test("home graph", async () => {
     await expect(page.locator(".react-flow:not([inert] *)")).toHaveCount(0);
     await expect(upNext()).toBeVisible();
 
-    const openScreen = async (section: string, screen: string) => {
-      await page.getByRole("button", { name: section, exact: true }).click();
-      await page.getByRole("menu", { name: section }).getByRole("menuitem", { name: screen }).click();
-      await expect(page.getByRole("menu")).toHaveCount(0);
-    };
-
-    await openScreen("Home", "Character");
+    await openScreen(page, "Character");
+    await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(page.getByText("STR")).toBeVisible();
     await expect(upNext()).toBeHidden();
 
-    await openScreen("Home", "Graph");
+    await openScreen(page, "Graph");
+    await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(page.locator(".react-flow")).toBeVisible();
     await expect(page.locator(".react-flow__handle").first()).toBeHidden(); // no linking by hand on the phone
     await card("Deep Learning II").getByRole("button", { name: "Actions" }).click();
@@ -427,10 +423,12 @@ test("home graph", async () => {
     await addInput().press("Enter");
     await expect(card("Added on the phone")).toBeVisible();
 
-    await openScreen("Home", "To-do");
+    await openScreen(page, "To-do");
+    await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(upNext()).toContainText("Added on the phone");
 
-    await openScreen("Kitchen", "Stocks");
+    await openScreen(page, "Stocks");
+    await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Stocks" })).toBeVisible();
   });
 

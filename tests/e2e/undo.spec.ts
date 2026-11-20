@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { phoneWindow } from "../phoneWindow";
+import { openScreen } from "../openScreen";
 
 // Undo after a tick: from the graph and from Now; one toast, the newest; gone after a few
 // seconds; and a tick that folds a quest away comes back.
@@ -178,14 +179,13 @@ test("undo a tick", async () => {
     await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
 
     await phoneWindow(app, page);
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "To-do" }).click();
+    await openScreen(page, "To-do");
     const focus = page.getByRole("region", { name: "Now" });
     await focus.getByRole("listitem").first().getByTitle("Mark done").click();
     await expect(toast()).toHaveCSS("opacity", "1");
     await page.screenshot({ path: `${shots}/undo-phone.png` });
     const box = (await toast().boundingBox())!;
-    const tabs = (await page.getByRole("button", { name: "Home", exact: true }).boundingBox())!;
+    const tabs = (await page.locator("nav").boundingBox())!;
     expect(box.y + box.height).toBeLessThanOrEqual(tabs.y);
     // Only Undo takes taps: a tap on its words reaches what lies under them
     const underWords = await toast().evaluate((el) => {

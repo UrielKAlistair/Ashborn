@@ -74,6 +74,7 @@ export function Navbar({
                 type="button"
                 onClick={() => choose(section)}
                 aria-expanded={section.desktop.length > 1 ? openSection === section : undefined}
+                aria-current={isActive ? "page" : undefined}
                 className={`group flex flex-col items-center gap-1.5 bg-transparent ${isActive ? "text-ink" : "text-muted hover:text-ink/80"}`}
               >
                 <HexTile active={isActive} className="h-12 w-14">

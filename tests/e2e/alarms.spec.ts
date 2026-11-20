@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { showTime, toISODate } from "../../src/shared/dates";
 import { weekStart } from "../../src/pages/calendar/calendarEvents";
+import { openScreen } from "../openScreen";
 
 // The Alarms page: today's rings, each with how long until it rings, skipped for today alone by its
 // switch or moved that day alone by a tap; tomorrow's rings one arrow away; the repeating alarms,
@@ -50,8 +51,8 @@ test("alarms", async () => {
     await page.getByPlaceholder("Email").fill(process.env.E2E_EMAIL!);
     await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await page.getByRole("button", { name: "Calendar", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Alarms", exact: true }).click({ timeout: 20_000 });
+    await page.locator("aside").first().waitFor({ timeout: 20_000 });
+    await openScreen(page, "Alarms");
     // A row shows the time and AM/PM in separate spans
     await expect(ring("Stretch")).toContainText(showTime(time).replace(" ", ""));
     await expect(ring("Stretch")).toContainText(/in \d min/);
@@ -113,8 +114,7 @@ test("alarms", async () => {
   });
 
   await test.step("calendar: a one-off relabelled keeps its moment; one deleted elsewhere closes", async () => {
-    await page.getByRole("button", { name: "Calendar", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Calendar", exact: true }).click();
+    await openScreen(page, "Calendar");
     await expect(page.getByText("Rang this morning")).toBeVisible(); // still in the snapshot, on today
     // Today's column marks now, and greys the alarm that has rung
     await expect(page.getByRole("separator", { name: "Now" })).toBeVisible();
@@ -160,8 +160,7 @@ test("alarms", async () => {
   });
 
   await test.step("the + pop-up sets a quick alarm, which rings today and opens from there", async () => {
-    await page.getByRole("button", { name: "Calendar", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
+    await openScreen(page, "Alarms");
     const count = async () => (await db.from("alarms").select("id")).data?.length;
     const before = await count();
     await page.getByRole("button", { name: "New on this day" }).click();

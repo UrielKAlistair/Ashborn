@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { openScreen } from "../openScreen";
 
 // The phone graph's own layout: quests in one column in priority order, prerequisites above what
 // they lead to, and nothing the desktop placed read or written. The view opens on the column's top,
@@ -104,8 +105,7 @@ test("the phone graph's own layout", async () => {
   // than the 640 px at which a desktop window takes the phone layout; only the height is tried here
   await test.step("on its side, the character's head can be scrolled into view", async () => {
     await windowSize(640, 360);
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "Character" }).click();
+    await openScreen(page, "Character");
     const card = page.locator("section").filter({ hasText: /Lvl\s*\d/ }).filter({ hasText: "STR" });
     await expect(card).toBeVisible();
     const scroller = page.locator(".panel-scroll").filter({ has: card });
@@ -125,12 +125,9 @@ test("the phone graph's own layout", async () => {
   await test.step("another section keeps the graph built", async () => {
     await openGraph();
     await page.locator(".react-flow").evaluate((element) => ((element as HTMLElement).dataset.kept = "yes"));
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "To-do" }).click();
-    await page.getByRole("button", { name: "Calendar", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "To-do" }).click();
+    await openScreen(page, "To-do");
+    await openScreen(page, "Alarms");
+    await openScreen(page, "To-do");
     expect(await page.locator(".react-flow").getAttribute("data-kept")).toBe("yes");
   });
 
@@ -148,8 +145,8 @@ test("the phone graph's own layout", async () => {
 });
 
 async function openGraph() {
-  await page.getByRole("button", { name: "Home", exact: true }).click({ timeout: 15_000 });
-  await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "Graph" }).click();
+  await page.locator("nav").waitFor({ timeout: 15_000 });
+  await openScreen(page, "Graph");
   await expect(node(ids.first)).toBeVisible({ timeout: 15_000 });
 }
 

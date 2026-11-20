@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { addDays, today as appToday } from "../../src/shared/dates";
 import { phoneWindow } from "../phoneWindow";
+import { openScreen } from "../openScreen";
 
 // One walk through the Kitchen in a fresh profile, signed in as the test user: tracking staples,
 // correcting stock by hand, writing a recipe, planning, ticking and unticking meals against stock,
@@ -57,11 +58,6 @@ const editRecipe = async (title: string) => {
 };
 const amountLabel = (name: string) => stock(name).locator("p.font-mono");
 
-async function openScreen(section: string, screen: string) {
-  await page.getByRole("button", { name: section, exact: true }).click();
-  await page.getByRole("menu", { name: section }).getByRole("menuitem", { name: screen }).click();
-}
-
 async function setStock(name: string, value: string) {
   await stock(name).getByRole("button", { name: "Edit" }).click();
   const field = stock(name).getByRole("spinbutton", { name: `${name} amount in` });
@@ -81,7 +77,7 @@ test("kitchen", async () => {
     await page.getByPlaceholder("Password").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("button", { name: "Kitchen", exact: true })).toBeVisible({ timeout: 15_000 });
-    await openScreen("Kitchen", "Planning");
+    await openScreen(page, "Planning");
     await expect(page.getByRole("heading", { name: "Meal plan" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Stocks" })).toBeVisible();
   });
@@ -119,7 +115,7 @@ test("kitchen", async () => {
   });
 
   await test.step("a recipe with tracked ingredients and a reminder timed from another", async () => {
-    await openScreen("Kitchen", "Cookbook");
+    await openScreen(page, "Cookbook");
     await page.getByRole("button", { name: "+ New recipe" }).click();
     await page.getByLabel("Recipe name").fill("Rice and beans");
     await page.getByLabel("Method").fill("Take 200 grams of rice, wash it twice.\nCook the beans soft.");
@@ -147,7 +143,7 @@ test("kitchen", async () => {
   });
 
   await test.step("a planned meal, ticked, takes its recipe's amounts off the stocks", async () => {
-    await openScreen("Kitchen", "Planning");
+    await openScreen(page, "Planning");
     await meal("lunch").getByRole("button", { name: "Edit" }).click();
     await page.getByLabel("lunch description").fill("Rice with butter beans");
     await page.getByRole("button", { name: "Rice and beans", pressed: false }).click();
@@ -193,7 +189,7 @@ test("kitchen", async () => {
     // Leaving the screen with an edit open asks too, and so does quitting the app
     await editRecipe("Rice and beans");
     await page.getByLabel("Rice amount").fill("999");
-    await openScreen("Kitchen", "Planning");
+    await openScreen(page, "Planning");
     await expect(page.getByRole("alertdialog", { name: "Discard changes?" })).toBeVisible();
     await page.getByRole("button", { name: "Keep editing" }).click();
     await expect(page.getByLabel("Rice amount")).toHaveValue("999");
@@ -210,10 +206,10 @@ test("kitchen", async () => {
     });
     expect(asked).toBe("You have unsaved changes to this recipe.");
     await expect(page.getByLabel("Rice amount")).toHaveValue("999");
-    await openScreen("Kitchen", "Planning");
+    await openScreen(page, "Planning");
     await page.getByRole("button", { name: "Discard" }).click();
 
-    await openScreen("Kitchen", "Planning");
+    await openScreen(page, "Planning");
     await meal("lunch").getByTitle("Mark not done").click();
     await expect(amountLabel("Rice")).toHaveText("5 kg / 2 kg");
     await expect(amountLabel("Butter beans")).toHaveText("1 kg / 1 kg");
@@ -255,7 +251,7 @@ test("kitchen", async () => {
 
   await test.step("Back out of an edit: Discard closes the editor; Save opens what was saved, at its address", async () => {
     const asked = page.getByRole("alertdialog", { name: "Discard changes?" });
-    await openScreen("Kitchen", "Cookbook");
+    await openScreen(page, "Cookbook");
     await page.getByRole("button", { name: "Rice and beans" }).click();
     await editRecipe("Rice and beans");
     await page.getByLabel("Rice amount").fill("999");
@@ -307,11 +303,11 @@ test("kitchen", async () => {
 
   await test.step("on a phone-sized window the Kitchen is three screens", async () => {
     await phoneWindow(app, page);
-    await openScreen("Kitchen", "Stocks");
+    await openScreen(page, "Stocks");
     await expect(amountLabel("Rice")).toBeVisible();
-    await openScreen("Kitchen", "Meal plan");
+    await openScreen(page, "Meal plan");
     await expect(meal("lunch")).toBeInViewport();
-    await openScreen("Kitchen", "Recipes");
+    await openScreen(page, "Recipes");
     await page.getByRole("button", { name: "Rice and beans" }).click();
     await expect(page.getByRole("heading", { name: "Rice and beans" })).toBeVisible();
     // The phone's Back button (MainActivity) asks the page first: an open recipe goes back to the list

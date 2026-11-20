@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { openScreen } from "../openScreen";
 
 // Graph titles wrap, to three lines at most: on data seeded with long titles, every card's title
 // row is as tall as its title's lines (so layout and the drawn card agree), no two cards overlap,
@@ -175,8 +176,7 @@ test("graph titles wrap", async () => {
       await page.evaluate((stored) => localStorage.setItem("ashborn-theme", stored), theme);
       await windowSize(412, 860);
       await page.reload();
-      await page.getByRole("button", { name: "Home", exact: true }).click();
-      await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "Graph" }).click();
+      await openScreen(page, "Graph");
       await expect(card("Short no longer")).toBeVisible({ timeout: 15_000 });
       await expect.poll(mismatches).toEqual([]);
       await shot(`phone-${theme}`);

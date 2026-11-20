@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { phoneWindow } from "../phoneWindow";
+import { openScreen } from "../openScreen";
 
 // The quests' automatic layout: packed to the canvas, reflowing when one is added elsewhere,
 // dragged quests staying put with the rest around them, and the two resets.
@@ -233,8 +234,7 @@ test("quest layout", async () => {
   await test.step("the phone window keeps quests one screen wide", async () => {
     await phoneWindow(app, page);
     await page.reload();
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await page.getByRole("menu", { name: "Home" }).getByRole("menuitem", { name: "Graph" }).click();
+    await openScreen(page, "Graph");
     await expect(page.locator(".react-flow__node-quest").first()).toBeVisible({ timeout: 20_000 });
     const list = await rects();
     expectNoOverlap(list);

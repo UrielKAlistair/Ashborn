@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApi } from "../../src/lib/api";
 import { today } from "../../src/shared/dates";
+import { openScreen } from "../openScreen";
 
 // Two devices on one account: device A is the desktop app, taken offline and back; device B is
 // the API called from here, as the phone or the agent would. Per field the change made later
@@ -86,11 +87,6 @@ async function setStock(name: string, value: string) {
   await field.fill(value);
   await field.press("Enter");
   await stock(name).getByRole("button", { name: "Done" }).click();
-}
-
-async function openScreen(section: string, screen: string) {
-  await page.getByRole("button", { name: section, exact: true }).click();
-  await page.getByRole("menu", { name: section }).getByRole("menuitem", { name: screen }).click();
 }
 
 test("two devices", async () => {
@@ -182,7 +178,7 @@ test("two devices", async () => {
   await test.step("stock: equal readings on both devices give that amount, not twice it", async () => {
     const rice = crypto.randomUUID();
     await deviceB.createStockItem({ id: rice, name: "Rice", unit: "kg", target: 2000, readAt: null });
-    await openScreen("Kitchen", "Planning");
+    await openScreen(page, "Planning");
     await expect(amountLabel("Rice")).toHaveText("0 kg / 2 kg", { timeout: 10_000 });
     await goOffline();
     await setStock("Rice", "4.9");
