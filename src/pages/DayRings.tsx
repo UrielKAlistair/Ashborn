@@ -216,8 +216,9 @@ export function Row({ time, title, detail, until, dim, tone = "ring", lit = fals
       </span>
     </>
   );
+  // An event's wider left edge comes out of its padding, so its clock lines up with the rings'
   return (
-    <div role="group" aria-label={title} className={`alarm-card flex items-center gap-4 rounded-xl border px-4 py-4 hover:border-ink/25 ${tone === "event" ? "border-l-[3px] border-ink/12 border-l-emerald-400/70" : "border-ink/12"} ${lit ? "bg-emerald-400/[0.07]" : "bg-card"} ${dim ? "opacity-50" : ""}`}>
+    <div role="group" aria-label={title} className={`alarm-card flex items-center gap-4 rounded-xl border py-4 pr-4 hover:border-ink/25 ${tone === "event" ? "border-l-[3px] border-ink/12 border-l-emerald-400/70 pl-[14px]" : "border-ink/12 pl-4"} ${lit ? "bg-emerald-400/[0.07]" : "bg-card"} ${dim ? "opacity-50" : ""}`}>
       {onOpen ? (
         <button type="button" onClick={onOpen} aria-label={`Edit ${title}`} className="flex min-w-0 flex-1 items-center gap-4 text-left">
           {content}
