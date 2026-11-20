@@ -36,11 +36,11 @@ then Now). A bet must not undo a user's decision.
 - Not the "Up next" removed in design.md 201 (a second copy of the to-do's steps): this lists
   only timed rings and events.
 
-## 4. Past days narrower in the desktop week
-- **Seen**: at 1440 px the week's seven equal columns gave five past, mostly empty days over half
-  the width, while today's titles wrapped a word a line.
-- **Change**: a past day is half a future day's width, and its items one line each with an ellipsis.
-- **Wrong if**: you look back over the week as much as ahead.
+## 4. (Withdrawn) Past days narrower in the desktop week
+Tried at half and at 0.7 of a future day's width. At half, a past title showed as "Lect…" or
+broke mid-word; at 0.7 past days barely narrowed and today's titles wrapped again. Late in the
+week five of seven columns are past, so the room taken from each is too little to matter. If the
+week's columns are to change, a window starting at yesterday would be the thing to try.
 
 ## 5. A quieter meal plan
 - **Seen**: "Nothing planned" twelve times on the desktop plan; a dish named like its recipe said
