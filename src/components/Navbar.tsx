@@ -66,7 +66,7 @@ export function Navbar({
       <div className="flex flex-1 flex-col items-center gap-3">
         {desktopSections.map((section) => {
           const isActive = section === currentSection;
-          const Icon = section.icon;
+          const Icon = isActive ? (screenAt(currentPath, section.desktop)?.icon ?? section.icon) : section.icon;
 
           return (
             <div key={section.label} className="flex flex-col items-center">

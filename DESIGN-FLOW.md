@@ -18,9 +18,10 @@ The e2e tests that open a section's menu by its button may need updating here (s
   CALENDAR; on the phone To-do, Graph and Character all said HOME.
 - **Why it hurts**: two choices per move where one would do, and recall ("where is Alarms?")
   where recognition would do.
-- **Change**: a button from another section goes straight to the screen last open in it (kept on the
-  device); the open section's button is labelled with the screen shown (TO-DO, ALARMS, STOCKS);
-  pressing it again opens the menu, as before.
+- **Change**: a button from another section goes straight to the screen last open in it during this
+  run of the app (a new run starts each section on its first screen, so one visit to the Cookbook
+  doesn't redirect Kitchen for good); the open section's button shows the shown screen's icon and
+  name (TO-DO, ALARMS, STOCKS), so icon and label agree; pressing it again opens the menu, as before.
 - **Wrong if**: you mostly want a section's first screen rather than the last one, or the changing
   label reads as the button moving.
 

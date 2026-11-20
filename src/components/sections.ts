@@ -82,15 +82,16 @@ export function sectionAt(path: string): Section | undefined {
   return [...desktopSections, settings].find((section) => screenAt(path, [...section.phone, ...section.desktop]));
 }
 
-// The screen last open in each section, kept on this device, so a section's button returns to it
+// The screen last open in each section during this run of the app, so a section's button returns to
+// it; a new run starts every section on its first screen
 const lastScreenKey = "ashborn-last-screen";
 
 export function rememberScreen(path: string) {
   const section = sectionAt(path);
   if (!section) return;
   try {
-    const last = JSON.parse(localStorage.getItem(lastScreenKey) ?? "{}") as Record<string, string>;
-    localStorage.setItem(lastScreenKey, JSON.stringify({ ...last, [section.label]: path }));
+    const last = JSON.parse(sessionStorage.getItem(lastScreenKey) ?? "{}") as Record<string, string>;
+    sessionStorage.setItem(lastScreenKey, JSON.stringify({ ...last, [section.label]: path }));
   } catch {
     // Storage blocked: the section's first screen is used instead
   }
@@ -99,7 +100,7 @@ export function rememberScreen(path: string) {
 // Where a section's button goes from another section: its last screen on these screens, else its first
 export function lastScreen(section: Section, screens: Screen[]): string {
   try {
-    const path = (JSON.parse(localStorage.getItem(lastScreenKey) ?? "{}") as Record<string, string>)[section.label];
+    const path = (JSON.parse(sessionStorage.getItem(lastScreenKey) ?? "{}") as Record<string, string>)[section.label];
     if (path && screenAt(path, screens)) return path;
   } catch {
     // Storage blocked or unreadable
