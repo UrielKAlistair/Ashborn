@@ -51,3 +51,13 @@ The e2e tests that open a section's menu by its button may need updating here (s
 - **Change**: an empty slot is just its name and time in a dashed outline, and a press anywhere on
   it plans it; a dish whose name is its one recipe's shows once, as the recipe's link at title size.
 - **Wrong if**: an empty slot without words reads as broken rather than free.
+
+## 6. A new screen eases in
+- **Seen**: changing screen was a hard cut; the whole window swapped in one frame.
+- **Why it hurts**: with no motion the eye can't tell what changed and re-scans the whole window;
+  a short entrance marks where the new content is and that the move happened.
+- **Change**: the page area fades up and rises 4 px over 160 ms on a change of screen (not within a
+  screen, e.g. opening a recipe); nothing remounts, so the phone's graph stays built. Off under
+  reduced motion.
+- **Wrong if**: it reads as lag. 160 ms is near the lower bound people notice as motion; if it feels
+  slow, cut it rather than add more.

@@ -23,6 +23,7 @@ import { useToday } from "./lib/useToday";
 import { PhoneHome } from "./pages/phone/PhoneHome";
 import { SignInPage } from "./pages/SignInPage";
 import { LeaveDialog } from "./components/LeaveDialog";
+import { usePageEntrance } from "./lib/usePageEntrance";
 import { useSyncedData } from "./lib/useSyncedData";
 import { asking, askToLeave, saveForQuit } from "./lib/unsaved";
 
@@ -173,6 +174,7 @@ function App() {
   };
 
   const page = renderPage();
+  const pageBox = usePageEntrance(currentPath);
 
   return (
     <main className="relative h-screen overflow-hidden bg-transparent text-ink">
@@ -183,7 +185,7 @@ function App() {
       {phone ? (
         <div className="relative flex h-full min-h-0 flex-col">
           {/* On the desktop's phone view, the content starts below the window's title strip */}
-          <div className={`flex min-h-0 flex-1 overflow-hidden px-4 py-3 ${window.ashborn ? "pt-7" : "pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>{page}</div>
+          <div ref={pageBox} className={`flex min-h-0 flex-1 overflow-hidden px-4 py-3 ${window.ashborn ? "pt-7" : "pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>{page}</div>
           {userId ? <PhoneTabs currentPath={currentPath} onNavigate={navigate} /> : null}
         </div>
       ) : (
@@ -191,7 +193,7 @@ function App() {
           {/* The sections need a signed-in user, so the rail waits for one */}
           {userId ? <Navbar currentPath={currentPath} onNavigate={navigate} /> : null}
 
-          <div className="flex min-h-0 flex-1 justify-between gap-6 overflow-hidden p-6">{page}</div>
+          <div ref={pageBox} className="flex min-h-0 flex-1 justify-between gap-6 overflow-hidden p-6">{page}</div>
         </div>
       )}
 
