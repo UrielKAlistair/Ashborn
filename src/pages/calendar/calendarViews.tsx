@@ -11,7 +11,8 @@ import { dayEvents, monthGrid, overdue, weekStart, type CalendarDays, type Calen
  * The Calendar's two views of the same events. Each gets the events by day and the week in view, and
  * reports taps up to the page: an event (onOpen), a week picked (onWeek), a day's name to see the whole
  * day, every ring in it (onDay). Adding is the page's one + button.
- *   WeekColumns (desktop): the week's seven days side by side, as the meal plan lays out its days,
+ *   WeekColumns (desktop): the week's seven days side by side, as the meal plan lays out its days (past
+ *     days at half width),
  *     with arrows to the weeks either side.
  *   WeekList (phone, narrow desktop): the weeks from the one in view down, each day with something on
  *     it a heading over its events, the free days a row of small dates.
@@ -76,6 +77,9 @@ function dayName(date: ISODate, today: ISODate) {
 
 // ---- The desktop's week ----
 
+// A past day's column width, as a share of a day to come's: what is over needs less room
+const PAST_DAY_SHARE = 0.5;
+
 export function WeekColumns({ calendar, today, monday, onWeek, onOpen, onDay, now, act }: CalendarViewProps) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
   return (
@@ -95,7 +99,7 @@ export function WeekColumns({ calendar, today, monday, onWeek, onOpen, onDay, no
         <Arrow label="Previous week" onClick={() => onWeek(addDays(monday, -7))}>
           ‹
         </Arrow>
-        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-7 gap-2">
+        <div className="grid min-h-0 min-w-0 flex-1 gap-2" style={{ gridTemplateColumns: days.map((date) => (date < today ? `${PAST_DAY_SHARE}fr` : "1fr")).join(" ") }}>
           {days.map((date) => (
             <DayColumn key={date} date={date} events={eventsOn(date, calendar, today)} today={today} now={now} onOpen={onOpen} onDay={onDay} act={act} />
           ))}
@@ -125,7 +129,7 @@ function DayColumn({ date, events, today, now, onOpen, onDay, act }: { date: ISO
       {events.map((event, index) => (
         <div key={event.id} className="contents">
           {index === nowAt ? <NowLine now={now} /> : null}
-          <EventCard event={event} today={today} past={offset === 0 && over(event, now)} onOpen={onOpen} act={act} />
+          <EventCard event={event} today={today} past={offset === 0 && over(event, now)} gone={offset < 0} onOpen={onOpen} act={act} />
         </div>
       ))}
       {nowAt === events.length && events.length > 0 ? <NowLine now={now} /> : null}
@@ -133,16 +137,17 @@ function DayColumn({ date, events, today, now, onOpen, onDay, act }: { date: ISO
   );
 }
 
-// An event in a day's column: its tick or bell and title, then its time and what it is
-function EventCard({ event, today, past, onOpen, act }: { event: CalendarEvent; today: ISODate; past: boolean; onOpen: (event: CalendarEvent) => void; act: Act }) {
+// An event in a day's column: its tick or bell and title, then its time and what it is. In a past
+// day's narrow column each is one line, cut with an ellipsis.
+function EventCard({ event, today, past, gone, onOpen, act }: { event: CalendarEvent; today: ISODate; past: boolean; gone: boolean; onOpen: (event: CalendarEvent) => void; act: Act }) {
   const off = event.kind === "alarm" && !event.alarm.enabled;
   return (
     <div role="group" aria-label={event.title} className={`rounded-lg border-l-[3px] bg-ink/[0.035] px-2 py-1.5 hover:bg-ink/[0.06] ${edgeClass(event, today)} ${off || past ? "opacity-50" : ""}`}>
       <div className="flex items-start gap-1.5">
         {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <TimeMark alarm={event.alarm} />}
         <button type="button" onClick={() => onOpen(event)} aria-label={`Open ${event.title}`} className="min-w-0 flex-1 text-left">
-          <span className="block text-[12.5px] leading-snug text-ink/90 [overflow-wrap:anywhere]">{event.title}</span>
-          <span className="block text-[10.5px] text-muted">{cardDetail(event, today, off)}</span>
+          <span className={`block text-[12.5px] leading-snug text-ink/90 ${gone ? "truncate" : "[overflow-wrap:anywhere]"}`}>{event.title}</span>
+          <span className={`block text-[10.5px] text-muted ${gone ? "truncate" : ""}`}>{cardDetail(event, today, off)}</span>
         </button>
       </div>
     </div>
