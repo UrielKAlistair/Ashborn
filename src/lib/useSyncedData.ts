@@ -17,7 +17,6 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { Act } from "../pages/home/HomePage";
-import { DEFAULT_DAY_START_HOUR, setDayStartHour } from "../shared/dates";
 import { emptyKitchen } from "../shared/kitchen";
 import type { Delta, Snapshot } from "../shared/types";
 import { createApi } from "./api";
@@ -55,8 +54,6 @@ export function useSyncedData(userId: string | null | undefined) {
   // A preview is made again over every newer confirmed snapshot, so a change made elsewhere
   // meanwhile is kept; one that no longer applies is left out until the server answers.
   const snapshot = useMemo(() => data.confirmed && data.pending.reduce(withPreview, data.confirmed), [data]);
-  // today() reads the hour from dates.ts; set it here, before anything below renders with it
-  if (snapshot) setDayStartHour(snapshot.settings.dayStartHour);
   const [offline, setOffline] = useState(false);
   const [queued, setQueued] = useState(queuedCount);
   const [error, setError] = useState<string | null>(null);
@@ -335,7 +332,7 @@ function loadCachedSnapshot(): Snapshot | null {
   try {
     const cached = JSON.parse(window.localStorage.getItem(snapshotStorageKey) ?? "null") as Snapshot | null;
     // Saved before the Kitchen, the settings, skipped alarms or alarm sounds existed
-    return cached && { ...cached, nodes: cached.nodes.map((node) => ({ ...node, stamps: node.stamps ?? {} })), kitchen: cached.kitchen ?? emptyKitchen, skippedAlarms: cached.skippedAlarms ?? [], alarms: cached.alarms.map((alarm) => ({ ...alarm, sound: alarm.sound ?? "default" })), settings: cached.settings ?? { dayStartHour: DEFAULT_DAY_START_HOUR, timeZone: null } };
+    return cached && { ...cached, nodes: cached.nodes.map((node) => ({ ...node, stamps: node.stamps ?? {} })), kitchen: cached.kitchen ?? emptyKitchen, skippedAlarms: cached.skippedAlarms ?? [], alarms: cached.alarms.map((alarm) => ({ ...alarm, sound: alarm.sound ?? "default" })), settings: cached.settings ?? { timeZone: null } };
   } catch {
     return null;
   }

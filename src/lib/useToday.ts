@@ -2,10 +2,8 @@
 import { useEffect, useState } from "react";
 import { addDays, startOfDay, today } from "../shared/dates";
 
-// Today's date, refreshed when the next day starts, on focus, and when the day-start hour changes:
-// the app can sit in the tray for days
-// (today() reads the hour itself; dayStartHour is here so a change refreshes the date)
-export function useToday(dayStartHour: number) {
+// Today's date, refreshed at midnight and on focus: the app can sit in the tray for days
+export function useToday() {
   const [date, setDate] = useState(today);
 
   useEffect(() => {
@@ -18,7 +16,7 @@ export function useToday(dayStartHour: number) {
       window.clearTimeout(timeout);
       window.removeEventListener("focus", refresh);
     };
-  }, [date, dayStartHour]);
+  }, [date]);
 
   return date;
 }

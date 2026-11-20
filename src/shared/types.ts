@@ -178,8 +178,8 @@ export type Snapshot = {
   settings: Settings;
 };
 
-// dayStartHour 0–23; timeZone an IANA name, written by the user's devices, null until one has
-export type Settings = { dayStartHour: number; timeZone: string | null };
+// timeZone an IANA name, written by the user's devices, null until one has
+export type Settings = { timeZone: string | null };
 
 // What a change returns: only the rows it touched. Upserts replace by id; removals drop by id.
 // Edges touching a removed node are dropped along with it.

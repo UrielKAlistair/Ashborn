@@ -69,7 +69,7 @@ The app is a release build, signed with your own key, which stays outside the re
   waiting to be sent.
 - `npm run android:test` checks the phone's Java copy of the alarm schedule against the cases
   the unit tests write (`tests/unit/scheduleFixtures.spec.ts`); run it after changing the
-  schedule, the Kitchen's reminders or the day-start rule, and fix `Schedule.java` until it passes.
+  schedule or the Kitchen's reminders, and fix `Schedule.java` until it passes.
 
 On first start the app asks to allow notifications and, on Android 14+, to show alarms over
 the lock screen; both are needed for alarms to ring. Signing in also gives the phone a second

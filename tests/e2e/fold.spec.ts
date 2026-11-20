@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { addDays, dayOf, startOfDay } from "../../src/shared/dates";
+import { addDays, startOfDay, today as todayDate } from "../../src/shared/dates";
 
 // Folding finished chains, on data seeded straight into the test user's rows: a box finished today
 // folds to one line at once; steps and boxes finished on an earlier day leave the graph until their
@@ -12,15 +12,14 @@ import { addDays, dayOf, startOfDay } from "../../src/shared/dates";
 // back with Reopen; an opening from an earlier day no longer counts.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
-const DAY_START_HOUR = 4;
 
 let app: ElectronApplication;
 let page: Page;
 let profile: string;
 const pageErrors: string[] = [];
 
-const today = dayOf(new Date(), DAY_START_HOUR);
-const dayStart = startOfDay(today, DAY_START_HOUR);
+const today = todayDate();
+const dayStart = startOfDay(today);
 const minutes = (base: Date, offset: number) => new Date(base.getTime() + offset * 60_000).toISOString();
 const twoDaysAgo = minutes(dayStart, -2 * 24 * 60);
 const justNow = new Date().toISOString();
@@ -41,7 +40,6 @@ test.beforeAll(async () => {
     const { error: wipeError } = await db.from(table).delete().not("id", "is", null);
     if (wipeError) throw wipeError;
   }
-  await must(db.from("user_settings").upsert({ day_start_hour: DAY_START_HOUR }, { onConflict: "user_id" }));
 
   const step = (title: string, parentId: string, completedAt: string | null) => ({ id: crypto.randomUUID(), title, parent_id: parentId, completed_at: completedAt });
   await must(
@@ -145,34 +143,18 @@ test("finished chains fold", async () => {
     await expect(card("Inner two")).toBeVisible({ timeout: 15_000 });
   });
 
-  await test.step("the day-start hour is set from Today's header and saved", async () => {
-    await page.locator("section", { hasText: "Routines" }).last().getByTitle("When the day starts").click();
-    await page.getByLabel("The day starts at").selectOption("5");
-    await expect.poll(async () => (await db.from("user_settings").select("day_start_hour").single()).data?.day_start_hour).toBe(5);
-  });
-
-  await test.step("a new day reads the data again, for the reads bounded by date (not between 23:00 and midnight)", async () => {
-    // The day made to start at the next hour, and the page's clock set half a minute before it
-    const hour = new Date().getHours();
-    try {
-      if (hour === 23) return;
-      await must(db.from("user_settings").upsert({ day_start_hour: hour + 1 }, { onConflict: "user_id" }));
-      const start = new Date();
-      start.setHours(hour + 1, 0, 0, 0);
-      await page.clock.install({ time: new Date(start.getTime() - 30_000) });
-      await page.reload();
-      await expect(card("Inner two")).toBeVisible({ timeout: 15_000 });
-      await page.waitForTimeout(3000); // the first reads settle
-      let reads = 0;
-      page.on("request", (request) => {
-        if (request.method() === "GET" && request.url().includes("/nodes_with_xp?") && !request.url().includes("id=eq")) reads++;
-      });
-      await page.clock.runFor(60_000);
-      await expect.poll(() => reads).toBeGreaterThan(0);
-    } finally {
-      // Set back, as later suites count days from the default hour
-      await must(db.from("user_settings").upsert({ day_start_hour: DAY_START_HOUR }, { onConflict: "user_id" }));
-    }
+  await test.step("midnight reads the data again, for the reads bounded by date", async () => {
+    // The page's clock set half a minute before the next midnight
+    await page.clock.install({ time: new Date(startOfDay(addDays(todayDate(), 1)).getTime() - 30_000) });
+    await page.reload();
+    await expect(card("Inner two")).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(3000); // the first reads settle
+    let reads = 0;
+    page.on("request", (request) => {
+      if (request.method() === "GET" && request.url().includes("/nodes_with_xp?") && !request.url().includes("id=eq")) reads++;
+    });
+    await page.clock.runFor(60_000);
+    await expect.poll(() => reads).toBeGreaterThan(0);
   });
 
   expect(pageErrors).toEqual([]);

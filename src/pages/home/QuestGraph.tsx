@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { HexMark } from "../../components/HexTile";
 import { useToday } from "../../lib/useToday";
 import { isFinished, type GraphModel } from "../../shared/graphModel";
-import { dayOf } from "../../shared/dates";
+import { toISODate } from "../../shared/dates";
 import { byPriority, derivePriorities, linkPriority, type Priorities } from "../../shared/priority";
 import { type GraphEdge, type GraphNode, type ISODate, type Snapshot } from "../../shared/types";
 import type { Act } from "./HomePage";
@@ -120,8 +120,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   const [unlocked, setUnlocked] = useState(() => loadIds(unlockedStorageKey));
   const [opened, setOpened] = useState(loadOpened);
   const [showingShelved, setShowingShelved] = useState<ReadonlySet<string>>(new Set());
-  const { dayStartHour } = snapshot.settings;
-  const today = useToday(dayStartHour);
+  const today = useToday();
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
@@ -137,7 +136,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   const zoomAtMoveStart = useRef(1);
 
   const priorities = useMemo(() => derivePriorities(model, snapshot), [model, snapshot.edges]);
-  const view: ViewChoices = { collapsed, opened, showingShelved, today, dayStartHour };
+  const view: ViewChoices = { collapsed, opened, showingShelved, today };
   const folded = (id: string) => isFolded(model, view, id);
 
   const quests = model.children.get(null) ?? [];
@@ -151,7 +150,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // Worked out again only when the graph or what is open changes, not per drag move
   const { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone, shelvedSteps } = useMemo(
     () => drawnGraph(model, snapshot.edges, priorities, view, { addingTo, fontsReady, phone }),
-    [model, snapshot.edges, collapsed, opened, showingShelved, today, dayStartHour, addingTo, priorities, fontsReady, phone],
+    [model, snapshot.edges, collapsed, opened, showingShelved, today, addingTo, priorities, fontsReady, phone],
   );
   // Each rendered node's quest, whose territory a hover keeps lit
   const questOf = useMemo(() => new Map(rendered.map(({ node, questId }) => [node.id, questId])), [rendered]);
@@ -400,7 +399,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       built.current.set(node.id, next);
       return next;
     });
-  }, [rendered, model, placements, moving, collapsed, opened, today, dayStartHour, unlocked, addingTo, menuFor, priorities, phone, actions]);
+  }, [rendered, model, placements, moving, collapsed, opened, today, unlocked, addingTo, menuFor, priorities, phone, actions]);
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -635,7 +634,7 @@ const toolbarPill = "rounded-lg border border-ink/10 bg-panel px-3 py-1.5 text-[
 
 // What this device chose to show: boxes collapsed, finished boxes opened today (by day), and quests
 // showing their shelved steps; with the day, which decides what counts as done earlier
-type ViewChoices = { collapsed: ReadonlySet<string>; opened: Record<string, ISODate>; showingShelved: ReadonlySet<string>; today: ISODate; dayStartHour: number };
+type ViewChoices = { collapsed: ReadonlySet<string>; opened: Record<string, ISODate>; showingShelved: ReadonlySet<string>; today: ISODate };
 
 // A finished box (shared/graphModel.ts) folds at once, unless opened today. A folded quest leaves the graph
 // for the Completed list.
@@ -664,7 +663,7 @@ function drawnGraph(
   const visibleSteps = (id: string) => (view.collapsed.has(id) || isFolded(model, view, id) ? [] : byPriority(model.children.get(id) ?? [], priorities));
   const doneEarlier = (node: GraphNode) => {
     const finished = model.finishedAt.get(node.id) ?? (node.completedAt ? Date.parse(node.completedAt) : null);
-    return finished !== null && dayOf(new Date(finished), view.dayStartHour) < view.today;
+    return finished !== null && toISODate(new Date(finished)) < view.today;
   };
   const quests = model.children.get(null) ?? [];
   const shown = byPriority(quests.filter((quest) => !quest.shelved && !isFolded(model, view, quest.id)), priorities);

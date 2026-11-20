@@ -29,7 +29,7 @@ const snapshot = (nodes: GraphNode[]): Snapshot => ({
   deadlines: [],
   alarms: [],
   kitchen: emptyKitchen,
-  settings: { dayStartHour: 4, timeZone: null },
+  settings: { timeZone: null },
 });
 const quest = (statWeights: StatWeights, ownXp = 10) => node("quest", { statWeights, ownXp });
 

@@ -9,7 +9,7 @@ import { Tick } from "../home/Tick";
 // Days the desktop shows at once, today in the middle
 const DESKTOP_DAYS = 5;
 
-type MealPlanProps = { kitchen: Kitchen; dayStartHour: number; act: Act; phone: boolean; onOpenRecipe: (id: string) => void };
+type MealPlanProps = { kitchen: Kitchen; act: Act; phone: boolean; onOpenRecipe: (id: string) => void };
 
 /**
  * The meal plan: each day's breakfast, lunch and dinner, rolling with today, from mealDaysBack days
@@ -18,9 +18,9 @@ type MealPlanProps = { kitchen: Kitchen; dayStartHour: number; act: Act; phone: 
  * takes its recipes' ingredients off the stocks; cancelled, which silences its reminders; or edited
  * (which plans a cancelled meal again, design 273). A switch swaps in the default week, which fills any day not planned.
  */
-export function MealPlan({ kitchen, dayStartHour, act, phone, onOpenRecipe }: MealPlanProps) {
+export function MealPlan({ kitchen, act, phone, onOpenRecipe }: MealPlanProps) {
   const [defaults, setDefaults] = useState(false);
-  const date = useToday(dayStartHour);
+  const date = useToday();
 
   return (
     <section className="panel-lift rounded-2xl border border-ink/8 bg-panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-4">

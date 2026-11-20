@@ -28,7 +28,7 @@ const model = (nodes: GraphNode[]) =>
     deadlines: [],
     alarms: [],
     kitchen: emptyKitchen,
-    settings: { dayStartHour: 4, timeZone: null },
+    settings: { timeZone: null },
   } satisfies Snapshot);
 
 test("a box folds as soon as its last step is ticked", () => {

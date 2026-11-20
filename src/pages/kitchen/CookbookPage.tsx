@@ -253,8 +253,9 @@ function RecipeView({ kitchen, recipe, onEdit, onDelete }: { kitchen: Kitchen; r
 }
 
 // A recipe's method, a line at a time: a blank line parts sections, a section's first line reads as its
-// heading when steps follow it, and a step's wrapped text lines up with its first line. A tap on a step strikes it through
-// while cooking; the marks are kept by recipe and route while the app runs (struckSteps), not saved.
+// heading when steps follow it. Each step shows a round mark, and a tap on the step ticks the mark and
+// strikes the step through while cooking; a hint says so until the first tap. A bullet gives way to the
+// mark; a number stays. The marks are kept by recipe and route while the app runs (struckSteps), not saved.
 function Method({ text, marks }: { text: string; marks: string }) {
   const [struck, setStruck] = useState<ReadonlySet<string>>(() => {
     const kept = struckSteps.get(marks);
@@ -268,8 +269,11 @@ function Method({ text, marks }: { text: string; marks: string }) {
     setStruck(next);
   };
 
+  const hasSteps = text.split("\n").some((line) => step.test(line));
+
   return (
     <div role="group" aria-label="Method" className="space-y-4 text-sm leading-relaxed text-ink/80">
+      {hasSteps && struck.size === 0 ? <p className="text-[11.5px] text-muted">Tap a step to tick it off as you cook.</p> : null}
       {text.split(/\n\s*\n/).map((section, index) => (
         <div key={index} className="space-y-1.5">
           {section.split("\n").map((line, at, lines) => {
@@ -284,8 +288,10 @@ function Method({ text, marks }: { text: string; marks: string }) {
             }
             const key = `${index}:${at}:${line}`;
             const done = struck.has(key);
+            const marker = line.match(step)![1];
+            const shown = /\d/.test(marker) ? line.trim() : line.replace(step, "");
             return (
-              <p
+              <div
                 key={at}
                 role="checkbox"
                 aria-checked={done}
@@ -296,10 +302,18 @@ function Method({ text, marks }: { text: string; marks: string }) {
                   event.preventDefault();
                   strike(key);
                 }}
-                className={`cursor-pointer whitespace-pre-wrap rounded-md pl-[2ch] -indent-[2ch] transition-colors focus-visible:outline focus-visible:outline-ember/60 ${done ? "text-ink/35 line-through" : "hover:text-ink/95"}`}
+                className={`group -mx-2 flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1 transition-colors select-none hover:bg-ink/[0.05] focus-visible:outline focus-visible:outline-ember/60 phone:py-1.5 ${done ? "text-ink/35" : "hover:text-ink/95"}`}
               >
-                {line}
-              </p>
+                <span
+                  aria-hidden="true"
+                  className={`mt-[0.2em] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors ${done ? "border-transparent bg-emerald-400/70 text-canvas" : "border-ink/30 text-transparent group-hover:border-ember group-hover:text-ember/70"}`}
+                >
+                  <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2.5 6.2 L5 8.5 L9.5 3.5" />
+                  </svg>
+                </span>
+                <span className={`min-w-0 flex-1 whitespace-pre-wrap ${/\d/.test(marker) ? "pl-[2.5ch] -indent-[2.5ch]" : ""} ${done ? "line-through" : ""}`}>{shown}</span>
+              </div>
             );
           })}
         </div>

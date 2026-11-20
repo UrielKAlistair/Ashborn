@@ -9,6 +9,14 @@ Only open work is listed here. What is built, and why it is built that way, is i
 
 ## Now: daily use, in this order
 
+- [ ] Discuss pushes and battery. The ring-aware pushes (design 326) are parked, not approved, on branch
+      `wip/ring-aware-push`. Open: how long Doze can hold a normal push (measure it in Diagnostics), and
+      whether high pushes for changes within that bound can replace the refresh wakes altogether.
+- [ ] Drop `user_settings.day_start_hour` once the phone, the desktop app and the hosted connector run a build
+      from after 2026-11-20 (design 323), and redeploy the connector (`npm run connector:deploy`) so agents stop
+      reading it.
+- [ ] Per-tick stats (design 321): each tick records the stats it earned then, so moving a step, changing
+      weights or deleting leaves the past alone. Needs a schema change; not built.
 - [ ] Check the evening's phone changes of 2026-11-08 after installing (`research/daily-use/phone-checks.md`,
       last section): recipe tabs and struck steps, Back on a recipe, vibration on vibrate and silent, a ring
       stopping by itself after 5 minutes with a "Missed" notice, a challenge alarm sounding on silent for 15.
@@ -38,9 +46,6 @@ Only open work is listed here. What is built, and why it is built that way, is i
         HyperOS turns "Floating notifications" and "Lock screen notifications" off by default for
         a new channel, which on its own would leave only a quiet notification in the shade
         (inferred from HyperOS's known defaults, not checked on this phone).
-- [ ] Decide: the Alarms screen's Today lists rings before midnight, so a quick alarm set at 23:45 "in 30 min"
-      shows nowhere on that screen (only on the Calendar). Run Today to the day-start hour (04:00) instead,
-      as routines count their day?
 - [ ] Try sync across real devices: change something on the phone offline and the same thing on
       the desktop, and see the later change kept.
 - [ ] Check the AppImage starts at login: run `scripts/install-appimage.sh`, log out and in,

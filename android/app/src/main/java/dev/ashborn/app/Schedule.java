@@ -21,7 +21,7 @@ import org.json.JSONObject;
 // (src/shared/kitchen.ts), for refreshing alarms while the app is closed. The two are kept in step
 // by shared cases: tests/unit/scheduleFixtures.spec.ts writes them, ScheduleTest checks this
 // class against them. The input is the snapshot's JSON, reduced to what the schedule reads:
-// settings, routines, routineChecks, alarms, skippedAlarms, deadlines and kitchen (recipes, defaultWeek,
+// routines, routineChecks, alarms, skippedAlarms, deadlines and kitchen (recipes, defaultWeek,
 // meals).
 final class Schedule {
     private static final String[] WEEKDAYS = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
@@ -46,17 +46,12 @@ final class Schedule {
                 if (!alarm.getBoolean("enabled") || time == null || !has(alarm.getJSONArray("weekdays"), weekdayOf(date))) continue;
                 alarms.add(new Alarm("alarm:" + alarm.getString("id") + "@" + date, atTime(date, time), label(alarm), alarm.getString("kind"), alarm.getString("sound")));
             }
-        }
-        int dayStartHour = snapshot.getJSONObject("settings").getInt("dayStartHour");
-        String firstDay = dayOf(from, dayStartHour);
-        for (int offset = 0; offset < days; offset++) {
-            String date = addDays(firstDay, offset);
             for (JSONObject routine : objects(snapshot.getJSONArray("routines"))) {
                 String time = text(routine, "time");
                 if ("none".equals(routine.getString("alarm")) || time == null || !has(routine.getJSONArray("weekdays"), weekdayOf(date))) continue;
                 String id = routine.getString("id");
                 if (checked.contains(id + "@" + date)) continue;
-                alarms.add(new Alarm("routine:" + id + "@" + date, onDayAt(date, time, dayStartHour), routine.getString("title"), routine.getString("alarm")));
+                alarms.add(new Alarm("routine:" + id + "@" + date, atTime(date, time), routine.getString("title"), routine.getString("alarm")));
             }
         }
         long end = new GregorianCalendar(year, month, day + days).getTimeInMillis();
@@ -70,7 +65,7 @@ final class Schedule {
             String time = text(deadline, "alarmTime");
             String due = deadline.getString("dueDate");
             if (time == null || due.compareTo(lastDate) > 0) continue;
-            alarms.add(new Alarm("deadline:" + deadline.getString("id") + "@" + due, onDayAt(due, time, dayStartHour), "Due today: " + deadline.getString("title"), "plain"));
+            alarms.add(new Alarm("deadline:" + deadline.getString("id") + "@" + due, atTime(due, time), "Due today: " + deadline.getString("title"), "plain"));
         }
 
         alarms.addAll(mealReminders(snapshot.getJSONObject("kitchen"), from, days));
@@ -152,29 +147,18 @@ final class Schedule {
         return offsets;
     }
 
-    // When `time` falls on the day `date` (a routine's or a deadline's): within the day, which runs from the
-    // day-start hour and so past midnight; 03:00 on a day starting at 04:00 is the night after it
-    private static long onDayAt(String date, String time, int dayStartHour) {
-        long at = atTime(date, time);
-        return at < startOfDay(date, dayStartHour) ? atTime(addDays(date, 1), time) : at;
-    }
-
     // Dates are local, as in src/shared/dates.ts: a Calendar built from out-of-range fields rolls
     // over the way JavaScript's Date does
 
-    static String dayOf(long moment, int dayStartHour) {
+    // The date a moment falls on
+    static String dateOf(long moment) {
         Calendar at = calendarAt(moment);
-        return isoDate(new GregorianCalendar(at.get(Calendar.YEAR), at.get(Calendar.MONTH), at.get(Calendar.DAY_OF_MONTH), at.get(Calendar.HOUR_OF_DAY) - dayStartHour, at.get(Calendar.MINUTE)));
+        return isoDate(new GregorianCalendar(at.get(Calendar.YEAR), at.get(Calendar.MONTH), at.get(Calendar.DAY_OF_MONTH)));
     }
 
     static String addDays(String date, int days) {
         int[] ymd = ymd(date);
         return isoDate(new GregorianCalendar(ymd[0], ymd[1] - 1, ymd[2] + days));
-    }
-
-    private static long startOfDay(String date, int dayStartHour) {
-        int[] ymd = ymd(date);
-        return new GregorianCalendar(ymd[0], ymd[1] - 1, ymd[2], dayStartHour, 0).getTimeInMillis();
     }
 
     // Clock times arrive as HH:MM, or HH:MM:SS from the database

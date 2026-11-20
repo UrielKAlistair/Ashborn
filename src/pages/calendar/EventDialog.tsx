@@ -105,7 +105,7 @@ export function AlarmFields({ alarm, date: initialDate, act, onDone }: { alarm: 
         <input type="date" aria-label="Day" value={date} onChange={(event) => setDate(event.target.value)} className={`${field} min-w-0 flex-1`} />
         <TimeField label="Time" value={time} onChange={setTime} className={`${field} w-32`} />
       </div>
-      <input value={label} onChange={(event) => setLabel(event.target.value)} onKeyDown={(event) => event.key === "Enter" && !event.nativeEvent.isComposing && save()} placeholder="What for (optional)" aria-label="Label" className={`${field} w-full`} />
+      <textarea value={label} onChange={(event) => setLabel(event.target.value)} rows={4} placeholder="What for (optional)" aria-label="Label" className={`${field} block w-full resize-y leading-5`} />
       <div className="flex items-center gap-3">
         <select value={kind} aria-label="How it stops" onChange={(event) => setKind(event.target.value as Alarm["kind"])} className={`${field} flex-1`}>
           {(Object.keys(kindLabels) as Alarm["kind"][]).map((option) => (

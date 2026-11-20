@@ -2,7 +2,7 @@
 // out of mind unnoticed. A quest on the to-do counts too: a step listed every day and never acted on is
 // the quietest kind. A P1 quest is quiet sooner than the rest.
 
-import { dayOf, daysBetween } from "./dates";
+import { daysBetween, toISODate } from "./dates";
 import { isDone, type GraphModel } from "./graphModel";
 import type { Priorities } from "./priority";
 import type { GraphNode, ISODate, Priority } from "./types";
@@ -23,7 +23,7 @@ export function goneQuiet(model: GraphModel, { best }: Priorities, date: ISODate
       const open = inside.filter((step) => !model.children.has(step.id) && !isDone(step) && !model.shelved.has(step.id));
       if (open.length === 0) return [];
       const latest = Math.max(...[quest, ...inside].map((node) => Date.parse(node.lastActive)));
-      const days = daysBetween(dayOf(new Date(latest)), date);
+      const days = daysBetween(toISODate(new Date(latest)), date);
       const priority = best.get(quest.id);
       return days >= (priority === 1 ? QUIET_DAYS_P1 : QUIET_DAYS) ? [{ quest, days, openSteps: open.length, priority }] : [];
     })

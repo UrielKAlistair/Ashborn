@@ -17,7 +17,7 @@ const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   alarms: [],
   skippedAlarms: [],
   kitchen: emptyKitchen,
-  settings: { dayStartHour: 4, timeZone: null },
+  settings: { timeZone: null },
   ...parts,
 });
 
@@ -62,21 +62,12 @@ test("no alarm, no time, ticked days and past times do not ring", () => {
   expect(times(upcomingAlarms(snapshot({ routines, routineChecks }), monday6am, 2))).toEqual(["routine:ticked@2026-10-20 Tue Oct 20 2026 07:00"]);
 });
 
-test("a routine timed before the day-start hour rings in the night after its day, and its tick there silences it", () => {
-  const late = routine({ id: "late", weekdays: ["Mon"], time: "02:00", alarm: "plain" });
-  expect(times(upcomingAlarms(snapshot({ routines: [late] }), monday6am, 2))).toEqual(["routine:late@2026-10-19 Tue Oct 20 2026 02:00"]);
-  // At 01:30 on Tuesday's calendar it is still Monday, so Monday's tick holds
+test("a routine timed after midnight rings on its own calendar day, and only that day's tick silences it", () => {
+  const late = routine({ id: "late", weekdays: ["Tue"], time: "02:00", alarm: "plain" });
   const mondayNight = new Date("2026-10-20T01:30:00");
-  expect(times(upcomingAlarms(snapshot({ routines: [late] }), mondayNight, 1))).toEqual(["routine:late@2026-10-19 Tue Oct 20 2026 02:00"]);
-  const routineChecks = [{ routineId: "late", date: "2026-10-19" }];
-  expect(upcomingAlarms(snapshot({ routines: [late], routineChecks }), mondayNight, 1)).toEqual([]);
-});
-
-test("the schedule takes the day-start hour from the snapshot", () => {
-  const early = routine({ id: "early", weekdays: ["Mon"], time: "05:00", alarm: "plain" });
-  // With the day starting at 6, Monday's 05:00 falls in the night after Monday
-  const alarms = upcomingAlarms(snapshot({ routines: [early], settings: { dayStartHour: 6, timeZone: null } }), monday6am, 1);
-  expect(times(alarms)).toEqual(["routine:early@2026-10-19 Tue Oct 20 2026 05:00"]);
+  expect(times(upcomingAlarms(snapshot({ routines: [late] }), mondayNight, 1))).toEqual(["routine:late@2026-10-20 Tue Oct 20 2026 02:00"]);
+  expect(upcomingAlarms(snapshot({ routines: [late], routineChecks: [{ routineId: "late", date: "2026-10-19" }] }), mondayNight, 1)).toHaveLength(1);
+  expect(upcomingAlarms(snapshot({ routines: [late], routineChecks: [{ routineId: "late", date: "2026-10-20" }] }), mondayNight, 1)).toEqual([]);
 });
 
 test("deadlines ring on their due day when they have an alarm time inside the window", () => {
@@ -90,10 +81,9 @@ test("deadlines ring on their due day when they have an alarm time inside the wi
   expect(alarms[0]).toMatchObject({ title: "Due today: Deadline", kind: "plain" });
 });
 
-test("a deadline's alarm before the day-start hour rings in the night after its day, as a routine's does", () => {
-  // Made at 01:00 on the calendar's Tuesday, still Monday's day (it starts at 04:00): due "today", alarm 03:00
-  const deadlines = [deadline({ id: "night", dueDate: "2026-10-19", alarmTime: "03:00" })];
-  expect(times(upcomingAlarms(snapshot({ deadlines }), new Date("2026-10-20T01:00:00"), 2))).toEqual(["deadline:night@2026-10-19 Tue Oct 20 2026 03:00"]);
+test("a deadline's alarm after midnight rings on its due date", () => {
+  const deadlines = [deadline({ id: "night", dueDate: "2026-10-20", alarmTime: "03:00" })];
+  expect(times(upcomingAlarms(snapshot({ deadlines }), new Date("2026-10-20T01:00:00"), 1))).toEqual(["deadline:night@2026-10-20 Tue Oct 20 2026 03:00"]);
 });
 
 test("standalone alarms: recurring ones on their days, one-offs once, switched-off ones never", () => {

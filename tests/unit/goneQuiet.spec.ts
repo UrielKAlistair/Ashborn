@@ -34,7 +34,7 @@ function quiet(nodes: GraphNode[]) {
     routineChecks: [],
     alarms: [],
     kitchen: emptyKitchen,
-    settings: { dayStartHour: 4, timeZone: null },
+    settings: { timeZone: null },
   };
   const model = buildGraphModel(snapshot);
   return goneQuiet(model, derivePriorities(model, snapshot), date).map(({ quest, days, openSteps }) => [quest.id, days, openSteps]);

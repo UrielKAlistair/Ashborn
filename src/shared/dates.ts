@@ -1,12 +1,9 @@
 /**
- * Dates and clock times, read in the user's time zone and with the user's day boundary.
+ * Dates and clock times, read in the user's time zone. A day runs from midnight to midnight.
  *
- * Two kinds of "day" exist. A calendar date (toISODate) is what a wall clock shows. An app day
- * (dayOf) starts at the day-start hour, 04:00 by default, so 01:00 still belongs to the day before:
- * routines, the to-do and progress count app days. Both settings are module state, because nearly
- * every caller wants the user's and passing them everywhere would thread them through the whole app:
- * the day-start hour is set whenever the data is shown; the time zone only by the hosted agent server,
- * since the app runs in the user's own zone.
+ * The time zone is module state, because nearly every caller wants the user's and passing it
+ * everywhere would thread it through the whole app; only the hosted agent server sets it, since the
+ * app runs in the user's own zone.
  * Calendar arithmetic runs on UTC midnights, where every day is 24 hours; conversion to and from real
  * moments goes through the time zone, daylight saving included.
  */
@@ -32,22 +29,6 @@ export function toISODate(date: Date): ISODate {
   return calendarDate(year, month, day);
 }
 
-// The hour the day turns over (user_settings.day_start_hour): before it, it is still the day
-// before. Set from the snapshot once it is read.
-export const DEFAULT_DAY_START_HOUR = 4;
-let dayStartHour = DEFAULT_DAY_START_HOUR;
-
-export function setDayStartHour(hour: number) {
-  dayStartHour = hour;
-}
-
-// The day a moment belongs to
-export function dayOf(moment: Date, startHour = dayStartHour): ISODate {
-  const { year, month, day, hour, minute } = wallClock(moment);
-  const shifted = new Date(Date.UTC(year, month - 1, day, hour - startHour, minute));
-  return calendarDate(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, shifted.getUTCDate());
-}
-
 // The clock time a moment shows, HH:MM on a 24-hour clock
 export function clockOf(moment: Date): string {
   const { hour, minute } = wallClock(moment);
@@ -61,12 +42,12 @@ export function showTime(time: string): string {
 }
 
 export function today(): ISODate {
-  return dayOf(new Date());
+  return toISODate(new Date());
 }
 
-// The moment a day begins
-export function startOfDay(date: ISODate, startHour = dayStartHour): Date {
-  return momentAt(date, startHour, 0);
+// The moment a day begins, its midnight
+export function startOfDay(date: ISODate): Date {
+  return momentAt(date, 0, 0);
 }
 
 // The moment the clock shows `time` (HH:MM) on `date`

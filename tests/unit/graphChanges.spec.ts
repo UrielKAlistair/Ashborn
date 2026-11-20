@@ -44,7 +44,7 @@ const snapshot: Snapshot = {
   alarms: [],
   skippedAlarms: [],
   kitchen: emptyKitchen,
-  settings: { dayStartHour: 4, timeZone: null },
+  settings: { timeZone: null },
 };
 
 test("the open nodes inside a box, at any depth, shelved ones included, done ones and outsiders not", () => {

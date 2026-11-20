@@ -1,4 +1,3 @@
-import { DayStartSelect } from "../../components/DayStartSelect";
 import { TimeField } from "../../components/TimeField";
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
@@ -28,14 +27,11 @@ type TodayPanelProps = {
 };
 
 /**
- * Today: the desktop's right-hand panel, and the phone's To-do screen. Top to bottom: the date (a tap
- * sets the hour the day starts); the quests gone quiet, asking what's up; deadlines overdue or due
+ * Today: the desktop's right-hand panel, and the phone's To-do screen. Top to bottom: the date; the quests gone quiet, asking what's up; deadlines overdue or due
  * within three weeks; Now, the to-do; the ready steps no priority covers yet; and today's routines.
  */
 export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
-  const { dayStartHour } = snapshot.settings;
-  const date = useToday(dayStartHour);
-  const [dayStartOpen, setDayStartOpen] = useState(false);
+  const date = useToday();
   const weekday = weekdayOf(date);
 
   // Worked out again when the data or the day changes, not when a section opens or closes
@@ -64,21 +60,10 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
     <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-ink/8 bg-panel px-4 py-4">
       <div className="flex items-baseline justify-between px-1">
         <h2 className="caps font-display text-[13px] font-bold text-ink/90">Today</h2>
-        <button
-          type="button"
-          onClick={() => setDayStartOpen((open) => !open)}
-          title="When the day starts"
-          className="font-mono text-[11px] text-muted tabular-nums hover:text-ink/70"
-        >
+        <span className="font-mono text-[11px] text-muted tabular-nums">
           {weekday} {date}
-        </button>
+        </span>
       </div>
-      {dayStartOpen ? (
-        <label className="-mt-4 flex items-center justify-end gap-2 px-1 text-[11.5px] text-muted">
-          The day starts at
-          <DayStartSelect hour={dayStartHour} act={act} className="rounded-md border border-ink/10 bg-canvas/70 px-1.5 py-0.5 text-ink/80" />
-        </label>
-      ) : null}
 
       <GoneQuiet quiet={quiet} act={act} />
 

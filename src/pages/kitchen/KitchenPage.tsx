@@ -29,14 +29,14 @@ export function KitchenPage({ snapshot, act, phone, screen, recipeId, onNavigate
         <StockPanel kitchen={kitchen} act={act} />
       </div>
     ) : (
-      <MealPlan kitchen={kitchen} dayStartHour={snapshot.settings.dayStartHour} act={act} phone onOpenRecipe={openRecipe} />
+      <MealPlan kitchen={kitchen} act={act} phone onOpenRecipe={openRecipe} />
     );
   }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 gap-5">
       <div className="flex min-h-0 min-w-0 flex-[2] flex-col">
-        <MealPlan kitchen={kitchen} dayStartHour={snapshot.settings.dayStartHour} act={act} phone={false} onOpenRecipe={openRecipe} />
+        <MealPlan kitchen={kitchen} act={act} phone={false} onOpenRecipe={openRecipe} />
       </div>
       <div className="flex min-h-0 w-[30%] min-w-[16rem] max-w-[24rem] flex-col">
         <StockPanel kitchen={kitchen} act={act} />

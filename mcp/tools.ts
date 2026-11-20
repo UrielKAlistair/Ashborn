@@ -13,12 +13,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { createApi, readKitchen, readSettings } from "../src/lib/api";
+import { createApi, readKitchen } from "../src/lib/api";
 import { buildGraphModel, isDone, isFinished, questOf, statKeys, trainedStats, type GraphModel } from "../src/shared/graphModel";
-import { addDays, atTime, currentTimeZone, dayOf, daysBetween, setDayStartHour, today, toISODate, week, weekdayOf } from "../src/shared/dates";
+import { addDays, atTime, currentTimeZone, daysBetween, today, toISODate, week, weekdayOf } from "../src/shared/dates";
 import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, sameName, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
-import { byTime, movedLabel, nextOccurrence, onDayAt } from "../src/shared/schedule";
+import { byTime, movedLabel, nextOccurrence } from "../src/shared/schedule";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../src/shared/priority";
 import { goneQuiet } from "../src/shared/goneQuiet";
 import { mealDaysAhead, mealDaysBack, mealSlots, stockUnits, type Alarm, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type DeadlinePatch, type RoutinePatch, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
@@ -115,7 +115,6 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
   // shows what the change did
   const prioritiesNow = async (nodeIds: string[]) => {
     const snapshot = await api.getSnapshot();
-    setDayStartHour(snapshot.settings.dayStartHour);
     const model = buildGraphModel(snapshot);
     const priorities = derivePriorities(model, snapshot);
     return nodeIds.flatMap((nodeId) => {
@@ -344,7 +343,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
     async ({ title, due_date, alarm_time, node_id }) => {
       if (node_id && !(await existingNodes([node_id])).has(node_id)) return failure(`Not a quest or step: ${node_id}. Nothing was added.`);
       // As add_alarm: an alarm whose moment has passed would never ring
-      if (alarm_time && onDayAt(due_date, alarm_time, (await readSettings(db)).dayStartHour).getTime() <= Date.now()) {
+      if (alarm_time && atTime(due_date, alarm_time).getTime() <= Date.now()) {
         return failure(`${due_date} ${alarm_time} has passed: give a later alarm_time, or none. Nothing was added.`);
       }
       const deadlineId = crypto.randomUUID();
@@ -374,7 +373,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
       // As add_deadline: an alarm whose moment has passed would never ring
       const alarmAt = alarm_time === undefined ? current.alarm_time?.slice(0, 5) : alarm_time;
       const dueOn = due_date ?? current.due_date;
-      if ((due_date !== undefined || alarm_time) && alarmAt && onDayAt(dueOn, alarmAt, (await readSettings(db)).dayStartHour).getTime() <= Date.now()) {
+      if ((due_date !== undefined || alarm_time) && alarmAt && atTime(dueOn, alarmAt).getTime() <= Date.now()) {
         return failure(`${dueOn} ${alarmAt} has passed: give a later alarm_time, or null for none. Nothing was changed.`);
       }
       return run([() => api.updateDeadline(id, patch)], `Updated deadline${alarmAt ? `. ${RINGS_ON_PHONE}` : ""}`);
@@ -513,8 +512,8 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
       if (snapshot.alarms.some((alarm) => alarm.id === id && !alarm.enabled)) return failure(`${ring.title} is turned off, so it doesn't ring on ${day} anyway.`);
       // A second skip would leave the first's alarm at its new time ringing too
       if (snapshot.skippedAlarms.some((skip) => skip.key === ring.key)) return failure(`${ring.title} is already skipped on ${day}: restore_ring it first, then skip it again.`);
-      if (ring.at(ring.time).getTime() <= Date.now()) return failure(`The ${day} ring at ${ring.time} has already passed.`);
-      const moved = instead_at ? ring.at(instead_at) : null;
+      if (atTime(day, ring.time).getTime() <= Date.now()) return failure(`The ${day} ring at ${ring.time} has already passed.`);
+      const moved = instead_at ? atTime(day, instead_at) : null;
       if (moved && moved.getTime() <= Date.now()) return failure(`${day} ${instead_at} has passed.`);
       const alarmId = crypto.randomUUID();
       const changes = [() => api.setAlarmSkip(ring.key, day, true)];
@@ -550,14 +549,13 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
   // The ring a routine or a recurring alarm makes on `day`, or why it makes none
   const ringOn = async (ringId: string, day: string): Promise<{ problem: string } | { ring: Ring & { kind: Alarm["kind"] }; snapshot: Snapshot }> => {
     const snapshot = await api.getSnapshot();
-    setDayStartHour(snapshot.settings.dayStartHour);
     const routine = snapshot.routines.find((candidate) => candidate.id === ringId);
     const alarm = snapshot.alarms.find((candidate) => candidate.id === ringId);
     if (!routine && !alarm) return { problem: `No routine or alarm ${ringId}.` };
     if (alarm && !alarm.time) return { problem: "That is a one-off alarm: delete it, and add another at the new time." };
     const ring: Ring = routine
-      ? { key: `routine:${ringId}@${day}`, title: routine.title, kind: routine.alarm === "none" ? null : routine.alarm, time: routine.time ?? "", weekdays: routine.weekdays, at: (time) => onDayAt(day, time, snapshot.settings.dayStartHour), dayOf: (at) => dayOf(at, snapshot.settings.dayStartHour) }
-      : { key: `alarm:${ringId}@${day}`, title: alarm!.label || "Alarm", kind: alarm!.kind, time: alarm!.time!, weekdays: alarm!.weekdays, at: (time) => atTime(day, time), dayOf: toISODate };
+      ? { key: `routine:${ringId}@${day}`, title: routine.title, kind: routine.alarm === "none" ? null : routine.alarm, time: routine.time ?? "", weekdays: routine.weekdays }
+      : { key: `alarm:${ringId}@${day}`, title: alarm!.label || "Alarm", kind: alarm!.kind, time: alarm!.time!, weekdays: alarm!.weekdays };
     if (!ring.kind || !ring.time) return { problem: `${ring.title} has no alarm.` };
     if (!ring.weekdays.includes(weekdayOf(day))) return { problem: `${ring.title} does not ring on ${day}, a ${weekdayOf(day)}; it rings on ${ring.weekdays.join(" ")}.` };
     return { ring: ring as Ring & { kind: Alarm["kind"] }, snapshot };
@@ -897,12 +895,11 @@ async function run(changes: Array<() => Promise<Delta>>, done: string, labels: s
 }
 
 // One date's ring of a routine or a recurring alarm (skip_ring). `at` places a clock time on its date;
-// `dayOf` gives the date a moment belongs to, as the ring counts days
-type Ring = { key: string; title: string; kind: Alarm["kind"] | null; time: string; weekdays: string[]; at: (time: string) => Date; dayOf: (at: Date) => string };
+type Ring = { key: string; title: string; kind: Alarm["kind"] | null; time: string; weekdays: string[] };
 
 // The one-off alarms a move of the ring made (movedLabel), for restore_ring to delete
 const movedAlarms = (snapshot: Snapshot, ring: Ring, day: string) =>
-  snapshot.alarms.filter((alarm) => alarm.at && alarm.label === movedLabel(ring.title, ring.time) && ring.dayOf(new Date(alarm.at)) === day);
+  snapshot.alarms.filter((alarm) => alarm.at && alarm.label === movedLabel(ring.title, ring.time) && toISODate(new Date(alarm.at)) === day);
 
 // How far off a due date is, in words: an open deadline can be past
 const dueIn = (days: number) => (days === 0 ? "today" : days > 0 ? `in ${days} ${days === 1 ? "day" : "days"}` : `overdue by ${-days} ${days === -1 ? "day" : "days"}`);
@@ -911,8 +908,6 @@ const dueIn = (days: number) => (days === 0 ? "today" : days > 0 ? `in ${days} $
 // is one line and a finished quest is listed under Completed (or Archived, if shelved); asking for
 // one quest shows it in full.
 function describe(snapshot: Snapshot, questId?: string) {
-  const { dayStartHour } = snapshot.settings;
-  setDayStartHour(dayStartHour);
   const model = buildGraphModel(snapshot);
   const folds = (id: string) => !questId && isFinished(model, id);
   const quests = (model.children.get(null) ?? []).filter((quest) => (questId ? quest.id === questId : true));

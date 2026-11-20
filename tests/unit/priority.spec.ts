@@ -32,7 +32,7 @@ function setup(nodes: GraphNode[], edges: GraphEdge[] = [], deadlines: Deadline[
     routineChecks: [],
     alarms: [],
     kitchen: emptyKitchen,
-    settings: { dayStartHour: 4, timeZone: null },
+    settings: { timeZone: null },
   } as unknown as Snapshot;
   const model = buildGraphModel(snapshot);
   return { snapshot, model, priorities: derivePriorities(model, snapshot) };

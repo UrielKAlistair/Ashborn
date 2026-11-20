@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { atTime, dayOf, setTimeZone, startOfDay, toISODate } from "../../src/shared/dates";
+import { atTime, setTimeZone, startOfDay, toISODate } from "../../src/shared/dates";
 import { emptyKitchen } from "../../src/shared/kitchen";
 import { nextOccurrence, upcomingAlarms } from "../../src/shared/schedule";
 import type { Snapshot } from "../../src/shared/types";
@@ -9,13 +9,11 @@ import type { Snapshot } from "../../src/shared/types";
 
 test.afterEach(() => setTimeZone(null));
 
-test("in Kolkata, 20:00 UTC is 01:30 the next day, which still belongs to the day before", () => {
+test("in Kolkata, 20:00 UTC is 01:30 the next day", () => {
   setTimeZone("Asia/Kolkata");
   const moment = new Date("2026-10-28T20:00:00Z");
   expect(toISODate(moment)).toBe("2026-10-29");
-  expect(dayOf(moment, 4)).toBe("2026-10-28");
-  expect(dayOf(moment, 0)).toBe("2026-10-29");
-  expect(startOfDay("2026-10-29", 4).toISOString()).toBe("2026-10-28T22:30:00.000Z");
+  expect(startOfDay("2026-10-29").toISOString()).toBe("2026-10-28T18:30:00.000Z");
   expect(atTime("2026-10-29", "07:00").toISOString()).toBe("2026-10-29T01:30:00.000Z");
 });
 
@@ -44,7 +42,7 @@ test("the schedule's days and times follow the set zone", () => {
     alarms: [],
     skippedAlarms: [],
     kitchen: emptyKitchen,
-    settings: { dayStartHour: 4, timeZone: "Asia/Kolkata" },
+    settings: { timeZone: "Asia/Kolkata" },
   };
   // 22:00 IST on Wednesday 28 October; Thursday's 06:30 is 01:00 UTC on the 29th
   const alarms = upcomingAlarms(snapshot, new Date("2026-10-28T16:30:00Z"), 2);

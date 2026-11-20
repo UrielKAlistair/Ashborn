@@ -14,8 +14,6 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prompter } from "../scripts/ask.mjs";
-import { readSettings } from "../src/lib/api";
-import { setDayStartHour } from "../src/shared/dates";
 import { registerTools } from "./tools";
 
 const sessionFile = process.env.ASHBORN_SESSION_FILE ?? path.join(homedir(), ".config", "ashborn", "agent-session.json");
@@ -49,9 +47,6 @@ async function serve() {
     process.exit(1);
   }
 
-  // The user's day-start hour, for the tools' "today" from the first call (the overview reads it
-  // again); unread (offline, say), the default stands until then
-  await readSettings(db).then(({ dayStartHour }) => setDayStartHour(dayStartHour), () => undefined);
   const server = new McpServer({ name: "ashborn", version: "0.1.0" });
   registerTools(server, db);
   await server.connect(new StdioServerTransport());

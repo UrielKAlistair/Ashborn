@@ -52,10 +52,9 @@ public class AlarmRefreshWorker extends Worker {
     private static final String PUSH_TOKEN_SENT = "pushTokenSent";
     // An access token this near its expiry is renewed first, so it can't lapse mid-refresh
     static final long RENEW_BEFORE_MS = 5 * 60_000L;
-    // As SCHEDULE_DAYS in src/lib/alarms.ts, RING_LOOKBACK_MS in src/shared/schedule.ts and DEFAULT_DAY_START_HOUR in src/shared/dates.ts
+    // As SCHEDULE_DAYS in src/lib/alarms.ts and RING_LOOKBACK_MS in src/shared/schedule.ts
     private static final int SCHEDULE_DAYS = 7;
     private static final long RING_LOOKBACK_MS = 24 * 60 * 60_000L;
-    private static final int DEFAULT_DAY_START_HOUR = 4;
     private static final int TIMEOUT_MS = 15_000;
     // The least a retried renewal is given to answer
     private static final int RETRY_MIN_MS = 1500;
@@ -204,10 +203,7 @@ public class AlarmRefreshWorker extends Worker {
 
     // The snapshot's fields that Schedule reads from `from` on, from the same rows the app's getSnapshot reads
     private static JSONObject read(String rest, String key, String access, long from, long deadline) throws IOException, JSONException {
-        JSONArray settings = get(rest, key, access, deadline, "user_settings?select=day_start_hour");
-        int dayStartHour = settings.length() > 0 ? settings.getJSONObject(0).getInt("day_start_hour") : DEFAULT_DAY_START_HOUR;
-        String firstDay = Schedule.dayOf(from, dayStartHour);
-        String today = Schedule.dayOf(from, 0);
+        String today = Schedule.dateOf(from);
 
         JSONArray recipes = get(rest, key, access, deadline, "recipes?select=id,title,recipe_reminders(id,label,offsetMinutes:offset_minutes,anchorId:anchor_id)&order=created_at&recipe_reminders.order=position");
         for (int i = 0; i < recipes.length(); i++) {
@@ -220,9 +216,8 @@ public class AlarmRefreshWorker extends Worker {
         for (int i = 0; i < meals.length(); i++) recipeIds(meals.getJSONObject(i), "meal_recipes");
 
         return new JSONObject()
-            .put("settings", new JSONObject().put("dayStartHour", dayStartHour))
             .put("routines", get(rest, key, access, deadline, "routines?select=id,title,weekdays,time,alarm&order=created_at"))
-            .put("routineChecks", get(rest, key, access, deadline, "routine_checks?select=routineId:routine_id,date&checked=is.true&date=gte." + firstDay))
+            .put("routineChecks", get(rest, key, access, deadline, "routine_checks?select=routineId:routine_id,date&checked=is.true&date=gte." + Schedule.addDays(today, -1)))
             .put("skippedAlarms", get(rest, key, access, deadline, "alarm_skips?select=key,date&skipped=is.true&date=gte." + Schedule.addDays(today, -1)))
             .put("alarms", get(rest, key, access, deadline, "alarms?select=id,label,kind,sound,at,time,weekdays,enabled&or=(at.is.null,at.gt." + utc(from) + ")&order=created_at"))
             .put("deadlines", get(rest, key, access, deadline, "deadlines?select=id,title,dueDate:due_date,alarmTime:alarm_time&done_at=is.null&order=due_date"))

@@ -23,7 +23,7 @@ export type GraphModel = {
   byId: Map<string, GraphNode>;
   children: Map<string | null, GraphNode[]>; // keyed by parent id; null holds the quests
   totalXp: Map<string, number>; // a node's own XP and its steps', plus that of everything upstream
-  ready: Set<string>; // not done, not shelved, with no unfinished prerequisite or step
+  ready: Set<string>; // not done, not shelved, with no unfinished step or prerequisite, its own or of a box around it
   shelved: Set<string>; // shelved itself, or inside a shelved box
   finishedAt: Map<string, number>; // boxes whose steps at any depth are all done, and the box too if a step: when the last was ticked (ms)
   statXp: Record<StatKey, number>;
@@ -78,17 +78,18 @@ export function buildGraphModel(snapshot: Snapshot): GraphModel {
   // shows its shelved steps) and never ready
   const shelved = new Set(snapshot.nodes.filter((node) => isShelved(byId, node)).map((node) => node.id));
 
-  // Ready: open, not put away, every prerequisite done, and every step inside done (a box is done
-  // last, after its contents)
+  // Every prerequisite of the node and of each box and quest around it is done, so a step
+  // inside a box that waits on another waits too
+  const prerequisitesDone = (node: GraphNode | undefined): boolean =>
+    !node ||
+    ((incoming.get(node.id) ?? []).every((edge) => byId.get(edge.from)?.completedAt) &&
+      prerequisitesDone(node.parentId ? byId.get(node.parentId) : undefined));
+
+  // Ready: open, not put away, its prerequisites done, and every step inside done (a box is done last, after its
+  // contents)
   const ready = new Set(
     snapshot.nodes
-      .filter(
-        (node) =>
-          !isDone(node) &&
-          !shelved.has(node.id) &&
-          (incoming.get(node.id) ?? []).every((edge) => byId.get(edge.from)?.completedAt) &&
-          (children.get(node.id) ?? []).every(isDone),
-      )
+      .filter((node) => !isDone(node) && !shelved.has(node.id) && prerequisitesDone(node) && (children.get(node.id) ?? []).every(isDone))
       .map((node) => node.id),
   );
 

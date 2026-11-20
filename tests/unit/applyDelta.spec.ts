@@ -31,7 +31,7 @@ const snapshot: Snapshot = {
   deadlines: [],
   alarms: [],
   kitchen: emptyKitchen,
-  settings: { dayStartHour: 4, timeZone: null },
+  settings: { timeZone: null },
 };
 
 test("an echo equal to what is shown returns the snapshot itself", () => {

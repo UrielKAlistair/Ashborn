@@ -11,7 +11,7 @@
  * snapshotMerge.ts.
  */
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { addDays, dayOf, DEFAULT_DAY_START_HOUR, today } from "../shared/dates";
+import { addDays, today } from "../shared/dates";
 import { openInside } from "../shared/graphModel";
 import { recipeProblems, sameKind } from "../shared/kitchen";
 import { PROGRESS_UNIT } from "../shared/progression";
@@ -105,9 +105,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
 
   return inRowOrder(db, {
     async getSnapshot() {
-      // Which day it is depends on the day-start hour, so the reads of today's data wait for it
-      const settings = readSettings(db);
-      const date = settings.then(({ dayStartHour }) => dayOf(new Date(), dayStartHour));
+      const day = today();
       const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, skipRows, kitchen, settingsRow] = await Promise.all([
         // A second key for rows made at the same moment: without one, an update can move a row among them,
         // or a page boundary skip it
@@ -115,13 +113,13 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         allPages((from, to) => db.from("graph_edges").select("from_id, to_id").order("from_id").order("to_id").range(from, to)),
         db.from("routines").select().order("created_at"),
         // From yesterday, and one-offs from a day back: the phone's schedule reaches back that far
-        date.then((day) => db.from("routine_checks").select("routine_id, date").gte("date", addDays(day, -1)).eq("checked", true)),
+        db.from("routine_checks").select("routine_id, date").gte("date", addDays(day, -1)).eq("checked", true),
         db.from("deadlines").select().is("done_at", null).order("due_date"),
         db.from("alarms").select().or(`at.is.null,at.gt.${new Date(Date.now() - RING_LOOKBACK_MS).toISOString()}`).order("created_at"),
-        // From yesterday: a routine's day can run past midnight
-        date.then((day) => db.from("alarm_skips").select("key, date").eq("skipped", true).gte("date", addDays(day, -1))),
-        date.then((day) => readKitchen(db, day)),
-        settings,
+        // From yesterday, as the one-offs above
+        db.from("alarm_skips").select("key, date").eq("skipped", true).gte("date", addDays(day, -1)),
+        readKitchen(db, day),
+        readSettings(db),
       ]);
 
       return {
@@ -326,9 +324,9 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { alarmSkip: { key, date, skipped: kept.skipped } };
     },
 
-    async updateSettings({ dayStartHour, timeZone }) {
+    async updateSettings({ timeZone }) {
       const at = clock().toISOString();
-      const fields = { day_start_hour: dayStartHour, time_zone: timeZone };
+      const fields = { time_zone: timeZone };
       must(await db.from("user_settings").upsert({ ...fields, changed_at: stamps(fields, at) }, { onConflict: "user_id" }));
 
       return { settings: await readSettings(db) };
@@ -529,8 +527,8 @@ function toStockItem(row: StockRow) {
 
 // A user with no settings row has the defaults
 export async function readSettings(db: SupabaseClient): Promise<Settings> {
-  const row = must(await db.from("user_settings").select("day_start_hour, time_zone").maybeSingle()) as { day_start_hour: number; time_zone: string | null } | null;
-  return { dayStartHour: row?.day_start_hour ?? DEFAULT_DAY_START_HOUR, timeZone: row?.time_zone ?? null };
+  const row = must(await db.from("user_settings").select("time_zone").maybeSingle()) as { time_zone: string | null } | null;
+  return { timeZone: row?.time_zone ?? null };
 }
 
 // A node's own XP: what level-ups logged on it, plus the completion credit once it is done

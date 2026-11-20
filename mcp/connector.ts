@@ -10,7 +10,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { pipeline } from "@supabase/middleware";
 import { withOAuthProtectedResource, withSupabase } from "@supabase/server";
 import { readSettings } from "../src/lib/api";
-import { setDayStartHour, setTimeZone } from "../src/shared/dates";
+import { setTimeZone } from "../src/shared/dates";
 import { registerTools } from "./tools";
 
 declare const Deno: { serve(handler: (request: Request) => Promise<Response>): unknown };
@@ -48,7 +48,6 @@ Deno.serve(
   pipeline([withOAuthProtectedResource(), withSupabase({ auth: "user" })], (request, { supabase }) =>
     oneAtATime(async () => {
       const settings = await readSettings(supabase);
-      setDayStartHour(settings.dayStartHour);
       setTimeZone(settings.timeZone);
 
       const server = new McpServer({ name: "ashborn", version: "0.1.0" });

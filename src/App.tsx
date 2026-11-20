@@ -111,7 +111,7 @@ function App() {
     [phone],
   );
 
-  const nowDate = useToday(snapshot?.settings.dayStartHour ?? 0);
+  const nowDate = useToday();
   // A new day moves the reads bounded by date (the Kitchen's days, the last day's ticks and skips), so
   // a window left open across the day start reads again. Not on the first data, whose own hour can move
   // the date the screen started on.
@@ -149,7 +149,7 @@ function App() {
     const away = (() => {
       if (currentPath === "/alarms") return <AlarmsPage snapshot={snapshot} act={acting} />;
       if (currentPath === "/calendar") return <CalendarPage snapshot={snapshot} act={acting} />;
-      if (currentPath === "/settings") return <SettingsPage permissions={permissions} dayStartHour={snapshot.settings.dayStartHour} act={acting} sync={sync} />;
+      if (currentPath === "/settings") return <SettingsPage permissions={permissions} sync={sync} />;
       if (currentPath === "/kitchen" || currentPath.startsWith("/kitchen/")) {
         const [, , screen, recipeId] = currentPath.split("/");
         return (

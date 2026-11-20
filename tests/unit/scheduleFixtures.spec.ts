@@ -27,14 +27,14 @@ const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   alarms: [],
   skippedAlarms: [],
   kitchen: emptyKitchen,
-  settings: { dayStartHour: 4, timeZone: null },
+  settings: { timeZone: null },
   ...parts,
 });
 
 // 2026-10-19 is a Monday
 const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] = [
   {
-    name: "routines: weekdays, no alarm, untimed, ticked, past, and one before the day-start hour",
+    name: "routines: weekdays, no alarm, untimed, ticked, past, and one after midnight",
     snapshot: snapshot({
       routines: [
         routine({ id: "wake", title: "Wake", weekdays: ["Mon", "Wed"], time: "07:00", alarm: "situps" }),
@@ -51,10 +51,10 @@ const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] 
     days: 3,
   },
   {
-    name: "in the night after Monday it is still Monday: Monday's tick silences its late routine",
+    name: "after midnight it is Tuesday: Monday's tick leaves Tuesday's late routine ringing",
     snapshot: snapshot({
       routines: [
-        routine({ id: "late", weekdays: ["Mon"], time: "02:00", alarm: "plain" }),
+        routine({ id: "late", weekdays: ["Tue"], time: "02:00", alarm: "plain" }),
         routine({ id: "later", weekdays: ["Mon"], time: "03:00", alarm: "walk" }),
       ],
       routineChecks: [{ routineId: "late", date: "2026-10-19" }],
@@ -76,14 +76,8 @@ const cases: { name: string; snapshot: Snapshot; from: string; days: number }[] 
     days: 2,
   },
   {
-    name: "the day starts at 6",
-    snapshot: snapshot({ routines: [routine({ id: "early", weekdays: ["Mon"], time: "05:00", alarm: "plain" })], settings: { dayStartHour: 6, timeZone: null } }),
-    from: "2026-10-19T06:00:00",
-    days: 1,
-  },
-  {
-    name: "the day starts at midnight",
-    snapshot: snapshot({ routines: [routine({ id: "early", weekdays: ["Tue"], time: "00:30", alarm: "plain" })], settings: { dayStartHour: 0, timeZone: null } }),
+    name: "a routine just after midnight rings on its own day",
+    snapshot: snapshot({ routines: [routine({ id: "early", weekdays: ["Tue"], time: "00:30", alarm: "plain" })] }),
     from: "2026-10-19T23:00:00",
     days: 2,
   },

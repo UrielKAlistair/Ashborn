@@ -6,11 +6,10 @@ import path from "node:path";
 import { showTime, toISODate } from "../../src/shared/dates";
 import { weekStart } from "../../src/pages/calendar/calendarEvents";
 
-// The Alarms page: today's rings, each skipped for today alone by its switch or moved that day alone
-// by a tap; the repeating alarms,
+// The Alarms page: today's rings, each with how long until it rings, skipped for today alone by its
+// switch or moved that day alone by a tap; tomorrow's rings one arrow away; the repeating alarms,
 // turned off, and opened to edit or delete; a quick alarm set from the pop-up and opened from Today
-// to relabel. The Calendar: a
-// one-time alarm edited there, and a deadline added. The alarm rings a few minutes from
+// to relabel. The Calendar: a one-time alarm edited there, and a deadline added. The alarm rings a few minutes from
 // now, so this fails if run in the last minutes before midnight.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
@@ -55,6 +54,7 @@ test("alarms", async () => {
     await page.getByRole("menuitem", { name: "Alarms", exact: true }).click({ timeout: 20_000 });
     // A row shows the time and AM/PM in separate spans
     await expect(ring("Stretch")).toContainText(showTime(time).replace(" ", ""));
+    await expect(ring("Stretch")).toContainText(/in \d min/);
     await ring("Stretch").getByRole("switch").click();
     await expect.poll(skipOf).toBe(true);
     await expect(ring("Stretch").getByRole("switch")).toHaveAttribute("aria-checked", "false");
@@ -83,6 +83,15 @@ test("alarms", async () => {
     await expect.poll(async () => (await movedRows()).length).toBe(0);
   });
 
+  await test.step("tomorrow lists the day's rings, and the arrow back returns to today", async () => {
+    await page.getByRole("button", { name: "Tomorrow", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Tomorrow" })).toBeVisible();
+    await expect(ring("Stretch")).toContainText(/in 2\dh/);
+    await expect(ring("Rang this morning")).toHaveCount(0);
+    await page.getByRole("button", { name: "Today", exact: true }).click();
+    await expect(ring("Rang this morning")).toBeVisible();
+  });
+
   await test.step("repeating: turned off, edited, deleted; a one-off is not listed", async () => {
     await page.getByRole("button", { name: "Repeating ›" }).click();
     await expect(ring("Stretch")).toBeVisible();
@@ -104,6 +113,16 @@ test("alarms", async () => {
     await page.getByRole("button", { name: "Calendar", exact: true }).click();
     await page.getByRole("menuitem", { name: "Calendar", exact: true }).click();
     await expect(page.getByText("Rang this morning")).toBeVisible(); // still in the snapshot, on today
+    // Today's column marks now, and greys the alarm that has rung
+    await expect(page.getByRole("separator", { name: "Now" })).toBeVisible();
+    await expect(ring("Rang this morning")).toHaveClass(/opacity-50/);
+    // A tap on today's name opens the whole day, as the Alarms screen shows it
+    await page.getByRole("button", { name: "See today" }).click();
+    const day = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Day after ›" }) });
+    await expect(day.getByRole("group", { name: "Rang this morning", exact: true })).toBeVisible();
+    await day.getByRole("button", { name: "Day after ›" }).click();
+    await expect(day.getByRole("group", { name: "Rang this morning", exact: true })).toHaveCount(0);
+    await day.getByRole("button", { name: "Close" }).click();
     // The Calendar shows a week, Monday to Sunday: from Friday on, three days ahead is the next one
     if (weekStart(toISODate(new Date(laterAt))) !== weekStart(toISODate(new Date()))) await page.getByRole("button", { name: "Next week" }).click();
     await ring("Dentist").getByRole("button", { name: "Open Dentist" }).click();
@@ -153,7 +172,7 @@ test("alarms", async () => {
     await expect(ring("Alarm")).toBeVisible();
 
     await ring("Alarm").getByRole("button", { name: "Edit Alarm" }).click();
-    const dialog = page.getByRole("dialog", { name: "Edit alarm" });
+    const dialog = page.getByRole("dialog", { name: "Alarm" });
     await dialog.getByPlaceholder("What for (optional)").fill("Tea");
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect.poll(async () => (await db.from("alarms").select("label").eq("label", "Tea")).data?.length).toBe(1);
