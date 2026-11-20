@@ -1,19 +1,22 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { HexTile } from "./HexTile";
-import { phoneSections, screenAt, sectionAt, type Section } from "./sections";
+import { lastScreen, phoneSections, rememberScreen, screenAt, sectionAt, type Section } from "./sections";
 
 // The phone's navigation: one tab per section, grouped towards the middle of the bottom edge. On a
 // short screen (the phone on its side) each tab's label sits beside a smaller icon, so the bar takes
-// less of the height. A section with several screens
-// opens a menu of them upward from its tab; a tap elsewhere closes it.
+// less of the height. A tab goes straight to the screen last open in its section; the open section's
+// tab is labelled with the screen shown, and tapping it again opens a menu of the section's screens,
+// upward from the tab; a tap elsewhere closes it.
 export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; onNavigate: (path: string) => void }) {
   const [openSection, setOpenSection] = useState<Section | null>(null);
   const currentSection = sectionAt(currentPath);
 
+  useEffect(() => rememberScreen(currentPath), [currentPath]);
+
   const choose = (section: Section) => {
-    if (section.phone.length === 1) {
+    if (section !== currentSection || section.phone.length === 1) {
       setOpenSection(null);
-      onNavigate(section.phone[0].path);
+      onNavigate(section === currentSection ? section.phone[0].path : lastScreen(section, section.phone));
     } else {
       setOpenSection(openSection === section ? null : section);
     }
@@ -37,7 +40,7 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
               <HexTile active={isActive} className="h-9 w-[42px] short:h-7 short:w-[33px]">
                 <Icon />
               </HexTile>
-              <span className="caps font-display text-[10px] font-semibold">{section.label}</span>
+              <span className="caps font-display text-[10px] font-semibold whitespace-nowrap">{isActive ? (screenAt(currentPath, section.phone)?.label ?? section.label) : section.label}</span>
             </button>
 
             {openSection === section ? (

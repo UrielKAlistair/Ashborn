@@ -2,15 +2,16 @@ import { useEffect, useState } from "react";
 import { setTheme, themeNames, themes, useTheme } from "../lib/useTheme";
 import { HexTile } from "./HexTile";
 import { MoonIcon, SunIcon } from "./icons";
-import { desktopSections, screenAt, sectionAt, type Section } from "./sections";
+import { desktopSections, lastScreen, rememberScreen, screenAt, sectionAt, type Section } from "./sections";
 
 type NavbarProps = {
   currentPath: string;
   onNavigate: (path: string) => void;
 };
 
-// The desktop sidebar: one button per section. A section with several pages unfolds them below
-// its button, pushing the buttons beneath it down.
+// The desktop sidebar: one button per section, going straight to the page last open in it. The open
+// section's button is labelled with the page shown; pressing it again unfolds the section's pages
+// below it, pushing the buttons beneath it down.
 export function Navbar({
   currentPath,
   onNavigate,
@@ -18,10 +19,12 @@ export function Navbar({
   const [openSection, setOpenSection] = useState<Section | null>(null);
   const currentSection = sectionAt(currentPath);
 
+  useEffect(() => rememberScreen(currentPath), [currentPath]);
+
   const choose = (section: Section) => {
-    if (section.desktop.length === 1) {
+    if (section !== currentSection || section.desktop.length === 1) {
       setOpenSection(null);
-      onNavigate(section.desktop[0].path);
+      onNavigate(section === currentSection ? section.desktop[0].path : lastScreen(section, section.desktop));
     } else {
       setOpenSection(openSection === section ? null : section);
     }
@@ -76,7 +79,7 @@ export function Navbar({
                 <HexTile active={isActive} className="h-12 w-14">
                   <Icon className={isActive ? "text-ember" : ""} />
                 </HexTile>
-                <span className={`caps font-display text-[10px] font-semibold ${isActive ? "text-ink/90" : ""}`}>{section.label}</span>
+                <span className={`caps font-display text-[10px] font-semibold ${isActive ? "text-ink/90" : ""}`}>{isActive ? (screenAt(currentPath, section.desktop)?.label ?? section.label) : section.label}</span>
               </button>
 
               {section.desktop.length > 1 ? (
