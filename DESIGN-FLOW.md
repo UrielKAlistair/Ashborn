@@ -70,3 +70,14 @@ The e2e tests that open a section's menu by its button may need updating here (s
 - **Change**: Today first, level with the graph's toolbar; the character is pinned at the column's
   foot, as large as before, and Today scrolls between them.
 - **Wrong if**: seeing the character first is what makes opening the app feel like the game.
+
+## 8. Alarms gets a phone tab; Settings moves into Home's menu
+- **Seen**: the phone's four tabs were Home, Calendar, Kitchen, Settings. Settings is opened a few
+  times ever (theme, alarm permissions); Alarms, the day's schedule, sat in Calendar's menu.
+- **Why it hurts**: a tab is the most expensive place on the screen, and it was spent on the least
+  used screen while a daily one cost two taps.
+- **Change**: tabs are Home, Alarms, Calendar, Kitchen; Settings is the last item in Home's menu
+  (To-do, Graph, Character, Settings), and Home never returns to it as a "last screen". The desktop
+  is unchanged.
+- **Wrong if**: Settings is opened more than it seems. (A missing alarm permission doesn't need it:
+  the app shows a banner on every screen, which fixes it in one tap.)

@@ -9,9 +9,9 @@ import { lastScreen, phoneSections, rememberScreen, screenAt, sectionAt, type Se
 // upward from the tab; a tap elsewhere closes it.
 export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; onNavigate: (path: string) => void }) {
   const [openSection, setOpenSection] = useState<Section | null>(null);
-  const currentSection = sectionAt(currentPath);
+  const currentSection = sectionAt(currentPath, phoneSections);
 
-  useEffect(() => rememberScreen(currentPath), [currentPath]);
+  useEffect(() => rememberScreen(currentPath, phoneSections), [currentPath]);
 
   const choose = (section: Section) => {
     if (section !== currentSection || section.phone.length === 1) {

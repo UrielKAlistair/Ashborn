@@ -17,9 +17,9 @@ export function Navbar({
   onNavigate,
 }: NavbarProps) {
   const [openSection, setOpenSection] = useState<Section | null>(null);
-  const currentSection = sectionAt(currentPath);
+  const currentSection = sectionAt(currentPath, desktopSections);
 
-  useEffect(() => rememberScreen(currentPath), [currentPath]);
+  useEffect(() => rememberScreen(currentPath, desktopSections), [currentPath]);
 
   const choose = (section: Section) => {
     if (section !== currentSection || section.desktop.length === 1) {
