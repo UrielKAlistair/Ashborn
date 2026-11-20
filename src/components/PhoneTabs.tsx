@@ -28,7 +28,7 @@ export function PhoneTabs({ currentPath, onNavigate }: { currentPath: string; on
 
       {phoneSections.map((section) => {
         const isActive = section === currentSection;
-        const Icon = isActive ? (screenAt(currentPath, section.phone)?.icon ?? section.icon) : section.icon;
+        const Icon = section.icon;
         return (
           <div key={section.label} className="relative flex w-20 justify-center short:w-auto">
             <button

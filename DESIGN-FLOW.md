@@ -20,8 +20,9 @@ The e2e tests that open a section's menu by its button may need updating here (s
   where recognition would do.
 - **Change**: a button from another section goes straight to the screen last open in it during this
   run of the app (a new run starts each section on its first screen, so one visit to the Cookbook
-  doesn't redirect Kitchen for good); the open section's button shows the shown screen's icon and
-  name (TO-DO, ALARMS, STOCKS), so icon and label agree; pressing it again opens the menu, as before.
+  doesn't redirect Kitchen for good); the open section's button keeps its section's icon and is labelled
+  with the shown screen's name (TO-DO, ALARMS, STOCKS); pressing it again opens the menu, as before.
+  (It first took the screen's icon too; the Meal plan's calendar then stood beside the Calendar's.)
 - **Wrong if**: you mostly want a section's first screen rather than the last one, or the changing
   label reads as the button moving.
 
@@ -104,3 +105,9 @@ Reverted: design.md 188 is the user's Settings tab on the phone.
   title ("Earlier Mon 16 Wed 18"), each opening its day, as the "Free" line does for empty ones;
   today's heading follows. Also the narrow desktop's list, which is the same list.
 - **Wrong if**: looking back over the week's past events is a common use of this list.
+
+## 13. The phone's meal plan shows the days either side
+- **Seen**: the phone showed one day's card filling the strip, and nothing said it swipes to other days.
+- **Change**: each day's card is 88% of the strip, centred, so the edges of yesterday and tomorrow
+  show at its sides.
+- **Wrong if**: the slivers read as clutter, or the narrower card wraps meal names.

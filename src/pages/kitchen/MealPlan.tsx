@@ -77,17 +77,19 @@ function PhoneDays({ kitchen, act, date, onOpenRecipe }: DaysProps) {
   const strip = useRef<HTMLDivElement>(null);
   const days = Array.from({ length: mealDaysBack + mealDaysAhead + 1 }, (_, index) => addDays(date, index - mealDaysBack));
 
-  // Open on today's card, and go back to it when the day turns (the strip then starts a day later)
+  // Open on today's card, centred, and go back to it when the day turns (the strip then starts a day later)
   useEffect(() => {
     const element = strip.current;
-    if (element) element.scrollLeft = mealDaysBack * element.clientWidth;
+    const card = element?.children[mealDaysBack] as HTMLElement | undefined;
+    if (element && card) element.scrollLeft = card.offsetLeft - (element.clientWidth - card.offsetWidth) / 2;
   }, [date]);
 
   return (
-    <div ref={strip} className="flex min-h-0 flex-1 snap-x py-px snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
+    <div ref={strip} className="relative flex min-h-0 flex-1 snap-x py-px snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
       {days.map((day) => (
-        // A day's card is as tall as its meals, up to the strip's height, rather than stretched to it
-        <div key={day} className="flex w-full shrink-0 snap-center items-start px-0.5">
+        // A day's card is as tall as its meals, up to the strip's height, rather than stretched to it;
+        // narrower than the strip, so the days either side show at its edges
+        <div key={day} className="flex w-[88%] shrink-0 snap-center items-start px-1">
           <Day kitchen={kitchen} act={act} day={day} today={date} onOpenRecipe={onOpenRecipe} />
         </div>
       ))}
