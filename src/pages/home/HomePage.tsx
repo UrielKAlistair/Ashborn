@@ -16,8 +16,8 @@ type HomePageProps = {
   act: Act;
 };
 
-// The desktop's Home: the quest graph, and beside it the character sheet and Today (Now, routines,
-// deadlines). The phone shows the same parts one screen at a time (PhoneHome.tsx).
+// The desktop's Home: the quest graph, and beside it Today (Now, deadlines, routines) above the
+// character sheet. The phone shows the same parts one screen at a time (PhoneHome.tsx).
 export function HomePage({ snapshot, act }: HomePageProps) {
   // The model reads only nodes and edges, so a routine, deadline or Kitchen change leaves it, and
   // everything the graph derives from it, as it was
@@ -30,8 +30,8 @@ export function HomePage({ snapshot, act }: HomePageProps) {
       </section>
 
       <div className="flex min-h-0 w-[30%] min-w-[20rem] max-w-[28rem] flex-col gap-5">
-        <CharacterPanel model={model} />
         <TodayPanel snapshot={snapshot} model={model} act={act} />
+        <CharacterPanel model={model} />
       </div>
     </div>
   );

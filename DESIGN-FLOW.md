@@ -61,3 +61,12 @@ The e2e tests that open a section's menu by its button may need updating here (s
   reduced motion.
 - **Wrong if**: it reads as lag. 160 ms is near the lower bound people notice as motion; if it feels
   slow, cut it rather than add more.
+
+## 7. Today above the character on the desktop Home
+- **Seen**: the right column opened with the character card (about 200 px of portrait and six stats),
+  and Today began below it.
+- **Why it hurts**: the eye lands top-right first on the panel's side; it landed on a status that
+  changes a few times a week, not on what to do now. Today's top also didn't line up with the graph's.
+- **Change**: Today first, level with the graph's toolbar; the character is pinned at the column's
+  foot, as large as before, and Today scrolls between them.
+- **Wrong if**: seeing the character first is what makes opening the app feel like the game.
