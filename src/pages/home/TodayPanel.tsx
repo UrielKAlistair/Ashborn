@@ -1,10 +1,12 @@
 import { TimeField } from "../../components/TimeField";
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
-import { daysBetween, showTime, today, week, weekdayOf } from "../../shared/dates";
+import { clockOf, daysBetween, showTime, today, week, weekdayOf } from "../../shared/dates";
+import { ringsIn } from "../DayRings";
 import { isDone, questOf, type GraphModel } from "../../shared/graphModel";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../../shared/priority";
-import { byTime } from "../../shared/schedule";
+import { byTime, eventsOn, upcomingAlarms } from "../../shared/schedule";
+import { useNow } from "../../lib/useNow";
 import { priorities as priorityLevels, type AlarmKind, type Deadline, type GraphNode, type ISODate, type Priority, type Snapshot, type Weekday } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { paletteOf } from "../../lib/theme";
@@ -27,7 +29,8 @@ type TodayPanelProps = {
 };
 
 /**
- * Today: the desktop's right-hand panel, and the phone's To-do screen. Top to bottom: the date; the quests gone quiet, asking what's up; deadlines overdue or due
+ * Today: the desktop's right-hand panel, and the phone's To-do screen. Top to bottom: the date; what is on
+ * now and next on today's schedule; the quests gone quiet, asking what's up; deadlines overdue or due
  * within three weeks; Now, the to-do; the ready steps no priority covers yet; and today's routines.
  */
 export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
@@ -65,6 +68,8 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         </span>
       </div>
 
+      <UpNext snapshot={snapshot} />
+
       <GoneQuiet quiet={quiet} act={act} />
 
       <Deadlines snapshot={snapshot} model={model} act={act} date={date} />
@@ -89,6 +94,44 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 
       <Routines snapshot={snapshot} act={act} date={date} weekday={weekday} />
     </section>
+  );
+}
+
+// How many of today's coming times Up next shows
+const UP_NEXT = 2;
+
+// Today's schedule at a glance: the events on now, then the next times still to come today, rings and
+// events alike (the Alarms screen has the whole day). Nothing shows on a day with nothing left.
+function UpNext({ snapshot }: { snapshot: Snapshot }) {
+  const now = useNow();
+  const date = today();
+  const events = eventsOn(snapshot, date);
+  const endOf = (at: Date, minutes: number | null) => new Date(at.getTime() + (minutes ?? 0) * 60_000);
+  const on = events.filter((event) => event.at <= now && now < endOf(event.at, event.minutes));
+  const coming = [
+    ...events.filter((event) => event.at > now).map((event) => ({ key: event.key, at: event.at, title: event.title, rings: false })),
+    ...upcomingAlarms(snapshot, now, 1).map((ring) => ({ key: ring.key, at: ring.at, title: ring.title.replace(/ \(moved from .+\)$/s, ""), rings: true })),
+  ]
+    .sort((a, b) => a.at.getTime() - b.at.getTime())
+    .slice(0, UP_NEXT);
+  if (on.length === 0 && coming.length === 0) return null;
+  return (
+    <div role="group" aria-label="Up next" className="space-y-1.5 px-1">
+      {on.map((event) => (
+        <p key={event.key} className="flex items-baseline gap-2.5 text-[13px]">
+          <span className="w-[78px] shrink-0 whitespace-nowrap font-['Silkscreen'] text-[10px] text-emerald-300">ON NOW</span>
+          <span className="min-w-0 flex-1 truncate text-ink/90">{event.title}</span>
+          {event.minutes ? <span className="shrink-0 text-[11px] text-muted">to {showTime(clockOf(endOf(event.at, event.minutes)))}</span> : null}
+        </p>
+      ))}
+      {coming.map((item) => (
+        <p key={item.key} className="flex items-baseline gap-2.5 text-[13px]">
+          <span className={`w-[78px] shrink-0 whitespace-nowrap font-['Silkscreen'] text-[11px] tabular-nums ${item.rings ? "text-ember" : "text-emerald-300"}`}>{showTime(clockOf(item.at))}</span>
+          <span className="min-w-0 flex-1 truncate text-ink/80">{item.title}</span>
+          <span className="shrink-0 text-[11px] text-muted">{ringsIn(item.at, now)}</span>
+        </p>
+      ))}
+    </div>
   );
 }
 

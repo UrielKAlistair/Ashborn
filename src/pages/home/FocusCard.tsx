@@ -92,6 +92,7 @@ export function FocusCard({ steps, priorities, model, act, empty }: {
                 className="min-w-0 flex-1 text-left text-[13px] leading-snug text-ink/90 decoration-ember/50 underline-offset-4 hover:underline"
               >
                 {row.title}
+                {row.description ? <span className="mt-0.5 line-clamp-2 block text-[11.5px] leading-snug text-muted no-underline">{row.description}</span> : null}
               </button>
               <span title={quest.title} className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${paletteOf(priorities.best.get(quest.id)).dot}`} />
             </li>
