@@ -68,7 +68,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
         </span>
       </div>
 
-      <UpNext snapshot={snapshot} />
+      <ComingUp snapshot={snapshot} />
 
       <FocusCard
         steps={todo.flatMap(({ steps }) => steps)}
@@ -97,12 +97,12 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
   );
 }
 
-// How many of today's coming times Up next shows
-const UP_NEXT = 2;
+// How many of today's coming times Coming up shows
+const COMING_UP = 2;
 
 // Today's schedule at a glance: the events on now, then the next times still to come today, rings and
 // events alike (the Alarms screen has the whole day). Nothing shows on a day with nothing left.
-function UpNext({ snapshot }: { snapshot: Snapshot }) {
+function ComingUp({ snapshot }: { snapshot: Snapshot }) {
   const now = useNow();
   const date = today();
   const events = eventsOn(snapshot, date);
@@ -113,10 +113,10 @@ function UpNext({ snapshot }: { snapshot: Snapshot }) {
     ...upcomingAlarms(snapshot, now, 1).map((ring) => ({ key: ring.key, at: ring.at, title: ring.title.replace(/ \(moved from .+\)$/s, ""), rings: true })),
   ]
     .sort((a, b) => a.at.getTime() - b.at.getTime())
-    .slice(0, UP_NEXT);
+    .slice(0, COMING_UP);
   if (on.length === 0 && coming.length === 0) return null;
   return (
-    <div role="group" aria-label="Up next" className="space-y-1.5 px-1">
+    <div role="group" aria-label="Coming up today" className="space-y-1.5 px-1">
       {on.map((event) => (
         <p key={event.key} className="flex items-baseline gap-2.5 text-[13px]">
           <span className="w-[78px] shrink-0 whitespace-nowrap font-['Silkscreen'] text-[10px] text-emerald-300">ON NOW</span>

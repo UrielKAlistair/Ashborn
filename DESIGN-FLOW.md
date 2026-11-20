@@ -29,13 +29,15 @@ The e2e tests that open a section's menu by its button may need updating here (s
   quiet quests and every deadline, about two thirds of the way down the desktop panel.
 - **Why it hurts**: the panel's first question is "what do I do now"; the answer was below the
   fold of attention, after items you check rather than act on.
-- **Change**: order is Up next (today's times), Now, deadlines, gone quiet, unprioritised, routines.
+- **Change**: order is Coming up (today's times), Now, deadlines, gone quiet, unprioritised, routines.
 - **Wrong if**: your first look each day is really "what is due", not "what do I do".
 
-## 3. Up next on Today; descriptions in Now
-- Up next: what is on now and the next two times today, rings and events, at the top of Today.
+## 3. Coming up today; descriptions in Now
+- Coming up: what is on now and the next two times today, rings and events, at the top of Today.
 - A step's description shows under it in Now, two lines at most, so an agent's "details in file X"
   is seen where the step is picked up.
+- Not the "Up next" removed in design.md 201 (a second copy of the to-do's steps): this lists
+  only timed rings and events.
 
 ## 4. Past days narrower in the desktop week
 - **Seen**: at 1440 px the week's seven equal columns gave five past, mostly empty days over half
