@@ -54,3 +54,15 @@
   control in the opening view.
 - **Wrong if**: Fit is wanted under the thumb at the bottom, or the narrower New quest field cuts
   what is typed.
+
+## The Alarms screen's + beside its column on a wide window
+
+- **Seen**: on the laptop (1440×900) the round + sat at the bottom right inside the 576 px column, on top
+  of the last visible row's switch: Stretch's switch was hidden entirely in the opening view, so which
+  rings are on could not be read and that switch could not be pressed until the list scrolled.
+- **Why it hurts**: the switches' column is what the eye runs down on this screen; a hole in it reads as
+  a ring with no switch.
+- **Change** (`src/pages/AlarmsPage.tsx`): from a 900 px window up, the + sits 80 px right of the column's
+  edge, in the empty margin (the same height); narrower windows and the phone keep it inside. Also on
+  Repeating, which shares the button.
+- **Wrong if**: the + reads as belonging to nothing out in the margin.
