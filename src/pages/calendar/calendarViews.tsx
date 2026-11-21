@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useStepEntrance } from "../../lib/usePageEntrance";
 import { addDays, clockAfter, daysBetween, showTime, week } from "../../shared/dates";
 import type { Alarm, ISODate } from "../../shared/types";
 import type { Act } from "../home/HomePage";
@@ -78,6 +79,7 @@ function dayName(date: ISODate, today: ISODate) {
 
 export function WeekColumns({ calendar, today, monday, onWeek, onOpen, onDay, now, act }: CalendarViewProps) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
+  const weekBox = useStepEntrance(Date.parse(monday));
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -95,7 +97,7 @@ export function WeekColumns({ calendar, today, monday, onWeek, onOpen, onDay, no
         <Arrow label="Previous week" onClick={() => onWeek(addDays(monday, -7))}>
           ‹
         </Arrow>
-        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-7 gap-2">
+        <div ref={weekBox} className="grid min-h-0 min-w-0 flex-1 grid-cols-7 gap-2">
           {days.map((date) => (
             <DayColumn key={date} date={date} events={eventsOn(date, calendar, today)} today={today} now={now} onOpen={onOpen} onDay={onDay} act={act} />
           ))}

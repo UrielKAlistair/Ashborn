@@ -7,6 +7,7 @@ import { needsFirstStep, type Priorities } from "../../shared/priority";
 import type { GraphNode } from "../../shared/types";
 import type { Act } from "./HomePage";
 import { showOnGraph } from "./showOnGraph";
+import { Folding, useLeaving } from "./leaving";
 import { Tick } from "./Tick";
 
 // How many steps Now lists while folded
@@ -43,7 +44,12 @@ export function FocusCard({ steps, priorities, model, act, empty }: {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const done = (row: GraphNode) => void act("updateNode", row.id, { done: true });
+  // Rows ticked here fold away rather than vanish (leaving.tsx)
+  const { leave, gone, withLeaving } = useLeaving(steps);
+  const done = (row: GraphNode) => {
+    void act("updateNode", row.id, { done: true });
+    leave(row);
+  };
   const first = steps[0];
   tickFirst.current = first && !needsFirstStep(model, first) ? () => done(first) : null;
 
@@ -56,7 +62,7 @@ export function FocusCard({ steps, priorities, model, act, empty }: {
     );
   }
 
-  const rows = showAll ? steps : steps.slice(0, NOW_ROWS);
+  const rows = withLeaving(showAll ? steps : steps.slice(0, NOW_ROWS));
   return (
     <section aria-label="Now" className="rounded-xl border border-ink/10 bg-card px-2 py-2.5">
       <div className="flex items-baseline justify-between px-2 pb-1">
@@ -69,6 +75,7 @@ export function FocusCard({ steps, priorities, model, act, empty }: {
       </div>
       <ul aria-label="Now" className="space-y-0.5">
         {rows.map((row) => {
+          if ("leaving" in row) return <LeavingRow key={`leaving:${row.leaving.id}`} row={row.leaving} onGone={() => gone(row.leaving)} />;
           const quest = questOf(model.byId, row);
           return (
             <li key={row.id} className="flex items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-ink/[0.04]">
@@ -100,6 +107,19 @@ export function FocusCard({ steps, priorities, model, act, empty }: {
         })}
       </ul>
     </section>
+  );
+}
+
+// A row just ticked: its tick filled and its title struck, as it folds away
+function LeavingRow({ row, onGone }: { row: GraphNode; onGone: () => void }) {
+  return (
+    <Folding as="li" onGone={onGone} className="flex items-start gap-2.5 rounded-lg px-2 py-1.5">
+      <Tick done onClick={() => {}} className="tick-done mt-0.5" />
+      <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink/50">
+        <span className="line-through">{row.title}</span>
+        {row.description ? <span className="mt-0.5 line-clamp-2 block text-[11.5px] leading-snug text-muted">{row.description}</span> : null}
+      </span>
+    </Folding>
   );
 }
 
