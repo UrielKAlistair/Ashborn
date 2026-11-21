@@ -126,7 +126,7 @@ function ComingUp({ snapshot }: { snapshot: Snapshot }) {
       ))}
       {coming.map((item) => (
         <p key={item.key} className="flex items-baseline gap-2.5 text-[13px]">
-          <span className={`w-[78px] shrink-0 whitespace-nowrap font-['Silkscreen'] text-[11px] tabular-nums ${item.rings ? "text-ember" : "text-emerald-300"}`}>{showTime(clockOf(item.at))}</span>
+          <span className={`w-[78px] shrink-0 whitespace-nowrap font-mono text-[11.5px] tabular-nums ${item.rings ? "text-ember" : "text-emerald-300"}`}>{showTime(clockOf(item.at))}</span>
           <span className="min-w-0 flex-1 truncate text-ink/80">{item.title}</span>
           <span className="shrink-0 text-[11px] text-muted">{ringsIn(item.at, now)}</span>
         </p>
