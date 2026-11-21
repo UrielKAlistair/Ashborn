@@ -15,6 +15,7 @@ import { FocusCard } from "./FocusCard";
 import { goneQuiet } from "../../shared/goneQuiet";
 import { GoneQuiet } from "./GoneQuiet";
 import { useOneTap } from "./oneTap";
+import { Folding, useLeaving } from "./leaving";
 import { Tick } from "./Tick";
 
 // Deadlines further out than this stay off the list
@@ -144,17 +145,29 @@ function Deadlines({ snapshot, model, act, date }: { snapshot: Snapshot; model: 
   const deadlines = snapshot.deadlines
     .filter((deadline) => daysBetween(date, deadline.dueDate) <= DEADLINE_HORIZON_DAYS)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  // A deadline ticked here folds away rather than vanishes (leaving.tsx)
+  const { leave, gone, withLeaving } = useLeaving(deadlines);
+  const rows = withLeaving(deadlines);
 
   return (
     <Section title="Deadlines" action={<DeadlineForm act={act} model={model} />}>
-      {deadlines.length === 0 ? (
+      {rows.length === 0 ? (
         <Empty>Nothing due in the next {DEADLINE_HORIZON_DAYS} days.</Empty>
       ) : (
-        deadlines.map((deadline) => {
+        rows.map((row) => {
+          const leaving = "leaving" in row;
+          const deadline = leaving ? row.leaving : row;
           const days = daysBetween(date, deadline.dueDate);
-          return (
-            <div key={deadline.id} className={`group relative ${rowClass}`}>
-              <Tick done={false} onClick={() => void act("completeDeadline", deadline.id)} className="mt-0.5" />
+          const content = (
+            <>
+              <Tick
+                done={leaving}
+                onClick={() => {
+                  void act("completeDeadline", deadline.id);
+                  leave(deadline);
+                }}
+                className={leaving ? "tick-done mt-0.5" : "mt-0.5"}
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start gap-2">
                   <button type="button" onClick={() => setEditingId(deadline.id)} title="Change this deadline" className="min-w-0 flex-1 text-left text-[13px] leading-snug text-ink/90 hover:text-ember">
@@ -178,6 +191,15 @@ function Deadlines({ snapshot, model, act, date }: { snapshot: Snapshot; model: 
                 </div>
               </div>
               <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
+            </>
+          );
+          return leaving ? (
+            <Folding key={`leaving:${deadline.id}`} onGone={() => gone(deadline)} className={rowClass}>
+              {content}
+            </Folding>
+          ) : (
+            <div key={deadline.id} className={`group relative ${rowClass}`}>
+              {content}
               {editingId === deadline.id ? <DeadlineFields deadline={deadline} act={act} model={model} onDone={() => setEditingId(null)} /> : null}
             </div>
           );

@@ -39,11 +39,11 @@ one row under the pointer.
 re-find its place in the list and check that the right step went.
 
 **Change** (`src/pages/home/FocusCard.tsx`): the change is sent at once, as before; the ticked row is
-drawn where it was, tick filled and title struck, for 80 ms, then folds to nothing over 120 ms (200 ms
-in all, `LEAVE_MS`), so the rows below close up instead of jumping. The leaving row is no longer a
+drawn where it was, tick filled and title struck, for about 70 ms, then folds to nothing over 100 ms (170 ms
+of animation, `LEAVE_MS` in `src/pages/home/leaving.tsx`; about 200 ms from the tap, measured), so the rows below close up instead of jumping. The leaving row is no longer a
 button, so a second tap can't untick it; if the step comes back (undo, a refused change) the real row
-replaces it. The D key goes through the same path. A ticked row that hasn't left the list within the fold's 200 ms (undone, refused, or past the folded rows) is forgotten, so a later removal from elsewhere (graph, delete) never draws a fold the user didn't make here. Reduced motion: removed at once, as before.
-Left as is: a ticked deadline in Today still leaves in one frame (a different row; same treatment would fit).
+replaces it. The D key goes through the same path. A ticked row that hasn't left the list within twice the fold's time (undone, refused, or past the folded rows) is forgotten, so a later removal from elsewhere (graph, delete) never draws a fold the user didn't make here. Reduced motion: removed at once, as before.
+A deadline ticked in Today folds the same way (the same hook; its leaving row is the real row drawn inert, with its tick filled, so the height matches).
 
 **Verified** (read-only playwright on the laptop "/", every non-GET to the database aborted, the one
 PATCH listed as blocked): row heights in Now before [48,48,48], ~30 ms after the click [48*,48,48,48]
@@ -52,3 +52,7 @@ reduced motion it is [48,48,48] throughout. Frames `betc/tick-motion-*.png`. tsc
 not run here: their config reads a `.env` this worktree doesn't have (none of them cover FocusCard).
 
 **Wrong if**: ticking several steps in a row feels held up; then cut the hold and keep the fold.
+
+Per-frame heights after the tick, blocked writes (ms from the click: heights, * leaving): Now
+`35:48* 113:48* 146:37* 179:15* 213:0* 246:gone`; Deadlines `22:58* 93:58* 125:45* 159:18* 194:0* 226:gone`;
+Deadlines under reduced motion: no leaving row in any frame. Script `betc/tick2.mjs`.
