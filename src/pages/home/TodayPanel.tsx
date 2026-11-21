@@ -17,6 +17,7 @@ import { GoneQuiet } from "./GoneQuiet";
 import { useOneTap } from "./oneTap";
 import { Folding, useLeaving } from "./leaving";
 import { Tick } from "./Tick";
+import { dayLabel } from "../calendar/calendarViews";
 
 // Deadlines further out than this stay off the list
 const DEADLINE_HORIZON_DAYS = 21;
@@ -64,9 +65,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
     <section className="panel-scroll flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-1 py-2">
       <div className="flex items-baseline justify-between px-1">
         <h2 className="caps font-display text-[13px] font-bold text-ink/90">Today</h2>
-        <span className="font-mono text-[11px] text-muted tabular-nums">
-          {weekday} {date}
-        </span>
+        <span className="font-mono text-[11px] text-muted tabular-nums">{dayLabel(date)}</span>
       </div>
 
       <ComingUp snapshot={snapshot} />
@@ -181,13 +180,14 @@ function Deadlines({ snapshot, model, act, date }: { snapshot: Snapshot; model: 
                     {days < 0 ? `${-days}d late` : days === 0 ? "today" : `${days}d`}
                   </span>
                 </div>
-                {/* The quest it belongs with sits on the date's line: a link only groups (194) */}
+                {/* The quest it belongs with sits on the date's line: a link only groups (194). On a touch screen the
+                    picker answers over 32 px but takes only its line in the row */}
                 <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
-                  <span className="shrink-0 font-mono tabular-nums">
-                    {deadline.dueDate}
+                  <span className="shrink-0 tabular-nums">
+                    {dayLabel(deadline.dueDate)}
                     {deadline.alarmTime ? ` · alarm ${showTime(deadline.alarmTime)}` : ""} ·
                   </span>
-                  <NodePicker model={model} label="Deadline for" none="No quest" value={deadline.nodeId} onChange={(nodeId) => void act("updateDeadline", deadline.id, { nodeId })} className="-mx-1 min-w-0 flex-1 cursor-pointer appearance-none truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6 hover:text-ink/80 pointer-coarse:min-h-8" />
+                  <NodePicker model={model} label="Deadline for" none="No quest" value={deadline.nodeId} onChange={(nodeId) => void act("updateDeadline", deadline.id, { nodeId })} className="-mx-1 min-w-0 flex-1 cursor-pointer appearance-none truncate rounded-md bg-transparent px-1 text-[11px] text-muted hover:bg-ink/6 hover:text-ink/80 pointer-coarse:-my-2 pointer-coarse:min-h-8" />
                 </div>
               </div>
               <DeleteButton warning="Delete this deadline?" onDelete={() => void act("deleteDeadline", deadline.id)} />
@@ -444,7 +444,7 @@ const fieldClass =
   "w-full rounded-lg border border-ink/10 bg-canvas/60 px-2.5 py-1.5 text-[13px] text-ink/85 placeholder:text-ink/35 focus:border-ember/50 focus:outline-none";
 const popoverClass = "absolute right-0 top-8 z-10 w-72 space-y-2 rounded-xl border border-ink/10 bg-card p-3 shadow-[var(--card-shadow)]";
 // A list row: quiet until hovered
-const rowClass = "flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-ink/[0.04]";
+const rowClass = "flex items-start gap-3 rounded-lg px-2 py-1.5 hover:bg-ink/[0.04]";
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -453,7 +453,7 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
         <p className="caps font-display text-[11px] font-semibold text-ink/65">{title}</p>
         {action}
       </div>
-      <div role="group" aria-label={title} className="space-y-2">
+      <div role="group" aria-label={title} className="space-y-1">
         {children}
       </div>
     </div>

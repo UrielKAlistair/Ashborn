@@ -558,22 +558,23 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     >
       <Territories quests={territories} camera={phone ? phonePanZoom.feed : undefined} />
       {phone ? null : <GraphScrollbar />}
-      {/* The phone zooms by pinching, so it keeps only Fit, which pinching can't do in one move */}
-      <Controls
-        position="bottom-left"
-        showInteractive={false}
-        showZoom={!phone}
-        fitViewOptions={{ ...fitOptions, duration: 300 }}
-        onFitView={() => (userMoved.current = false)}
-        // The zoom buttons move the view without an event, so onMoveStart doesn't count them
-        onZoomIn={() => (userMoved.current = true)}
-        onZoomOut={() => (userMoved.current = true)}
-      />
+      {/* The phone zooms by pinching, and has Fit in its toolbar, clear of the cards it scrolls under */}
+      {phone ? null : (
+        <Controls
+          position="bottom-left"
+          showInteractive={false}
+          fitViewOptions={{ ...fitOptions, duration: 300 }}
+          onFitView={() => (userMoved.current = false)}
+          // The zoom buttons move the view without an event, so onMoveStart doesn't count them
+          onZoomIn={() => (userMoved.current = true)}
+          onZoomOut={() => (userMoved.current = true)}
+        />
+      )}
 
       {quests.length > 0 ? (
         <Panel position="top-left" className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
-            <InlineInput placeholder="+ New quest" onSubmit={newQuest} className="graph-field w-52" />
+            <InlineInput placeholder="+ New quest" onSubmit={newQuest} className={`graph-field ${phone ? "w-36" : "w-52"}`} />
             <button
               type="button"
               onClick={() => setQuestsOpen((open) => !open)}
@@ -581,6 +582,21 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
             >
               Quests <span className="ml-1 font-mono text-muted tabular-nums">{shown.length}/{quests.length}</span>
             </button>
+            {/* Every quest on one screen, which pinching can't reach in one move */}
+            {phone ? (
+              <button
+                type="button"
+                aria-label="Fit View"
+                title="Show every quest"
+                onClick={() => {
+                  userMoved.current = false;
+                  void fitView({ ...fitOptions, duration: 300 });
+                }}
+                className={toolbarPill}
+              >
+                Fit
+              </button>
+            ) : null}
             {/* Shown only once something has been placed by hand, as there is nothing to reset before */}
             {phone || !snapshot.nodes.some((node) => node.position) ? null : <ResetLayoutButton onReset={resetLayout} />}
           </div>
@@ -633,7 +649,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   );
 }
 
-const toolbarPill = "rounded-lg border border-ink/10 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink/75 hover:border-ink/25 hover:text-ink";
+const toolbarPill = "whitespace-nowrap rounded-lg border border-ink/10 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink/75 hover:border-ink/25 hover:text-ink";
 
 // What this device chose to show: boxes collapsed, finished boxes opened today (by day), and quests
 // showing their shelved steps; with the day, which decides what counts as done earlier
