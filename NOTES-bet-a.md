@@ -8,7 +8,9 @@
 - **Change**: the card's header reads "‹ Yesterday  Today 11-21  Tomorrow ›": the neighbours' names
   in quiet text either side of the day's own name, each a press that swipes the strip one card
   (smoothly). None past the strip's ends. Still one day per card, swiped, opening on today
-  (design.md 133). The desktop's columns are unchanged.
+  (design.md 133). The desktop's columns are unchanged. After review (d749852, e43a69d): a
+  neighbour's press stays inside the header; a press steps from its own card, so a second press
+  mid-scroll lands one card on; focus moves to the new card's neighbour, so it stays on screen.
 - **Wrong if**: the names read as tabs or as a title rather than as "there is more this way", or
   the header feels crowded; then a dot row under the card is the next thing to try.
 
