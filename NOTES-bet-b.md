@@ -41,3 +41,16 @@
   (`phone:-my-2.5`, as the Today panel's quest picker). Phone pitch 96 → 76 px (from screenshots).
 - **Wrong if**: Edit's tap area, which now reaches over the top of the gauge (not pressable), catches
   taps meant elsewhere.
+
+## The phone graph's Fit moves into its toolbar
+
+- **Seen**: the phone's one graph control, Fit (bet 11), floated at the canvas's bottom left; in the
+  opening view it sat on the tick of the step "Week 1 graded assignment" (Fit at x ~45, the tick at ~60).
+- **Why it hurts**: the phone graph is read by scrolling, so whatever passes that corner is covered,
+  and a tap meant for a tick there can hit Fit instead.
+- **Change** (`src/pages/home/QuestGraph.tsx`): on the phone Fit is a "Fit" pill after Quests in the top
+  toolbar (same fit, still named "Fit View"), and "+ New quest" narrows from 208 to 160 px to make room;
+  toolbar pills keep to one line. The desktop's controls are unchanged. Shot: nothing sits under a
+  control in the opening view.
+- **Wrong if**: Fit is wanted under the thumb at the bottom, or the narrower New quest field cuts
+  what is typed.
