@@ -30,3 +30,14 @@
   change anyone would notice, so reverted.
 - **What would work**: more width for the text (the clock column or the switch), or shorter details;
   each touches 328, so it is the user's call.
+
+## A staple's card on the phone at the height of its contents
+
+- **Seen**: on the phone each staple card took a 96 px pitch (72 px on the laptop): Edit's 44 px touch
+  height set the name line's height, 44 px for 18 px of text, so the gauge sat far below its name.
+- **Why it hurts**: the name, amount and gauge read as one unit only when they sit together; the gap
+  also halves how many staples fit before scrolling (5 of them fill 530 px).
+- **Change** (`src/pages/kitchen/StockPanel.tsx`): Edit keeps its 44 px tap area but takes only its line
+  (`phone:-my-2.5`, as the Today panel's quest picker). Phone pitch 96 → 76 px (from screenshots).
+- **Wrong if**: Edit's tap area, which now reaches over the top of the gauge (not pressable), catches
+  taps meant elsewhere.

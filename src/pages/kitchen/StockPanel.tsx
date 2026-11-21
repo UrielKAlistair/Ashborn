@@ -47,7 +47,8 @@ function StockBar({ item, act }: { item: StockItem; act: Act }) {
           {shown(item.onHand, item.unit)}
           <span className="text-muted"> / {shown(item.target, item.unit)}</span>
         </p>
-        <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 rounded-md px-1.5 text-[11.5px] text-muted hover:bg-ink/6 hover:text-ink/85 phone:min-h-11 phone:px-2">
+        {/* On the phone Edit answers over 44 px but takes only its line in the card */}
+        <button type="button" onClick={() => setEditing(!editing)} className="shrink-0 rounded-md px-1.5 text-[11.5px] text-muted hover:bg-ink/6 hover:text-ink/85 phone:-my-2.5 phone:min-h-11 phone:px-2">
           {editing ? "Done" : "Edit"}
         </button>
       </div>
