@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Popup } from "../../components/Popup";
 import { useNow } from "../../lib/useNow";
+import { useStepEntrance } from "../../lib/usePageEntrance";
 import { usePhone } from "../../lib/usePhone";
 import { useToday } from "../../lib/useToday";
 import { addDays } from "../../shared/dates";
@@ -36,6 +37,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
   // The day open in full, and a ring in it being moved
   const [day, setDay] = useState<ISODate | null>(null);
   const [moving, setMoving] = useState<AlarmInstance | null>(null);
+  const phoneViewBox = useStepEntrance(phoneView === "week" ? 0 : 1);
 
   const view: CalendarViewProps = {
     calendar,
@@ -66,19 +68,21 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
     <>
       {day ? (
         <Popup label={dayLabel(day, { weekday: "long", day: "numeric", month: "long" })} onClose={() => setDay(null)}>
-          <div className="panel-scroll -mr-2 flex max-h-[70vh] flex-col gap-3 overflow-y-auto pr-2">
+          <div className="panel-scroll -mr-2 flex max-h-[70vh] flex-col gap-3 overflow-x-hidden overflow-y-auto pr-2">
             <div className="flex items-center justify-between">
               <DayStep onClick={() => setDay(addDays(day, -1))}>‹ Day before</DayStep>
               <DayStep onClick={() => setDay(addDays(day, 1))}>Day after ›</DayStep>
             </div>
-            <DayRings
-              snapshot={snapshot}
-              date={day}
-              act={act}
-              onOpenAlarm={(alarm) => setEditing({ kind: "alarm", id: alarm.id })}
-              onOpenDeadline={(deadline) => setEditing({ kind: "deadline", id: deadline.id })}
-              onMove={setMoving}
-            />
+            <DaySlide day={day}>
+              <DayRings
+                snapshot={snapshot}
+                date={day}
+                act={act}
+                onOpenAlarm={(alarm) => setEditing({ kind: "alarm", id: alarm.id })}
+                onOpenDeadline={(deadline) => setEditing({ kind: "deadline", id: deadline.id })}
+                onMove={setMoving}
+              />
+            </DaySlide>
             <button type="button" onClick={() => setEditing({ kind: "new", date: day })} className="self-start rounded-lg border border-dashed border-ink/15 px-3 py-1.5 text-[12.5px] text-muted hover:border-ember/40 hover:text-ember phone:min-h-11">
               + Add on this day
             </button>
@@ -103,7 +107,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
     // On the phone the panel is as tall as its contents and scrolls under the fixed +, as on the Alarms screen
     return (
       <div className="relative flex min-h-0 w-full min-w-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
           <section className="flex shrink-0 grow flex-col gap-5 pt-1 pb-24">
             <div className="flex items-center gap-3">
               <h1 className="caps mr-auto font-display text-[15px] font-bold text-ink/90">Calendar</h1>
@@ -112,7 +116,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
                 {tab("month", "Month")}
               </div>
             </div>
-            {phoneView === "week" ? <WeekList {...view} /> : <MonthDots {...view} large />}
+            <div ref={phoneViewBox}>{phoneView === "week" ? <WeekList {...view} /> : <MonthDots {...view} large />}</div>
           </section>
         </div>
         {addButton}
@@ -138,6 +142,12 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
       {dialog}
     </div>
   );
+}
+
+// The open day's rings, easing in from the side of a step to the day before or after; mounted with the
+// pop-up, so opening it doesn't slide
+function DaySlide({ day, children }: { day: ISODate; children: ReactNode }) {
+  return <div ref={useStepEntrance(Date.parse(day))}>{children}</div>;
 }
 
 function DayStep({ onClick, children }: { onClick: () => void; children: string }) {

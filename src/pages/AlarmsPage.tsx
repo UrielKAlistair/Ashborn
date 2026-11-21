@@ -3,6 +3,7 @@ import { Popup } from "../components/Popup";
 import { Switch } from "../components/Switch";
 import { TimeField } from "../components/TimeField";
 import { alarmsAvailable } from "../lib/alarms";
+import { useStepEntrance } from "../lib/usePageEntrance";
 import { useToday } from "../lib/useToday";
 import { addDays, clockAfter, minutesFrom, week } from "../shared/dates";
 import { buildGraphModel } from "../shared/graphModel";
@@ -42,6 +43,8 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
   const editing = editingId === "new" ? "new" : (snapshot.alarms.find((alarm) => alarm.id === editingId) ?? null);
   // The ring of a repeating alarm or a routine being moved, that day only
   const [moving, setMoving] = useState<AlarmInstance | null>(null);
+  // Today, tomorrow and the repeating alarms, in that order
+  const listBox = useStepEntrance(view === "all" ? 2 : ahead);
 
   const save = (alarm: Omit<Alarm, "id" | "enabled">) => {
     if (editing === "new") void act("createAlarm", { ...alarm, id: crypto.randomUUID(), enabled: true });
@@ -64,8 +67,8 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
   // panel is as tall as its rows (at least the screen): a column that neither shrinks it nor stretches it.
   return (
     <div className="relative mx-auto flex min-h-0 w-full min-w-0 max-w-xl flex-1 phone:max-w-none">
-      <div className="panel-scroll flex min-h-0 min-w-0 flex-1 phone:flex-col phone:overflow-y-auto">
-        <section className="panel-scroll flex min-h-0 w-full flex-col gap-5 overflow-y-auto px-1 pt-2 pb-24 phone:shrink-0 phone:grow phone:overflow-visible phone:px-0">
+      <div className="panel-scroll flex min-h-0 min-w-0 flex-1 overflow-x-hidden phone:flex-col phone:overflow-y-auto">
+        <section className="panel-scroll flex min-h-0 w-full flex-col gap-5 overflow-x-hidden overflow-y-auto px-1 pt-2 pb-24 phone:shrink-0 phone:grow phone:overflow-visible phone:px-0">
           <div className="flex items-center justify-between gap-3">
             {view === "day" ? (
               <div className="flex items-center gap-1">
@@ -93,18 +96,20 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
 
           {alarmsAvailable ? null : <p className="-mt-3 text-[11.5px] text-muted">Alarms ring on your phone.</p>}
 
-          {view === "day" ? (
-            <DayRings
-              snapshot={snapshot}
-              date={date}
-              act={act}
-              onOpenAlarm={(alarm) => (alarm.time ? edit(alarm) : setOpening({ kind: "alarm", id: alarm.id }))}
-              onOpenDeadline={(deadline) => setOpening({ kind: "deadline", id: deadline.id })}
-              onMove={setMoving}
-            />
-          ) : (
-            <AllAlarms alarms={snapshot.alarms} act={act} onEdit={edit} />
-          )}
+          <div ref={listBox}>
+            {view === "day" ? (
+              <DayRings
+                snapshot={snapshot}
+                date={date}
+                act={act}
+                onOpenAlarm={(alarm) => (alarm.time ? edit(alarm) : setOpening({ kind: "alarm", id: alarm.id }))}
+                onOpenDeadline={(deadline) => setOpening({ kind: "deadline", id: deadline.id })}
+                onMove={setMoving}
+              />
+            ) : (
+              <AllAlarms alarms={snapshot.alarms} act={act} onEdit={edit} />
+            )}
+          </div>
         </section>
       </div>
 
