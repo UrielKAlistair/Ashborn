@@ -16,3 +16,17 @@
   first routine now shows on both.
 - **Wrong if**: the picker, now overlapping the row's padding, catches taps meant for the next row's
   tick on the phone, or the rows read as cramped; then put the row padding back first.
+
+## (Withdrawn) Tighter gaps on the Alarms day view
+
+- **Seen**: on the phone about four ring cards fit below the deadlines; one-line cards take a 96 px
+  pitch, cards whose title or detail wraps to a third line 114 px. The text column is ~125 px wide,
+  squeezed between the 128 px clock column and the switch, so ordinary titles ("Leave for the 11:59
+  train") and details ("Event · 2:00 PM – 4:00 PM · 2h") wrap.
+- **Tried**: gaps only, since 328 (user's) set the cards' padding, the 30 px clock and the 128 px column:
+  columns 16 → 12 px apart, title → detail 4 → 2 px, cards 10 → 8 px apart.
+- **Measured** (phone 390×844, from screenshots): pitch 96 → 92 px and 114 → 110 px; nothing stopped
+  wrapping; the fifth card's top moved from y = 735 to 714. About 0.2 of a card more per screen: not a
+  change anyone would notice, so reverted.
+- **What would work**: more width for the text (the clock column or the switch), or shorter details;
+  each touches 328, so it is the user's call.
