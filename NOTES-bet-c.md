@@ -42,7 +42,7 @@ re-find its place in the list and check that the right step went.
 drawn where it was, tick filled and title struck, for 80 ms, then folds to nothing over 120 ms (200 ms
 in all, `LEAVE_MS`), so the rows below close up instead of jumping. The leaving row is no longer a
 button, so a second tap can't untick it; if the step comes back (undo, a refused change) the real row
-replaces it. The D key goes through the same path. Reduced motion: removed at once, as before.
+replaces it. The D key goes through the same path. A ticked row that hasn't left the list within the fold's 200 ms (undone, refused, or past the folded rows) is forgotten, so a later removal from elsewhere (graph, delete) never draws a fold the user didn't make here. Reduced motion: removed at once, as before.
 Left as is: a ticked deadline in Today still leaves in one frame (a different row; same treatment would fit).
 
 **Verified** (read-only playwright on the laptop "/", every non-GET to the database aborted, the one

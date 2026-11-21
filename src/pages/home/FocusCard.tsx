@@ -46,12 +46,13 @@ export function FocusCard({ steps, priorities, model, act, empty }: {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Rows ticked here, drawn where they were until they have folded away; the change is sent at once
-  const [leaving, setLeaving] = useState<{ row: GraphNode; index: number }[]>([]);
+  // Rows ticked here, drawn where they were until they have folded away; the change is sent at once.
+  // One that hasn't left the list within its fold (undone, refused) is not drawn when it leaves later.
+  const [leaving, setLeaving] = useState<{ row: GraphNode; index: number; at: number }[]>([]);
   const done = (row: GraphNode) => {
     void act("updateNode", row.id, { done: true });
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    setLeaving((current) => [...current.filter((leaver) => leaver.row.id !== row.id), { row, index: steps.indexOf(row) }]);
+    setLeaving((current) => [...current.filter((leaver) => leaver.row.id !== row.id && fresh(leaver)), { row, index: steps.indexOf(row), at: performance.now() }]);
   };
   const gone = (row: GraphNode) => setLeaving((current) => current.filter((leaver) => leaver.row !== row));
   const first = steps[0];
@@ -68,7 +69,7 @@ export function FocusCard({ steps, priorities, model, act, empty }: {
 
   const rows: Array<GraphNode | { leaving: GraphNode }> = showAll ? [...steps] : steps.slice(0, NOW_ROWS);
   // A row undone before it has folded is back in the list, and drawn there alone
-  for (const { row, index } of [...leaving].sort((a, b) => a.index - b.index)) {
+  for (const { row, index } of [...leaving].filter(fresh).sort((a, b) => a.index - b.index)) {
     if (!steps.some((step) => step.id === row.id) && index <= rows.length) rows.splice(index, 0, { leaving: row });
   }
   return (
@@ -116,6 +117,11 @@ export function FocusCard({ steps, priorities, model, act, empty }: {
       </ul>
     </section>
   );
+}
+
+// Whether a row ticked here is still within its fold
+function fresh({ at }: { at: number }) {
+  return performance.now() - at < LEAVE_MS;
 }
 
 // A row just ticked: its tick filled, then the row folds to nothing, so the rows below close up
