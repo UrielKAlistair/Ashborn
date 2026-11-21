@@ -43,7 +43,7 @@ drawn where it was, tick filled and title struck, for about 70 ms, then folds to
 of animation, `LEAVE_MS` in `src/pages/home/leaving.tsx`; about 200 ms from the tap, measured), so the rows below close up instead of jumping. The leaving row is no longer a
 button, so a second tap can't untick it; if the step comes back (undo, a refused change) the real row
 replaces it. The D key goes through the same path. A ticked row that hasn't left the list within twice the fold's time (undone, refused, or past the folded rows) is forgotten, so a later removal from elsewhere (graph, delete) never draws a fold the user didn't make here. Reduced motion: removed at once, as before.
-A deadline ticked in Today folds the same way (the same hook; its leaving row is the real row drawn inert, with its tick filled, so the height matches).
+A tick pressed from the keyboard hands focus to the tick now in its place (the next row's), rather than dropping it to the page. A deadline ticked in Today folds the same way (the same hook; its leaving row is the real row drawn inert, with its tick filled, so the height matches).
 
 **Verified** (read-only playwright on the laptop "/", every non-GET to the database aborted, the one
 PATCH listed as blocked): row heights in Now before [48,48,48], ~30 ms after the click [48*,48,48,48]

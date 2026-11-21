@@ -12,7 +12,19 @@ type Leaver<T> = { item: T; index: number; at: number };
 // within its fold (undone, refused) is not drawn when it leaves later. Off under reduced motion.
 export function useLeaving<T extends { id: string }>(list: T[]) {
   const [leaving, setLeaving] = useState<Leaver<T>[]>([]);
+  // A tick pressed from the keyboard is gone with its row; focus moves to the tick now in its place
+  const refocus = useRef<{ list: Element; index: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!refocus.current) return;
+    const { list: box, index } = refocus.current;
+    refocus.current = null;
+    const ticks = [...box.querySelectorAll<HTMLElement>(':scope > :not([aria-hidden]) [title="Mark done"]')];
+    (ticks[index] ?? ticks[ticks.length - 1])?.focus();
+  });
   const leave = (item: T) => {
+    const focused = document.activeElement;
+    const box = focused?.getAttribute("title") === "Mark done" ? focused.closest('ul, [role="group"]') : null;
+    if (box) refocus.current = { list: box, index: list.indexOf(item) };
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     setLeaving((current) => [...current.filter((leaver) => leaver.item.id !== item.id && fresh(leaver)), { item, index: list.indexOf(item), at: performance.now() }]);
   };
