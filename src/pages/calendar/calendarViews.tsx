@@ -139,13 +139,20 @@ function DayColumn({ date, events, today, now, onOpen, onDay, act }: { date: ISO
 function EventCard({ event, today, past, onOpen, act }: { event: CalendarEvent; today: ISODate; past: boolean; onOpen: (event: CalendarEvent) => void; act: Act }) {
   const off = event.kind === "alarm" && !event.alarm.enabled;
   return (
-    <div role="group" aria-label={event.title} className={`rounded-lg border-l-[3px] bg-ink/[0.035] px-2 py-1.5 hover:bg-ink/[0.06] ${edgeClass(event, today)} ${off || past ? "opacity-50" : ""}`}>
-      <div className="flex items-start gap-1.5">
+    // The title takes the column's full width and the mark sits on the detail line. A press anywhere
+    // opens the event: the title's button carries it for the keyboard, by bubbling; the tick stops its own
+    <div
+      role="group"
+      aria-label={event.title}
+      onClick={() => onOpen(event)}
+      className={`cursor-pointer rounded-lg border-l-[3px] bg-ink/[0.035] px-2 py-1.5 hover:bg-ink/[0.06] ${edgeClass(event, today)} ${off || past ? "opacity-50" : ""}`}
+    >
+      <button type="button" aria-label={`Open ${event.title}`} className="block w-full text-left text-[12.5px] leading-snug text-ink/90 [overflow-wrap:anywhere]">
+        {event.title}
+      </button>
+      <div className="mt-0.5 flex items-start gap-1.5">
         {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <TimeMark alarm={event.alarm} />}
-        <button type="button" onClick={() => onOpen(event)} aria-label={`Open ${event.title}`} className="min-w-0 flex-1 text-left">
-          <span className="block text-[12.5px] leading-snug text-ink/90 [overflow-wrap:anywhere]">{event.title}</span>
-          <span className="block text-[10.5px] text-muted">{cardDetail(event, today, off)}</span>
-        </button>
+        <span className="min-w-0 flex-1 text-[10.5px] leading-4 text-muted">{cardDetail(event, today, off)}</span>
       </div>
     </div>
   );
