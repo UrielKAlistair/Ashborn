@@ -31,4 +31,5 @@
   the title stays the button for the keyboard. "Statistics" now fits whole; "Portal check: confirm
   the test slot and venue" went from 7 lines to 6 plus its time line. The phone's rows are unchanged.
 - **Wrong if**: the mark on the second line is missed when scanning for alarms versus events; the
-  card's coloured edge still says the kind.
+  card's coloured edge still says the kind. Or if a deadline's tick, now on the detail line under its
+  title, is missed as the way to finish one.
