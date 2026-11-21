@@ -20,3 +20,15 @@
 - **Change**: on the desktop the time always takes its own line under the slot's name; the phone,
   with room, keeps it on the same line. Costs about 16 px per slot, where the columns have room to spare.
 - **Wrong if**: the taller slots push a day's meals past the column's height on a small laptop.
+
+## The desktop week's event titles take the card's full width
+- **Seen**: in the seven week columns a card's clock, bell or tick took a 22 px column beside the
+  title, so titles broke mid-word ("Lecture: Statistic / s") and an alarm's title ran to seven lines.
+- **Why it hurts**: a word split across lines is read twice; tall narrow cards push the day's later
+  events down the column.
+- **Change** (`calendarViews.tsx`, EventCard): the title spans the card; the mark (or a deadline's
+  tick) starts the detail line, beside the time. A press anywhere on the card opens it, as before;
+  the title stays the button for the keyboard. "Statistics" now fits whole; "Portal check: confirm
+  the test slot and venue" went from 7 lines to 6 plus its time line. The phone's rows are unchanged.
+- **Wrong if**: the mark on the second line is missed when scanning for alarms versus events; the
+  card's coloured edge still says the kind.
