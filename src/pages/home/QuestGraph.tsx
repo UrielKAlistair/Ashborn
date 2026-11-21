@@ -574,7 +574,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       {quests.length > 0 ? (
         <Panel position="top-left" className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
-            <InlineInput placeholder="+ New quest" onSubmit={newQuest} className={`graph-field ${phone ? "w-40" : "w-52"}`} />
+            <InlineInput placeholder="+ New quest" onSubmit={newQuest} className={`graph-field ${phone ? "w-36" : "w-52"}`} />
             <button
               type="button"
               onClick={() => setQuestsOpen((open) => !open)}

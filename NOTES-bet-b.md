@@ -49,7 +49,7 @@
 - **Why it hurts**: the phone graph is read by scrolling, so whatever passes that corner is covered,
   and a tap meant for a tick there can hit Fit instead.
 - **Change** (`src/pages/home/QuestGraph.tsx`): on the phone Fit is a "Fit" pill after Quests in the top
-  toolbar (same fit, still named "Fit View"), and "+ New quest" narrows from 208 to 160 px to make room;
+  toolbar (same fit, still named "Fit View"), and "+ New quest" narrows from 208 to 144 px to make room (the row then fits a 360 px phone);
   toolbar pills keep to one line. The desktop's controls are unchanged. Shot: nothing sits under a
   control in the opening view.
 - **Wrong if**: Fit is wanted under the thumb at the bottom, or the narrower New quest field cuts
