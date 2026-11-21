@@ -63,6 +63,7 @@
 - **Why it hurts**: the switches' column is what the eye runs down on this screen; a hole in it reads as
   a ring with no switch.
 - **Change** (`src/pages/AlarmsPage.tsx`): from a 900 px window up, the + sits 80 px right of the column's
-  edge, in the empty margin (the same height); narrower windows and the phone keep it inside. Also on
+  edge, in the empty margin (the same height); narrower windows and the phone layout keep it inside,
+  whatever its width (a phone on its side is 915 px wide; measured there, the + stays on screen). Also on
   Repeating, which shares the button.
 - **Wrong if**: the + reads as belonging to nothing out in the margin.

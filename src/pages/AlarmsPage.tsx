@@ -113,7 +113,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
         type="button"
         onClick={() => (view === "day" ? setOpening({ kind: "new", date }) : setEditingId("new"))}
         aria-label={view === "day" ? "New on this day" : "New repeating alarm"}
-        className="absolute right-4 bottom-4 flex h-14 w-14 min-[900px]:-right-20 items-center justify-center rounded-full bg-ember text-3xl leading-none text-canvas shadow-[var(--card-shadow)] hover:brightness-110"
+        className="absolute right-4 bottom-4 flex h-14 w-14 min-[900px]:not-phone:-right-20 items-center justify-center rounded-full bg-ember text-3xl leading-none text-canvas shadow-[var(--card-shadow)] hover:brightness-110"
       >
         +
       </button>
