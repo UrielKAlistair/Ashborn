@@ -83,8 +83,15 @@ function PhoneDays({ kitchen, act, date, onOpenRecipe }: DaysProps) {
     if (element) element.scrollLeft = mealDaysBack * element.clientWidth;
   }, [date]);
 
-  // Swipe one card earlier (-1) or later (1), as a header's neighbour names do
-  const step = (by: -1 | 1) => strip.current?.scrollBy({ left: by * strip.current.clientWidth, behavior: "smooth" });
+  // Swipe from card `index` one card earlier (-1) or later (1), as a header's neighbour names do. Focus
+  // follows to the new card's neighbour on the same side, so it stays on screen.
+  const step = (index: number, by: -1 | 1) => {
+    const element = strip.current!;
+    element.scrollTo({ left: (index + by) * element.clientWidth, behavior: "smooth" });
+    const neighbours = element.children[index + by].querySelectorAll<HTMLButtonElement>("button[data-side]");
+    const same = [...neighbours].find((button) => button.dataset.side === (by < 0 ? "earlier" : "later"));
+    (same ?? neighbours[0])?.focus({ preventScroll: true });
+  };
 
   return (
     <div ref={strip} className="flex min-h-0 flex-1 snap-x py-px snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
@@ -97,7 +104,7 @@ function PhoneDays({ kitchen, act, date, onOpenRecipe }: DaysProps) {
             day={day}
             today={date}
             onOpenRecipe={onOpenRecipe}
-            neighbours={{ earlier: index > 0 ? () => step(-1) : undefined, later: index < days.length - 1 ? () => step(1) : undefined }}
+            neighbours={{ earlier: index > 0 ? () => step(index, -1) : undefined, later: index < days.length - 1 ? () => step(index, 1) : undefined }}
           />
         </div>
       ))}
@@ -390,6 +397,7 @@ function Neighbour({ label, side, onClick }: { label: string; side: "earlier" | 
     <button
       type="button"
       onClick={onClick}
+      data-side={side}
       aria-label={`Show ${label}`}
       className={`relative whitespace-nowrap text-[11.5px] text-ink/40 before:absolute before:-inset-y-2 before:-inset-x-1 before:content-[''] hover:text-ink/70 ${side === "earlier" ? "justify-self-start" : "justify-self-end"}`}
     >
