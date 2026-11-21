@@ -28,3 +28,27 @@ Month) and laptop (Tomorrow, Next week, Day after); with `reducedMotion: "reduce
 
 **Wrong if**: the slide reads as the list being dragged or as lag. If so, drop the 8 px and keep only the
 fade, or cut it.
+
+## A step ticked in Now shows its tick, then folds away
+
+**Seen**: ticking a step in Now (Home's Today panel) removed its row in the same frame: the tick's
+pop (`.tick-done`) was never seen, because the row it belongs to was gone, and the rows below jumped up
+one row under the pointer.
+
+**Why it hurts**: the user's one act of progress got no answer on screen but a jump; the eye has to
+re-find its place in the list and check that the right step went.
+
+**Change** (`src/pages/home/FocusCard.tsx`): the change is sent at once, as before; the ticked row is
+drawn where it was, tick filled and title struck, for 80 ms, then folds to nothing over 120 ms (200 ms
+in all, `LEAVE_MS`), so the rows below close up instead of jumping. The leaving row is no longer a
+button, so a second tap can't untick it; if the step comes back (undo, a refused change) the real row
+replaces it. The D key goes through the same path. Reduced motion: removed at once, as before.
+Left as is: a ticked deadline in Today still leaves in one frame (a different row; same treatment would fit).
+
+**Verified** (read-only playwright on the laptop "/", every non-GET to the database aborted, the one
+PATCH listed as blocked): row heights in Now before [48,48,48], ~30 ms after the click [48*,48,48,48]
+(* the leaving row, same height as the row it replaces), ~90 ms [21*,...], ~150 ms [48,48,48]; under
+reduced motion it is [48,48,48] throughout. Frames `betc/tick-motion-*.png`. tsc clean. Unit tests
+not run here: their config reads a `.env` this worktree doesn't have (none of them cover FocusCard).
+
+**Wrong if**: ticking several steps in a row feels held up; then cut the hold and keep the fold.
