@@ -112,3 +112,94 @@ Reverted: design.md 188 is the user's Settings tab on the phone.
 Tried at 88% of the strip: the ~20 px slivers showed clipped letters of the next day's title and read
 as a rendering fault, not as days; the bet's own "wrong if". A swipe cue would need its own shape
 (dots, or the neighbour's name in the header).
+
+## 14. The phone's meal-plan card names the days either side (flow/a df6242a, d749852, e43a69d)
+- **Seen**: the phone showed one day's card, and nothing showed that the strip swipes to other days.
+  The slivers of 13 read as a rendering fault.
+- **Why it hurts**: an affordance nobody can see is one nobody uses.
+- **Change**: the card's header reads "‹ Yesterday  Today 11-21  Tomorrow ›". The neighbours' names
+  sit in quiet text either side of the day's name, and each is a press that swipes the strip one card.
+  There is none past the strip's ends. A press steps from its own card (a repeat lands one on), and
+  focus follows to the new card. Still one day per card, swiped, opening on today (design.md 133).
+- **Wrong if**: the names read as tabs or a title rather than "more this way", or the header feels
+  crowded. If so, try a dot row under the card next.
+
+## 15. A meal slot's time under its name in the desktop's day columns (flow/a df6242a)
+- **Seen**: in the five narrow columns, "Breakfast 8:00 AM" wrapped its time to a second line while
+  Lunch and Dinner didn't (Dinner did too once a tick sat beside it).
+- **Why it hurts**: three slots of one kind laid out two ways look like an error.
+- **Change**: on the desktop the time always takes its own line; the phone keeps it on the same
+  line. About 16 px per slot, where the columns have room to spare.
+- **Wrong if**: a day's meals then overflow the column on a small laptop.
+
+## 16. The desktop week's event titles take the card's full width (flow/a 8e25999, ffd1f96)
+- **Seen**: the clock, bell or tick took a column beside the title, so titles broke mid-word
+  ("Lecture: Statistic / s"), and an alarm's title ran to seven lines.
+- **Why it hurts**: a split word is read twice, and tall cards push the day's later events down.
+- **Change**: the title spans the card, and the mark (or a deadline's tick) starts the detail line,
+  beside the time. A press anywhere on the card still opens it. The phone's rows are unchanged.
+- **Wrong if**: the mark on the second line is missed when telling alarms from events, or a
+  deadline's tick under its title is missed as the way to finish it.
+
+## 17. A denser Today (flow/b 84764c4)
+- **Seen**: a one-line deadline took a 76 px pitch on the phone (66 px on the laptop), and its date
+  line repeated "2026-11-23" beside the "2d" pill. Now began at y = 436 on the phone, and Routines was
+  below the fold (on the laptop, under the pinned character).
+- **Why it hurts**: Today is read for what to do next, and the eye crosses tall, mostly empty rows
+  to reach Now.
+- **Change**: dates read "Mon 23 Nov" (the calendar's `dayLabel`). The quest picker keeps its 32 px
+  touch area but takes only its line. Rows have 6 px padding and sit 4 px apart. The order (304) and
+  the picker (202) are kept. Deadline pitch is now 53 px on both. Now's top moved 436 → 370 (phone)
+  and 390 → 356 (laptop), and the first routine shows on both.
+- **Wrong if**: the picker catches taps meant for the next row, or the rows read as cramped. If so,
+  restore the padding first.
+
+## 18. (Withdrawn) Tighter gaps on the Alarms day view (flow/b)
+Gaps alone (328 fixes the padding, the clock and its column) took the card pitch only from 96 to
+92 px, about 0.2 of a card per screen. The text column, ~125 px wide, is what wraps; widening it
+touches 328, so it is the user's call.
+
+## 19. A staple's card on the phone at the height of its contents (flow/b 42e8868)
+- **Seen**: Edit's 44 px touch height set the name line's height, so a staple took a 96 px pitch,
+  with the gauge far below its name.
+- **Why it hurts**: the name, amount and gauge read as one unit only when they sit together, and the
+  gap halves how many staples fit.
+- **Change**: Edit keeps its 44 px tap area but takes only its line. Pitch 96 → 76 px.
+- **Wrong if**: Edit's tap area, now reaching over the gauge, catches stray taps.
+
+## 20. The phone graph's Fit moves into its toolbar (flow/b 3129b73, c7e1756)
+- **Seen**: Fit (bet 11) floated at the canvas's bottom left, over a step's tick in the opening view.
+- **Why it hurts**: the phone graph is read by scrolling, so whatever passes that corner is covered,
+  and a tap meant for a tick can hit Fit.
+- **Change**: on the phone, Fit is a pill after Quests in the top toolbar, and "+ New quest" narrows
+  from 208 to 144 px to make room (c7e1756: at 360 px wide Fit ran past the edge). The desktop is unchanged.
+- **Wrong if**: Fit is wanted under the thumb, or the narrower field cuts what is typed.
+
+## 21. A step within a screen eases in from the side it went to (flow/c 64e3e1a)
+- **Seen**: Alarms' Today › Tomorrow › Repeating, the Calendar's week arrows, the phone's Week ↔
+  Month, and the day pop-up's day before and after all swapped look-alike lists in one frame.
+- **Why it hurts**: the eye can't tell the tap took, or which way it moved, and re-reads the rows.
+- **Change**: the list (not its header) fades up and slides 8 px in from the side stepped towards,
+  over 160 ms with the page entrance's easing (`useStepEntrance`). It is transform-only, nothing
+  remounts, and it is off under reduced motion.
+- **Wrong if**: the slide reads as dragging or lag. If so, keep only the fade, or cut it.
+
+## 22. A ticked step or deadline in Today shows its tick, then folds away (flow/c 3336f5c to b14f930)
+- **Seen**: ticking a step in Now or a deadline removed its row in the same frame. The tick's pop was
+  never seen, and the rows below jumped up under the pointer.
+- **Why it hurts**: the one act of progress got no answer on screen except a jump.
+- **Change**: the change is sent at once. The row stays inert, tick filled, then folds, about 200 ms
+  in all (`src/pages/home/leaving.tsx`). Undo or a refused change brings the real row back. A tick
+  pressed from the keyboard moves focus to the next row's first control. Off under reduced motion.
+- **Wrong if**: ticking several in a row feels held up. If so, cut the hold and keep the fold.
+  Open: in a folded Now the next row pops in while the ticked one folds; ticking the last row drops focus to the page.
+
+## 23. The laptop Alarms' + beside the column, not over the last row (flow/b fb6482b, 8fbf39f)
+- **Seen**: at 1440x900 the round + sat over the last visible row's switch (Stretch's, wholly hidden).
+- **Change**: from 900 px wide up, outside the phone layout, the + sits 80 px right of the column, in
+  the empty margin. Narrow windows and the phone keep it inside (a phone held sideways included).
+- **Wrong if**: the + is then too far from the list to be found.
+
+## 24. Coming up's times in the routines' face (design/flow 21863de)
+- **Seen**: Coming up set its times in Silkscreen, the pixel face, while the routines' times below sat in the mono face; two clocks in one panel, in two faces.
+- **Change**: the mono face at 11.5 px, as the routines use. Silkscreen stays for the Alarms' clocks and the NOW line.
