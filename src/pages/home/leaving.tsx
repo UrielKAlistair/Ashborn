@@ -20,7 +20,8 @@ export function useLeaving<T extends { id: string }>(list: T[]) {
   // `shown`, the rows drawn (all of `list` or its first few), with the leaving ones put back in place
   const withLeaving = (shown: T[]) => {
     const rows: Array<T | { leaving: T }> = [...shown];
-    for (const { item, index } of leaving.filter(fresh).sort((a, b) => a.index - b.index)) {
+    // Each index is in the list as it was when that row was ticked, so the latest goes back first
+    for (const { item, index } of leaving.filter(fresh).sort((a, b) => b.at - a.at)) {
       if (!list.some((each) => each.id === item.id) && index <= rows.length) rows.splice(index, 0, { leaving: item });
     }
     return rows;
