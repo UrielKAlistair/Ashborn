@@ -115,7 +115,12 @@ type Neighbours = { earlier?: () => void; later?: () => void };
 
 function Day({ kitchen, act, day, today: date, onOpenRecipe, neighbours }: { kitchen: Kitchen; act: Act; day: ISODate; today: ISODate; onOpenRecipe: (id: string) => void; neighbours?: Neighbours }) {
   const offset = daysBetween(date, day);
-  const name = dayName(day, date);
+  const title = (
+    <>
+      <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{dayName(day, date)}</span>
+      <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
+    </>
+  );
 
   return (
     <div
@@ -125,17 +130,11 @@ function Day({ kitchen, act, day, today: date, onOpenRecipe, neighbours }: { kit
       {neighbours ? (
         <div className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2 px-1 pb-0.5">
           <Neighbour label={dayName(addDays(day, -1), date)} side="earlier" onClick={neighbours.earlier} />
-          <p className="flex items-baseline gap-2">
-            <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{name}</span>
-            <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
-          </p>
+          <p className="flex items-baseline gap-2">{title}</p>
           <Neighbour label={dayName(addDays(day, 1), date)} side="later" onClick={neighbours.later} />
         </div>
       ) : (
-        <p className="flex flex-wrap items-baseline justify-between gap-x-2 px-1 pb-0.5">
-          <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{name}</span>
-          <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
-        </p>
+        <p className="flex flex-wrap items-baseline justify-between gap-x-2 px-1 pb-0.5">{title}</p>
       )}
       {mealSlots.map((slot) => (
         <MealCell key={slot} kitchen={kitchen} act={act} meal={shownMeal(kitchen, day, slot)} onOpenRecipe={onOpenRecipe} />
@@ -392,7 +391,7 @@ function Neighbour({ label, side, onClick }: { label: string; side: "earlier" | 
       type="button"
       onClick={onClick}
       aria-label={`Show ${label}`}
-      className={`relative whitespace-nowrap text-[11.5px] text-ink/40 before:absolute before:-inset-y-3 before:-inset-x-1 before:content-[''] hover:text-ink/70 ${side === "earlier" ? "justify-self-start" : "justify-self-end"}`}
+      className={`relative whitespace-nowrap text-[11.5px] text-ink/40 before:absolute before:-inset-y-2 before:-inset-x-1 before:content-[''] hover:text-ink/70 ${side === "earlier" ? "justify-self-start" : "justify-self-end"}`}
     >
       {side === "earlier" ? `‹ ${label}` : `${label} ›`}
     </button>
