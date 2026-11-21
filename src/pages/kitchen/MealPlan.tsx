@@ -83,31 +83,60 @@ function PhoneDays({ kitchen, act, date, onOpenRecipe }: DaysProps) {
     if (element) element.scrollLeft = mealDaysBack * element.clientWidth;
   }, [date]);
 
+  // Swipe one card earlier (-1) or later (1), as a header's neighbour names do
+  const step = (by: -1 | 1) => strip.current?.scrollBy({ left: by * strip.current.clientWidth, behavior: "smooth" });
+
   return (
     <div ref={strip} className="flex min-h-0 flex-1 snap-x py-px snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
-      {days.map((day) => (
+      {days.map((day, index) => (
         // A day's card is as tall as its meals, up to the strip's height, rather than stretched to it
         <div key={day} className="flex w-full shrink-0 snap-center items-start px-0.5">
-          <Day kitchen={kitchen} act={act} day={day} today={date} onOpenRecipe={onOpenRecipe} />
+          <Day
+            kitchen={kitchen}
+            act={act}
+            day={day}
+            today={date}
+            onOpenRecipe={onOpenRecipe}
+            neighbours={{ earlier: index > 0 ? () => step(-1) : undefined, later: index < days.length - 1 ? () => step(1) : undefined }}
+          />
         </div>
       ))}
     </div>
   );
 }
 
-function Day({ kitchen, act, day, today: date, onOpenRecipe }: { kitchen: Kitchen; act: Act; day: ISODate; today: ISODate; onOpenRecipe: (id: string) => void }) {
+function dayName(day: ISODate, today: ISODate): string {
+  const offset = daysBetween(today, day);
+  return offset === 0 ? "Today" : offset === -1 ? "Yesterday" : offset === 1 ? "Tomorrow" : weekdayOf(day);
+}
+
+// The phone's card names the days either side in its header, each a press that swipes to it
+type Neighbours = { earlier?: () => void; later?: () => void };
+
+function Day({ kitchen, act, day, today: date, onOpenRecipe, neighbours }: { kitchen: Kitchen; act: Act; day: ISODate; today: ISODate; onOpenRecipe: (id: string) => void; neighbours?: Neighbours }) {
   const offset = daysBetween(date, day);
-  const name = offset === 0 ? "Today" : offset === -1 ? "Yesterday" : offset === 1 ? "Tomorrow" : weekdayOf(day);
+  const name = dayName(day, date);
 
   return (
     <div
       aria-label={`Meals on ${day}`}
       className={`panel-scroll flex max-h-full min-h-0 w-full flex-col gap-1.5 overflow-y-auto rounded-xl p-2 ${offset === 0 ? "bg-ember/[0.06] ring-1 ring-ember/30" : "bg-ink/[0.015]"} ${offset < 0 ? "opacity-70" : ""}`}
     >
-      <p className="flex flex-wrap items-baseline justify-between gap-x-2 px-1 pb-0.5">
-        <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{name}</span>
-        <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
-      </p>
+      {neighbours ? (
+        <div className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2 px-1 pb-0.5">
+          <Neighbour label={dayName(addDays(day, -1), date)} side="earlier" onClick={neighbours.earlier} />
+          <p className="flex items-baseline gap-2">
+            <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{name}</span>
+            <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
+          </p>
+          <Neighbour label={dayName(addDays(day, 1), date)} side="later" onClick={neighbours.later} />
+        </div>
+      ) : (
+        <p className="flex flex-wrap items-baseline justify-between gap-x-2 px-1 pb-0.5">
+          <span className={`font-display text-[13px] font-semibold ${offset === 0 ? "text-ember" : "text-ink/85"}`}>{name}</span>
+          <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-muted">{day.slice(5)}</span>
+        </p>
+      )}
       {mealSlots.map((slot) => (
         <MealCell key={slot} kitchen={kitchen} act={act} meal={shownMeal(kitchen, day, slot)} onOpenRecipe={onOpenRecipe} />
       ))}
@@ -165,7 +194,7 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
       <div className="flex items-center gap-2">
         {empty || cancelled ? null : <Tick done={cooked} onClick={tick} />}
         <p className="min-w-0 flex-1 text-[11.5px] capitalize text-muted">
-          {meal.slot} <span className="whitespace-nowrap font-mono text-[10.5px] tabular-nums text-ink/35">{showTime(mealTimes[meal.slot])}</span>
+          {meal.slot} <span className="block whitespace-nowrap font-mono phone:inline text-[10.5px] tabular-nums text-ink/35">{showTime(mealTimes[meal.slot])}</span>
         </p>
         {/* Over the slot's name until hovered on the desktop, where a day's column has no room for both */}
         <div className="absolute top-1.5 right-1.5 flex items-center gap-2 rounded-md bg-card px-1.5 py-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 phone:static phone:gap-0 phone:bg-transparent phone:p-0 phone:opacity-100">
@@ -351,6 +380,22 @@ function DefaultCell({ kitchen, act, weekday, slot, onOpenRecipe }: { kitchen: K
       <p className="mt-1 text-[13px] leading-snug text-ink/85">{meal?.description || <span className="text-ink/30">Nothing</span>}</p>
       <RecipeLinks kitchen={kitchen} recipeIds={meal?.recipeIds ?? []} onOpenRecipe={onOpenRecipe} />
     </div>
+  );
+}
+
+// A neighbouring day's name, quiet, with its tap area stretched to the header's height; none past the strip's ends
+function Neighbour({ label, side, onClick }: { label: string; side: "earlier" | "later"; onClick?: () => void }) {
+  if (!onClick) return <span />;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Show ${label}`}
+      className={`relative whitespace-nowrap text-[11.5px] text-ink/40 before:absolute before:-inset-y-3 before:-inset-x-1 before:content-[''] hover:text-ink/70 ${side === "earlier" ? "justify-self-start" : "justify-self-end"}`}
+    >
+      {side === "earlier" ? `‹ ${label}` : `${label} ›`}
+    </button>
   );
 }
 
