@@ -1,3 +1,4 @@
+import { GraphScrollbar } from "./GraphScrollbar";
 import { Controls, MarkerType, Panel, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Connection, type Edge, type Node, type XYPosition } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HexMark } from "../../components/HexTile";
@@ -556,6 +557,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       className="!bg-transparent"
     >
       <Territories quests={territories} camera={phone ? phonePanZoom.feed : undefined} />
+      {phone ? null : <GraphScrollbar />}
       <Controls
         position="bottom-left"
         showInteractive={false}

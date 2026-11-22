@@ -67,6 +67,8 @@ Only open work is listed here. What is built, and why it is built that way, is i
 - [ ] The hosted connector (design 98) carries the overnight fixes (design 234, 238) only once deployed:
       `npm run connector:deploy`. Until then its `overview` lists shelved quests as "Hidden quests", and
       `update_quest` still offers `shown`, which now does nothing (design 55).
+      It also lacks `update_alarm`, `add_event` and `describe` (design 332, 333, 334) until then; the local
+      agent server (`npm run agent`) has them.
 - [ ] Drop `graph_nodes.active` (and from `nodes_with_xp`) once the phone, the desktop app and the hosted
       connector run a build from after 2026-11-09 (design 55). Until then an old build's "Hide quest" sets
       a flag the new builds ignore. `reopen_around` returns `nodes_with_xp` rows, so it is dropped and

@@ -178,6 +178,10 @@ function StepCard({ data }: NodeProps<Node<CardData>>) {
             <span className={`${nowPill} group-hover:invisible`}>Now</span>
           ) : node.priority && !data.phone ? (
             <span className="font-mono text-[10px] text-muted group-hover:invisible">P{node.priority}</span>
+          ) : node.description ? (
+            <span title="Has a description" className="text-muted group-hover:invisible">
+              <NotesIcon />
+            </span>
           ) : null}
         </span>
         {data.phone ? (
@@ -373,17 +377,46 @@ function PriorityButton({ data }: { data: CardData }) {
           event.stopPropagation();
           onMenu(!menuOpen);
         }}
-        title="Priority"
+        title="Priority and description"
         className={`nodrag ${iconButton} font-mono text-[10px] font-semibold text-muted hover:bg-ink/8 hover:text-ink`}
       >
         {node.priority ? `P${node.priority}` : "P"}
       </button>
       <NodeToolbar isVisible={menuOpen} position={Position.Bottom} align="end" offset={6}>
-        <div className="nodrag nopan w-52 rounded-xl border border-ink/10 bg-card p-2 text-xs text-ink/75 shadow-[var(--card-shadow)]">
+        <div className="nodrag nopan w-64 space-y-2.5 rounded-xl border border-ink/10 bg-card p-2.5 text-xs text-ink/75 shadow-[var(--card-shadow)]">
           <PriorityPicker node={node} act={act} />
+          <DescriptionEditor node={node} act={act} />
         </div>
       </NodeToolbar>
     </>
+  );
+}
+
+function NotesIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M3 4h10M3 8h10M3 12h6" />
+    </svg>
+  );
+}
+
+// A box's description, free text that wraps (where its details are kept, say); saved on leaving the field
+function DescriptionEditor({ node, act, rows = 4 }: { node: GraphNode; act: Act; rows?: number }) {
+  return (
+    <textarea
+      key={node.description}
+      defaultValue={node.description}
+      rows={rows}
+      maxLength={4000}
+      placeholder="Description (optional)"
+      aria-label="Description"
+      onKeyDown={(event) => event.stopPropagation()}
+      onBlur={(event) => {
+        const description = event.currentTarget.value.trim();
+        if (description !== node.description) void act("updateNode", node.id, { description });
+      }}
+      className="block w-full resize-y rounded-lg border border-ink/10 bg-canvas/60 px-2.5 py-2 text-[12.5px] leading-5 text-ink/85 placeholder:text-muted/70 focus:border-ember/60 focus:outline-none"
+    />
   );
 }
 
@@ -573,6 +606,7 @@ function MenuButton({ data }: { data: CardData }) {
             <p className="mb-1 text-[11.5px] text-muted">Priority</p>
             <PriorityPicker node={node} act={act} />
           </div>
+          <DescriptionEditor node={node} act={act} rows={3} />
           <StatWeightsEditor node={node} act={act} />
 
           <button
@@ -655,6 +689,9 @@ function PhoneMenu({ data }: { data: CardData }) {
                 }}
                 className="mb-1 min-h-11 w-full rounded-lg border border-ink/10 bg-canvas/60 px-3 py-2 font-display text-[15px] font-semibold text-ink/90 focus:border-ember/60 focus:outline-none"
               />
+              <div className="mb-1">
+                <DescriptionEditor node={node} act={act} rows={3} />
+              </div>
               <button type="button" onClick={choose(() => onAdding(true))} className={phoneItem}>
                 <PlusIcon /> Add a step inside
               </button>

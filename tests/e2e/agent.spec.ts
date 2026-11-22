@@ -69,6 +69,16 @@ test("agent tools", async () => {
     expect(body.split("\n\n")[1]).not.toContain("Kernel trick");
   });
 
+  await test.step("a description is set, shown quoted under its step, and cleared", async () => {
+    expect((await call("describe", { id: id("kernel"), description: "Details in notes/kernels.md\nSee lecture 7" })).ok).toBe(true);
+    let { body } = await call("overview");
+    expect(body).toMatch(/Kernel trick \[[^\]]+\].*\n\s+> Details in notes\/kernels\.md\n\s+> See lecture 7/);
+    expect((await call("describe", { id: "not-a-node", description: "x" })).ok).toBe(false);
+    expect((await call("describe", { id: id("kernel"), description: "" })).ok).toBe(true);
+    ({ body } = await call("overview"));
+    expect(body).not.toContain("notes/kernels.md");
+  });
+
   await test.step("loops and moving a node inside itself are refused", async () => {
     expect(await call("link", { from: id("kernel"), to: id("pca") })).toEqual({ ok: false, body: "That link would make a loop." });
     expect(await call("move", { id: id("dl"), parent_id: id("pca") })).toEqual({ ok: false, body: "A node cannot move inside itself." });
@@ -203,6 +213,26 @@ test("agent tools", async () => {
     expect((await call("delete_alarm", { id: dentist })).ok).toBe(true);
     ({ body } = await call("overview"));
     expect(body).not.toContain("Dentist");
+  });
+
+  await test.step("alarms are edited in place; events are set, listed apart, given an end, and never skipped as rings", async () => {
+    let { body } = await call("overview");
+    const wake = /Wake \[([^\]]+)\]/.exec(body)![1];
+    expect((await call("update_alarm", { id: wake, time: "06:30", weekdays: ["Tue"] })).ok).toBe(true);
+    expect((await call("update_alarm", { id: wake, date: "2099-11-05" })).ok).toBe(false);
+    expect((await call("add_event", { title: "Aptitude test", start: "11:00", end: "13:00", date: "2099-11-05" })).ok).toBe(true);
+    expect((await call("add_event", { title: "Lecture", start: "09:00", weekdays: ["Tue"] })).ok).toBe(true);
+    expect((await call("add_event", { title: "Neither", start: "09:00" })).ok).toBe(false);
+    ({ body } = await call("overview"));
+    expect(body).toMatch(/\[on\] 06:30 on Tue Wake \[[^\]]+\] \(situps\)/);
+    const events = body.slice(body.indexOf("Events"));
+    expect(events).toMatch(/once at .*2099.* Aptitude test \[[^\]]+\] \(120 min\)/);
+    const lecture = /Lecture \[([^\]]+)\]/.exec(events)![1];
+    expect((await call("update_alarm", { id: lecture, end: "10:30" })).ok).toBe(true);
+    expect((await call("skip_ring", { id: lecture, date: "2099-11-03" })).ok).toBe(false);
+    ({ body } = await call("overview"));
+    expect(body).toMatch(/09:00 on Tue Lecture \[[^\]]+\] \(90 min\)/);
+    for (const id of [lecture, /Aptitude test \[([^\]]+)\]/.exec(body)![1]]) expect((await call("delete_alarm", { id })).ok).toBe(true);
   });
 
   await test.step("a routine's ring is skipped or moved on one date only, restored, and the routine edited keeping its ticks", async () => {

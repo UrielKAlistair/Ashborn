@@ -56,6 +56,7 @@ export type NodeRow = {
   id: string;
   parent_id: string | null;
   title: string;
+  description?: string;
   stat_weights: StatWeights;
   created_at: string;
   completed_at: string | null;
@@ -68,7 +69,7 @@ export type NodeRow = {
   y: number | null;
 };
 export type RoutineRow = { id: string; title: string; cue: string; weekdays: Weekday[]; time: string | null; alarm: AlarmKind };
-export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; sound: Alarm["sound"]; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean };
+export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; sound: Alarm["sound"]; minutes: number | null; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean };
 export type DeadlineRow = { id: string; title: string; due_date: string; done_at: string | null; alarm_time: string | null; node_id: string | null };
 type StockRow = { id: string; name: string; unit: StockUnit; target: number; on_hand: number; read_at: string | null };
 type RecipeRow = {
@@ -144,11 +145,11 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { nodes: [node, ...reopened] };
     },
 
-    async updateNode(id, { title, statWeights, done, shelved, priority }) {
+    async updateNode(id, { title, description, statWeights, done, shelved, priority }) {
       const at = clock().toISOString();
       const completed_at = done === undefined ? undefined : done ? at : null;
       const stat_weights = statWeights && positiveWeights(statWeights);
-      const fields = { title, stat_weights, completed_at, shelved, priority };
+      const fields = { title, description, stat_weights, completed_at, shelved, priority };
       // A bare tick on a step already done changes nothing, so it keeps the day it was done on (a tick
       // replayed from another device's queue would otherwise move it, and its progress, to today)
       const bareTick = done === true && Object.values({ ...fields, completed_at: undefined }).every((value) => value === undefined);
@@ -537,6 +538,7 @@ export function toNode(row: NodeRow): GraphNode {
     id: row.id,
     parentId: row.parent_id,
     title: row.title,
+    description: row.description ?? "",
     statWeights: row.stat_weights,
     createdAt: row.created_at,
     completedAt: row.completed_at,
@@ -577,7 +579,7 @@ export function toDeadline(row: DeadlineRow): Deadline {
 }
 
 export function toAlarm(row: AlarmRow): Alarm {
-  return { id: row.id, label: row.label, kind: row.kind, sound: row.sound, at: row.at, time: toClock(row.time), weekdays: row.weekdays, enabled: row.enabled };
+  return { id: row.id, label: row.label, kind: row.kind, sound: row.sound, minutes: row.minutes ?? null, at: row.at, time: toClock(row.time), weekdays: row.weekdays, enabled: row.enabled };
 }
 
 // Postgres gives times as HH:MM:SS

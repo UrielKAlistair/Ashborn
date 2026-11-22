@@ -7,7 +7,7 @@
  */
 import { addDays, atTime, showTime, startOfDay, toISODate, weekdayOf } from "./dates.js";
 import { mealReminders } from "./kitchen.js";
-import type { AlarmKind, AlarmSound, Routine, Snapshot } from "./types.js";
+import type { Alarm, AlarmKind, AlarmSound, ISODate, Routine, Snapshot } from "./types.js";
 
 // How far back the schedule handed to the phone reaches: the rings already rung that are still due
 // say which snoozes may ring again (none whose ring was ticked, skipped or removed since), so the
@@ -35,7 +35,7 @@ export function byTime(a: Routine, b: Routine) {
 }
 
 // The alarms due from `from` over the next `days` days, soonest first: standalone alarms that are
-// on, timed routines, deadlines with an alarm, and meal reminders. A routine already ticked that
+// on and ring (not events), timed routines, deadlines with an alarm, and meal reminders. A routine already ticked that
 // day does not ring, nor does a ring skipped.
 export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): AlarmInstance[] {
   const alarms: AlarmInstance[] = [];
@@ -45,7 +45,7 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
   for (let offset = 0; offset < days; offset++) {
     const date = addDays(firstDate, offset);
     for (const alarm of snapshot.alarms) {
-      if (!alarm.enabled || !alarm.time || !alarm.weekdays.includes(weekdayOf(date))) continue;
+      if (!alarm.enabled || alarm.kind === "none" || !alarm.time || !alarm.weekdays.includes(weekdayOf(date))) continue;
       alarms.push({ key: `alarm:${alarm.id}@${date}`, at: atTime(date, alarm.time), title: alarm.label || "Alarm", kind: alarm.kind, sound: alarm.sound });
     }
     for (const routine of snapshot.routines) {
@@ -56,7 +56,7 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
   }
   const end = startOfDay(addDays(firstDate, days));
   for (const alarm of snapshot.alarms) {
-    if (!alarm.enabled || !alarm.at || new Date(alarm.at) >= end) continue;
+    if (!alarm.enabled || alarm.kind === "none" || !alarm.at || new Date(alarm.at) >= end) continue;
     alarms.push({ key: `alarm:${alarm.id}@${new Date(alarm.at).getTime()}`, at: new Date(alarm.at), title: alarm.label || "Alarm", kind: alarm.kind, sound: alarm.sound });
   }
   const lastDate = addDays(firstDate, days - 1);
@@ -69,6 +69,23 @@ export function upcomingAlarms(snapshot: Snapshot, from: Date, days: number): Al
 
   const skipped = new Set(snapshot.skippedAlarms.map((skip) => skip.key));
   return alarms.filter((alarm) => alarm.at > from && !skipped.has(alarm.key)).sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
+// A time on a day that doesn't ring: one of the user's events (an alarm of kind "none"), from `at`
+// for `minutes` (null: a moment)
+export type DayEvent = { key: string; at: Date; minutes: number | null; title: string; alarm: Alarm };
+
+// The events on `date` that are on, in time order: the repeating ones on its weekday, and the one-offs
+// whose moment falls on it
+export function eventsOn(snapshot: Snapshot, date: ISODate): DayEvent[] {
+  const events: DayEvent[] = [];
+  for (const alarm of snapshot.alarms) {
+    if (alarm.kind !== "none" || !alarm.enabled) continue;
+    const title = alarm.label || "Event";
+    if (alarm.time && alarm.weekdays.includes(weekdayOf(date))) events.push({ key: `alarm:${alarm.id}@${date}`, at: atTime(date, alarm.time), minutes: alarm.minutes, title, alarm });
+    else if (alarm.at && toISODate(new Date(alarm.at)) === date) events.push({ key: `alarm:${alarm.id}@${Date.parse(alarm.at)}`, at: new Date(alarm.at), minutes: alarm.minutes, title, alarm });
+  }
+  return events.sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
 // The next moment the clock shows `time`: today if it is still ahead, else tomorrow

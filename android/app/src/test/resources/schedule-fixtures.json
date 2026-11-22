@@ -228,6 +228,7 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": null,
             "time": "08:00",
             "weekdays": [
@@ -304,7 +305,7 @@
       ]
     },
     {
-      "name": "standalone alarms: recurring, one-off as Postgres writes it, a call, switched off, beyond the window, past",
+      "name": "standalone alarms: recurring, one-off as Postgres writes it, a call, switched off, beyond the window, past, and events, which never ring",
       "input": {
         "settings": {
           "timeZone": null
@@ -318,6 +319,7 @@
             "label": "Wake up",
             "kind": "situps",
             "sound": "default",
+            "minutes": null,
             "at": null,
             "time": "06:00",
             "weekdays": [
@@ -331,6 +333,7 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": "2026-10-19T10:00:00+00:00",
             "time": null,
             "weekdays": [],
@@ -341,6 +344,7 @@
             "label": "Precise",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": "2026-10-20T01:30:00.123456+00:00",
             "time": null,
             "weekdays": [],
@@ -351,6 +355,7 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": "2026-10-20T04:00:00Z",
             "time": null,
             "weekdays": [],
@@ -361,6 +366,7 @@
             "label": "Claude needs you",
             "kind": "plain",
             "sound": "call",
+            "minutes": null,
             "at": "2026-10-19T08:00:00Z",
             "time": null,
             "weekdays": [],
@@ -371,6 +377,7 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": null,
             "time": "07:00",
             "weekdays": [
@@ -383,6 +390,7 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": "2026-10-20T03:00:00+00:00",
             "time": null,
             "weekdays": [],
@@ -393,6 +401,7 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": "2026-11-30T09:00:00+00:00",
             "time": null,
             "weekdays": [],
@@ -403,9 +412,34 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": "2026-10-19T00:00:00+00:00",
             "time": null,
             "weekdays": [],
+            "enabled": true
+          },
+          {
+            "id": "test",
+            "label": "Aptitude test",
+            "kind": "none",
+            "sound": "default",
+            "minutes": 120,
+            "at": "2026-10-19T11:00:00+00:00",
+            "time": null,
+            "weekdays": [],
+            "enabled": true
+          },
+          {
+            "id": "lecture",
+            "label": "Lecture",
+            "kind": "none",
+            "sound": "default",
+            "minutes": 60,
+            "at": null,
+            "time": "09:00",
+            "weekdays": [
+              "Tue"
+            ],
             "enabled": true
           }
         ],
@@ -840,6 +874,7 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
+            "minutes": null,
             "at": null,
             "time": "07:00",
             "weekdays": [

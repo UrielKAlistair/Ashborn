@@ -116,7 +116,7 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
     on("routine_checks", (change) => {
       // A routine deleted takes its ticks with it; otherwise the row says whether it is ticked
       const row = (change.eventType === "DELETE" ? change.old : change.new) as { routine_id: string; date: string; checked?: boolean };
-      // The app holds the checks from yesterday on, as the load reads them: a routine's day can run past midnight
+      // The app holds the checks from yesterday on, as the load reads them: the phone's schedule reaches back that far
       if (row.date >= addDays(today(), -1)) {
         emit({ routineCheck: { routineId: row.routine_id, date: row.date, checked: change.eventType !== "DELETE" && row.checked !== false } });
       }

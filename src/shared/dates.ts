@@ -67,6 +67,20 @@ export function weekdayOf(date: ISODate): Weekday {
   return week[index === 0 ? 6 : index - 1];
 }
 
+// Minutes from `start` to `end` (clock times), past midnight if `end` is earlier; null if they are equal
+export function minutesFrom(start: string, end: string): number | null {
+  const minutes = (toMinutes(end) - toMinutes(start) + 1440) % 1440;
+  return minutes === 0 ? null : minutes;
+}
+
+// The clock time `minutes` after `start`
+export function clockAfter(start: string, minutes: number): string {
+  const total = (toMinutes(start) + minutes) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+
 // Whole days from `from` to `to`; negative when `to` is earlier
 export function daysBetween(from: ISODate, to: ISODate) {
   return Math.round((utcMidnight(to) - utcMidnight(from)) / 86_400_000);
@@ -95,13 +109,15 @@ function wallClock(moment: Date): WallClock {
 
 // The moment a clock in the time zone shows `hours`:`minutes` on `date`. Out-of-range fields roll
 // over, as Date's do. Across a daylight-saving change the zone's offset is read at the guess and
-// again at the result.
+// again at the result; when the two reads differ, the time falls in the gap the clocks skip, and it
+// is read after the change (the later candidate), as Date reads it.
 function momentAt(date: ISODate, hours: number, minutes: number): Date {
   const [year, month, day] = date.split("-").map(Number);
   if (!timeZone) return new Date(year, month - 1, day, hours, minutes);
   const asUtc = Date.UTC(year, month - 1, day, hours, minutes);
   const first = asUtc - offsetAt(asUtc);
-  return new Date(asUtc - offsetAt(first));
+  const second = asUtc - offsetAt(first);
+  return new Date(offsetAt(second) === offsetAt(first) ? second : Math.max(first, second));
 }
 
 // How far the time zone's clock is ahead of UTC at a moment, in milliseconds

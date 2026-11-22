@@ -63,7 +63,7 @@ test("alarms", async () => {
     await expect.poll(skipOf).toBe(false);
   });
 
-  await test.step("a tap on today's ring moves it, today only; switched back on, it rings at its own time", async () => {
+  await test.step("a tap on today's ring moves it, today only, and it then shows once, at its new time", async () => {
     const later = new Date(soon.getTime() + 2 * 60_000);
     const laterTime = `${String(later.getHours()).padStart(2, "0")}:${String(later.getMinutes()).padStart(2, "0")}`;
     const moved = `Stretch (moved from ${showTime(time)})`;
@@ -74,13 +74,16 @@ test("alarms", async () => {
     await dialog.getByRole("button", { name: "Move" }).click();
     await expect.poll(skipOf).toBe(true);
     await expect.poll(async () => (await movedRows()).map((row) => new Date(row.at).getMinutes())).toEqual([later.getMinutes()]);
-    await expect(ring(moved)).toContainText(showTime(laterTime).replace(" ", ""));
+    await expect(ring("Stretch")).toHaveCount(1);
+    await expect(ring("Stretch")).toContainText(showTime(laterTime).replace(" ", ""));
+    await expect(ring("Stretch")).toContainText(`Moved from ${showTime(time)}`);
     // The repeating alarm itself is unchanged
     expect((await db.from("alarms").select("time").eq("id", id).single()).data?.time.slice(0, 5)).toBe(time);
 
-    await ring("Stretch").getByRole("switch").click();
-    await expect.poll(skipOf).toBe(false);
-    await expect.poll(async () => (await movedRows()).length).toBe(0);
+    // Undone the way the agent's restore_ring does it, for the next step
+    await db.from("alarms").delete().eq("label", moved);
+    await db.from("alarm_skips").delete().not("user_id", "is", null);
+    await expect(ring("Stretch")).toContainText(showTime(time).replace(" ", ""));
   });
 
   await test.step("tomorrow lists the day's rings, and the arrow back returns to today", async () => {
@@ -161,8 +164,10 @@ test("alarms", async () => {
     await page.getByRole("menuitem", { name: "Alarms", exact: true }).click();
     const count = async () => (await db.from("alarms").select("id")).data?.length;
     const before = await count();
-    await page.getByRole("button", { name: "New alarm" }).click();
-    await page.getByRole("dialog", { name: "New alarm" }).getByRole("button", { name: "In 10 min" }).click();
+    await page.getByRole("button", { name: "New on this day" }).click();
+    const pop = page.getByRole("dialog", { name: /^New on/ });
+    await pop.getByRole("tab", { name: "Alarm" }).click();
+    await pop.getByRole("button", { name: "In 10 min" }).click();
     await expect.poll(count).toBe(before! + 1);
     // Today lists the rings before midnight: in the day's last minutes the alarm is on the Calendar only
     if (new Date(Date.now() + 10 * 60_000).getDate() !== new Date().getDate()) {
@@ -177,6 +182,27 @@ test("alarms", async () => {
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect.poll(async () => (await db.from("alarms").select("label").eq("label", "Tea")).data?.length).toBe(1);
     await expect(ring("Tea")).toBeVisible();
+  });
+
+  await test.step("an event from + is on the day's schedule, lit while on, and never rings", async () => {
+    const from = new Date(Date.now() - 30 * 60_000);
+    const to = new Date(Date.now() + 60 * 60_000);
+    if (toISODate(from) !== toISODate(to)) {
+      test.info().annotations.push({ type: "skip", description: "Event not checked: it would cross midnight" });
+      return;
+    }
+    const clock = (at: Date) => `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+    await page.getByRole("button", { name: "New on this day" }).click();
+    const pop = page.getByRole("dialog", { name: /^New on/ });
+    await pop.getByLabel("Starts", { exact: true }).fill(clock(from));
+    await pop.getByLabel("Ends (optional)", { exact: true }).fill(clock(to));
+    await pop.getByPlaceholder("What is on").fill("Aptitude test");
+    await pop.getByRole("button", { name: "Set" }).click();
+    await expect.poll(async () => (await db.from("alarms").select("kind, minutes").eq("label", "Aptitude test").maybeSingle()).data).toEqual({ kind: "none", minutes: 90 });
+    const row = ring("Aptitude test");
+    await expect(row.getByText("on now", { exact: true })).toBeVisible();
+    await expect(row.getByText(`Event · ${showTime(clock(from))} – ${showTime(clock(to))} · 1h 30m`, { exact: true })).toBeVisible();
+    await expect(row.getByRole("switch")).toHaveCount(0);
   });
 
   await app.close();

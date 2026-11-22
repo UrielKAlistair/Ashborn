@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useToday } from "../../lib/useToday";
-import { addDays, daysBetween, week, weekdayOf } from "../../shared/dates";
+import { addDays, daysBetween, showTime, week, weekdayOf } from "../../shared/dates";
 import { mealDeductions, shownMeal, type ShownMeal } from "../../shared/kitchen";
 import { mealDaysAhead, mealDaysBack, mealSlots, mealTimes, type ISODate, type Kitchen, type MealSlot, type Weekday } from "../../shared/types";
 import type { Act } from "../home/HomePage";
@@ -156,7 +156,7 @@ function MealCell({ kitchen, act, meal, onOpenRecipe }: { kitchen: Kitchen; act:
       <div className="flex items-center gap-2">
         {empty || cancelled ? null : <Tick done={cooked} onClick={tick} />}
         <p className="min-w-0 flex-1 text-[11.5px] capitalize text-muted">
-          {meal.slot} <span className="whitespace-nowrap font-mono text-[10.5px] tabular-nums text-ink/35">{mealTimes[meal.slot]}</span>
+          {meal.slot} <span className="whitespace-nowrap font-mono text-[10.5px] tabular-nums text-ink/35">{showTime(mealTimes[meal.slot])}</span>
         </p>
         {/* Over the slot's name until hovered on the desktop, where a day's column has no room for both */}
         <div className="absolute top-1.5 right-1.5 flex items-center gap-2 rounded-md bg-card px-1.5 py-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 phone:static phone:gap-0 phone:bg-transparent phone:p-0 phone:opacity-100">

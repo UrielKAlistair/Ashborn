@@ -57,7 +57,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 
 
   return (
-    <section className="panel-scroll panel-lift flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-2xl border border-ink/8 bg-panel px-4 py-4">
+    <section className="panel-scroll flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-1 py-2">
       <div className="flex items-baseline justify-between px-1">
         <h2 className="caps font-display text-[13px] font-bold text-ink/90">Today</h2>
         <span className="font-mono text-[11px] text-muted tabular-nums">
@@ -129,7 +129,7 @@ function Deadlines({ snapshot, model, act, date }: { snapshot: Snapshot; model: 
                 <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
                   <span className="shrink-0 font-mono tabular-nums">
                     {deadline.dueDate}
-                    {deadline.alarmTime ? ` · alarm ${deadline.alarmTime}` : ""} ·
+                    {deadline.alarmTime ? ` · alarm ${showTime(deadline.alarmTime)}` : ""} ·
                   </span>
                   <NodePicker model={model} label="Deadline for" none="No quest" value={deadline.nodeId} onChange={(nodeId) => void act("updateDeadline", deadline.id, { nodeId })} className="-mx-1 min-w-0 flex-1 cursor-pointer appearance-none truncate rounded-md bg-transparent px-1 py-0.5 text-[11.5px] text-muted hover:bg-ink/6 hover:text-ink/80 pointer-coarse:min-h-8" />
                 </div>

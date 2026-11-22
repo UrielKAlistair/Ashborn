@@ -25,7 +25,7 @@ export function HomePage({ snapshot, act }: HomePageProps) {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 gap-5">
-      <section className="panel-lift min-h-0 min-w-0 flex-[2] overflow-hidden rounded-2xl border border-ink/8 bg-panel">
+      <section className="min-h-0 min-w-0 flex-[2] overflow-hidden">
         <QuestGraph snapshot={snapshot} model={model} act={act} phone={false} />
       </section>
 

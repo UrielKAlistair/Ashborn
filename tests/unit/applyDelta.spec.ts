@@ -11,6 +11,7 @@ const node = (id: string, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
   parentId: null,
   title: id,
+  description: "",
   statWeights: {},
   createdAt: "2026-10-20T00:00:00Z",
   completedAt: null,
@@ -68,6 +69,12 @@ test("each field is judged by its own stamp", () => {
   const shown = node("a", { title: "new title", priority: null, stamps: { title: "2026-11-03T00:00:05Z", priority: "2026-11-03T00:00:01Z" } });
   const [merged] = applyDelta({ ...snapshot, nodes: [shown] }, { nodes: [node("a", { title: "old title", priority: 2, stamps: { title: "2026-11-03T00:00:02Z", priority: "2026-11-03T00:00:03Z" } })] }).nodes;
   expect(merged).toMatchObject({ title: "new title", priority: 2, stamps: { title: "2026-11-03T00:00:05Z", priority: "2026-11-03T00:00:03Z" } });
+});
+
+test("a description is kept when the one arriving was stamped earlier", () => {
+  const shown = node("a", { description: "newer", stamps: { description: "2026-11-03T00:00:05Z" } });
+  const [merged] = applyDelta({ ...snapshot, nodes: [shown] }, { nodes: [node("a", { description: "older", priority: 2, stamps: { description: "2026-11-03T00:00:02Z", priority: "2026-11-03T00:00:03Z" } })] }).nodes;
+  expect(merged).toMatchObject({ description: "newer", priority: 2, stamps: { description: "2026-11-03T00:00:05Z" } });
 });
 
 test("a position is one field, across its two columns", () => {

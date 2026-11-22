@@ -17,7 +17,7 @@ import { EventDialog, type Editing } from "./EventDialog";
  * The Calendar: the one-time alarms and the open deadlines, by day (calendarEvents.ts), a week at a time.
  * The desktop shows the week's days side by side with the month beside them, or, in a window too narrow
  * for seven columns, the weeks as a list beside the month; the phone shows the weeks as a list, or the month, a tap on whose days picks the week the list opens on (calendarViews.tsx).
- * A day's + adds either kind; a tap on one opens it, to change or delete an alarm, or to tick, change,
+ * The page's + adds either kind, on a day picked in its pop-up; a tap on one opens it, to change or delete an alarm, or to tick, change,
  * link or delete a deadline. Both edit in one pop-up (EventDialog.tsx), which the page owns.
  * A tap on a day's name opens that whole day as the Alarms screen shows it (DayRings): every ring,
  * routines and meals included, with arrows to the days either side.
@@ -27,7 +27,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
   const narrow = useNarrow();
   const today = useToday();
   const now = useNow();
-  const byDay = useMemo(() => calendarEvents(snapshot), [snapshot.alarms, snapshot.deadlines]);
+  const calendar = useMemo(() => calendarEvents(snapshot), [snapshot.alarms, snapshot.deadlines]);
   // The quests a deadline can be linked to; read only while the pop-up is open
   const model = useMemo(() => buildGraphModel(snapshot), [snapshot.nodes, snapshot.edges]);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -38,14 +38,13 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
   const [moving, setMoving] = useState<AlarmInstance | null>(null);
 
   const view: CalendarViewProps = {
-    byDay,
+    calendar,
     today,
     monday,
     onWeek: (picked) => {
       setMonday(picked);
       setPhoneView("week");
     },
-    onAdd: (date) => setEditing({ kind: "new", date }),
     onOpen: (event) => setEditing(event.kind === "alarm" ? { kind: "alarm", id: event.id } : { kind: "deadline", id: event.id }),
     onDay: setDay,
     now,
@@ -105,7 +104,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
     return (
       <div className="relative flex min-h-0 w-full min-w-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-          <section className="panel-lift flex shrink-0 grow flex-col gap-4 rounded-2xl border border-ink/8 bg-panel p-4 pb-20">
+          <section className="flex shrink-0 grow flex-col gap-5 pt-1 pb-24">
             <div className="flex items-center gap-3">
               <h1 className="caps mr-auto font-display text-[15px] font-bold text-ink/90">Calendar</h1>
               <div role="tablist" aria-label="Calendar view" className="flex w-44 rounded-lg border border-ink/12 p-0.5">
@@ -125,7 +124,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
   return (
     <div className="relative flex min-h-0 w-full min-w-0 flex-1 gap-4">
       {narrow ? (
-        <section className="panel-lift panel-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-ink/8 bg-panel p-4 pb-20">
+        <section className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto pr-3 pb-24">
           <h1 className="caps font-display text-[15px] font-bold text-ink/90">Calendar</h1>
           <WeekList {...view} />
         </section>

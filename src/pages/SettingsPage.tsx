@@ -8,8 +8,8 @@ import { setTheme, themeNames, themes, useTheme } from "../lib/useTheme";
 const CONNECT_SETTLE_MS = 5000;
 
 /**
- * The phone's Settings screen (the desktop has none: its theme switch is on the rail). Four groups:
- * the theme; the hour the day starts (also set from Today's date); Alarm reliability, a checklist of
+ * The phone's Settings screen (the desktop has none: its theme switch is on the rail). Three groups:
+ * the theme; Alarm reliability, a checklist of
  * what the phone must allow for alarms to ring on time, each item opening its setting; and Alarms on
  * this phone, what the phone holds, with Sync now. The two alarm groups show only in the Android app
  * (`permissions` is null elsewhere). `sync` reads the data again and hands the phone its schedule.

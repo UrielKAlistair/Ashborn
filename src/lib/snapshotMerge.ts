@@ -44,6 +44,7 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
 // The columns behind each of a node's fields that the server stamps
 const STAMPED_FIELDS = [
   ["title", ["title"]],
+  ["description", ["description"]],
   ["statWeights", ["stat_weights"]],
   ["completedAt", ["completed_at"]],
   ["shelved", ["shelved"]],
