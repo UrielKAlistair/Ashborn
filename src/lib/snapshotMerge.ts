@@ -34,6 +34,7 @@ export function applyDelta(snapshot: Snapshot, delta: Delta): Snapshot {
       skip && skip.skipped !== wasSkipped
         ? [...snapshot.skippedAlarms.filter((s) => s.key !== skip.key), ...(skip.skipped ? [{ key: skip.key, date: skip.date }] : [])]
         : snapshot.skippedAlarms,
+    events: merge(snapshot.events, (event) => event.id, delta.events, new Set(delta.removedEventIds)),
     kitchen: delta.kitchen && !same(delta.kitchen, snapshot.kitchen) ? delta.kitchen : snapshot.kitchen,
     settings: delta.settings && !same(delta.settings, snapshot.settings) ? delta.settings : snapshot.settings,
   };

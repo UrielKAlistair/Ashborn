@@ -331,8 +331,8 @@ function withPreview(shown: Snapshot, change: Pending): Snapshot {
 function loadCachedSnapshot(): Snapshot | null {
   try {
     const cached = JSON.parse(window.localStorage.getItem(snapshotStorageKey) ?? "null") as Snapshot | null;
-    // Saved before the Kitchen, the settings, skipped alarms, alarm sounds, descriptions or event lengths existed
-    return cached && { ...cached, nodes: cached.nodes.map((node) => ({ ...node, description: node.description ?? "", stamps: node.stamps ?? {} })), kitchen: cached.kitchen ?? emptyKitchen, skippedAlarms: cached.skippedAlarms ?? [], alarms: cached.alarms.map((alarm) => ({ ...alarm, sound: alarm.sound ?? "default", minutes: alarm.minutes ?? null })), settings: cached.settings ?? { timeZone: null } };
+    // Saved before the Kitchen, the settings, skipped alarms, alarm sounds, descriptions or events existed
+    return cached && { ...cached, nodes: cached.nodes.map((node) => ({ ...node, description: node.description ?? "", stamps: node.stamps ?? {} })), kitchen: cached.kitchen ?? emptyKitchen, skippedAlarms: cached.skippedAlarms ?? [], alarms: cached.alarms.map((alarm) => ({ ...alarm, sound: alarm.sound ?? "default", eventId: alarm.eventId ?? null })), events: cached.events ?? [], settings: cached.settings ?? { timeZone: null } };
   } catch {
     return null;
   }

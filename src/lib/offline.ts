@@ -31,7 +31,9 @@ import type {
   Recipe,
   Routine,
   DeadlinePatch,
+  EventPatch,
   RoutinePatch,
+  ScheduleEvent,
   Snapshot,
   StockItem,
 } from "../shared/types";
@@ -146,6 +148,17 @@ const preview: Record<Mutation, Preview> = {
   createAlarm: (_snapshot, [alarm]) => ({ alarms: [alarm as Alarm] }),
   updateAlarm: (snapshot, [id, patch]) => ({ alarms: [{ ...existing(snapshot.alarms, id, "This alarm"), ...(patch as AlarmPatch) }] }),
   deleteAlarm: (_snapshot, [id]) => ({ removedAlarmIds: [id] }),
+  // An event's start alarm is the server's to make (its id is the server's), so a new event rings only
+  // once sent; a change to one already there moves or removes its alarm as the server will
+  createEvent: (_snapshot, [event]) => ({ events: [event as ScheduleEvent] }),
+  updateEvent: (snapshot, [id, patch]) => {
+    const event = { ...existing(snapshot.events, id, "This event"), ...(patch as EventPatch) };
+    const own = snapshot.alarms.find((alarm) => alarm.eventId === id);
+    if (!own) return { events: [event] };
+    if (!event.rings) return { events: [event], removedAlarmIds: [own.id] };
+    return { events: [event], alarms: [{ ...own, label: event.title, kind: event.rings, at: event.at, time: event.time, weekdays: event.weekdays, enabled: true }] };
+  },
+  deleteEvent: (snapshot, [id]) => ({ removedEventIds: [id], removedAlarmIds: snapshot.alarms.filter((alarm) => alarm.eventId === id).map((alarm) => alarm.id) }),
   updateSettings: (snapshot, [patch]) => ({ settings: { ...snapshot.settings, ...definedOnly(patch) } }),
   // The Kitchen
   // An item already here (its row arrived live before the reply) keeps what the server holds

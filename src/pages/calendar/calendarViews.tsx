@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { addDays, clockAfter, daysBetween, showTime, week } from "../../shared/dates";
-import type { Alarm, ISODate } from "../../shared/types";
+import { nowPlace } from "../../shared/schedule";
+import type { ISODate } from "../../shared/types";
 import type { Act } from "../home/HomePage";
 import { Tick } from "../home/Tick";
 import { kindLabels } from "../alarmParts";
-import { NowLine } from "../DayRings";
+import { NowAcross, NowLine } from "../DayRings";
 import { dayEvents, monthGrid, overdue, weekStart, type CalendarDays, type CalendarEvent } from "./calendarEvents";
 
 /**
@@ -18,8 +19,8 @@ import { dayEvents, monthGrid, overdue, weekStart, type CalendarDays, type Calen
  *   MonthDots: a month's grid with a dot per event; a tap picks that day's week. Beside the columns on
  *     the desktop, and the phone's other view.
  * Overdue deadlines sit on today until ticked or deleted. Colours say the kind: ember a deadline, sky an
- * alarm, green an event (a time that doesn't ring); red, a deadline past due. On today a blue line marks
- * now, and the alarms that have rung and the events that have ended are greyed.
+ * alarm, green an event; red, a deadline past due. On today a blue line marks now, between rows or across
+ * an event that is on (nowPlace), and the alarms that have rung and the events that have ended are greyed.
  */
 
 export type CalendarViewProps = {
@@ -51,14 +52,16 @@ function eventsOn(date: ISODate, calendar: CalendarDays, today: ISODate) {
 
 // An alarm whose moment has passed, or an event that has ended
 function over(event: CalendarEvent, now: Date) {
-  return event.kind === "alarm" && event.at.getTime() + (event.alarm.minutes ?? 0) * 60_000 <= now.getTime();
+  if (event.kind === "deadline") return false;
+  return event.at.getTime() + (event.kind === "event" ? (event.event.minutes ?? 0) : 0) * 60_000 <= now.getTime();
 }
 
-// Where the line for now goes among today's events: before the first alarm or event still to start
-// (one already on stays above it), else last
-function nowIndex(events: CalendarEvent[], now: Date) {
-  const next = events.findIndex((event) => event.kind === "alarm" && event.at > now);
-  return next === -1 ? events.length : next;
+// Where the line for now goes among today's events; the deadlines, which have no time, are above it
+function nowAmong(events: CalendarEvent[], now: Date) {
+  return nowPlace(
+    events.map((event) => (event.kind === "deadline" ? { at: new Date(0) } : { at: event.at, minutes: event.kind === "event" ? event.event.minutes : null })),
+    now,
+  );
 }
 
 function weekTitle(monday: ISODate, today: ISODate) {
@@ -112,7 +115,7 @@ export function WeekColumns({ calendar, today, monday, onWeek, onOpen, onDay, no
 // events
 function DayColumn({ date, events, today, now, onOpen, onDay, act }: { date: ISODate; events: CalendarEvent[]; today: ISODate; now: Date; onOpen: (event: CalendarEvent) => void; onDay: (date: ISODate) => void; act: Act }) {
   const offset = daysBetween(today, date);
-  const nowAt = offset === 0 ? nowIndex(events, now) : -1;
+  const place = offset === 0 ? nowAmong(events, now) : null;
   return (
     <div
       aria-label={dayLabel(date)}
@@ -124,11 +127,13 @@ function DayColumn({ date, events, today, now, onOpen, onDay, act }: { date: ISO
       </button>
       {events.map((event, index) => (
         <div key={event.id} className="contents">
-          {index === nowAt ? <NowLine now={now} /> : null}
-          <EventCard event={event} today={today} past={offset === 0 && over(event, now)} onOpen={onOpen} act={act} />
+          {place?.row === index && place.inside === null ? <NowLine now={now} /> : null}
+          <NowAcross now={now} inside={place?.row === index ? place.inside : null}>
+            <EventCard event={event} today={today} past={offset === 0 && over(event, now)} onOpen={onOpen} act={act} />
+          </NowAcross>
         </div>
       ))}
-      {nowAt === events.length && events.length > 0 ? <NowLine now={now} /> : null}
+      {place && place.row === events.length && events.length > 0 ? <NowLine now={now} /> : null}
     </div>
   );
 }
@@ -139,7 +144,7 @@ function EventCard({ event, today, past, onOpen, act }: { event: CalendarEvent; 
   return (
     <div role="group" aria-label={event.title} className={`rounded-lg border-l-[3px] bg-ink/[0.035] px-2 py-1.5 hover:bg-ink/[0.06] ${edgeClass(event, today)} ${off || past ? "opacity-50" : ""}`}>
       <div className="flex items-start gap-1.5">
-        {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <TimeMark alarm={event.alarm} />}
+        {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <TimeMark event={event} />}
         <button type="button" onClick={() => onOpen(event)} aria-label={`Open ${event.title}`} className="min-w-0 flex-1 text-left">
           <span className="block text-[12.5px] leading-snug text-ink/90 [overflow-wrap:anywhere]">{event.title}</span>
           <span className="block text-[10.5px] text-muted">{cardDetail(event, today, off)}</span>
@@ -179,17 +184,19 @@ export function WeekList({ calendar, today, monday, onWeek, onOpen, onDay, now, 
             <p className="caps font-['Silkscreen'] text-[11px] text-muted">{weekTitle(first, today)}</p>
             {busy.map((date) => {
               const events = eventsOn(date, calendar, today);
-              const nowAt = date === today ? nowIndex(events, now) : -1;
+              const place = date === today ? nowAmong(events, now) : null;
               return (
                 <div key={date} className="space-y-2">
                   <DayHeader date={date} today={today} onClick={() => onDay(date)} />
                   {events.map((event, index) => (
                     <div key={event.id} className="space-y-2">
-                      {index === nowAt ? <NowLine now={now} /> : null}
-                      <EventRow event={event} today={today} past={date === today && over(event, now)} onOpen={onOpen} act={act} />
+                      {place?.row === index && place.inside === null ? <NowLine now={now} /> : null}
+                      <NowAcross now={now} inside={place?.row === index ? place.inside : null}>
+                        <EventRow event={event} today={today} past={date === today && over(event, now)} onOpen={onOpen} act={act} />
+                      </NowAcross>
                     </div>
                   ))}
-                  {nowAt === events.length && events.length > 0 ? <NowLine now={now} /> : null}
+                  {place && place.row === events.length && events.length > 0 ? <NowLine now={now} /> : null}
                   {events.length ? null : <p className="px-1 py-1 text-[12px] text-muted">Nothing on today.</p>}
                 </div>
               );
@@ -231,7 +238,7 @@ function EventRow({ event, today, past, onOpen, act }: { event: CalendarEvent; t
   const off = event.kind === "alarm" && !event.alarm.enabled;
   return (
     <div role="group" aria-label={event.title} className={`flex items-center gap-3 rounded-lg border-l-[3px] bg-ink/[0.03] py-2 pr-3 pl-3 hover:bg-ink/[0.06] ${edgeClass(event, today)} ${off || past ? "opacity-50" : ""}`}>
-      {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <TimeMark alarm={event.alarm} />}
+      {event.kind === "deadline" ? <Tick done={false} onClick={() => void act("completeDeadline", event.id)} /> : <TimeMark event={event} />}
       <button type="button" onClick={() => onOpen(event)} aria-label={`Open ${event.title}`} className="min-h-9 min-w-0 flex-1 text-left">
         <span className="line-clamp-2 text-[13px] leading-snug text-ink/90 [overflow-wrap:anywhere]">{event.title}</span>
         <span className="mt-0.5 block text-[11px] text-muted">{cardDetail(event, today, off)}</span>
@@ -326,17 +333,20 @@ function Legend({ dot, children }: { dot: string; children: ReactNode }) {
 // What an event is, short: an alarm's or event's time first, a deadline's alarm last
 function cardDetail(event: CalendarEvent, today: ISODate, off: boolean) {
   if (event.kind === "alarm") {
-    const { kind, minutes } = event.alarm;
-    const span = minutes ? `${showTime(event.time)} – ${showTime(clockAfter(event.time, minutes))}` : showTime(event.time);
-    return `${span}${kind === "plain" || kind === "none" ? "" : ` · ${kindLabels[kind].toLowerCase()}`}${off ? " · off" : ""}`;
+    const { kind } = event.alarm;
+    return `${showTime(event.time)}${kind === "plain" ? "" : ` · ${kindLabels[kind].toLowerCase()}`}${off ? " · off" : ""}`;
+  }
+  if (event.kind === "event") {
+    const { minutes, rings } = event.event;
+    return `${minutes ? `${showTime(event.time)} – ${showTime(clockAfter(event.time, minutes))}` : showTime(event.time)}${rings ? " · rings" : ""}`;
   }
   const days = daysBetween(today, event.date);
   return `${days < 0 ? `${-days}d late` : "Due"}${event.time ? ` · alarm ${showTime(event.time)}` : ""}`;
 }
 
-// A bell for an alarm; a clock face for an event, which doesn't ring
-function TimeMark({ alarm }: { alarm: Alarm }) {
-  if (alarm.kind === "none") {
+// A bell for an alarm; a clock face for an event
+function TimeMark({ event }: { event: CalendarEvent }) {
+  if (event.kind === "event") {
     return (
       <svg viewBox="0 0 16 16" aria-hidden="true" className="mt-px h-4 w-4 shrink-0 text-emerald-300" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
         <circle cx="8" cy="8" r="5.5" />
@@ -356,11 +366,13 @@ function BellMark() {
 }
 
 function edgeClass(event: CalendarEvent, today: ISODate) {
-  if (event.kind === "alarm") return event.alarm.kind === "none" ? "border-emerald-400/70" : "border-sky-400/70";
+  if (event.kind === "event") return "border-emerald-400/70";
+  if (event.kind === "alarm") return "border-sky-400/70";
   return event.date < today ? "border-red-400/80" : "border-ember/70";
 }
 
 function dotClass(event: CalendarEvent, today: ISODate) {
-  if (event.kind === "alarm") return !event.alarm.enabled ? "bg-ink/25" : event.alarm.kind === "none" ? "bg-emerald-400" : "bg-sky-400";
+  if (event.kind === "event") return "bg-emerald-400";
+  if (event.kind === "alarm") return !event.alarm.enabled ? "bg-ink/25" : "bg-sky-400";
   return event.date < today ? "bg-red-400" : "bg-ember";
 }

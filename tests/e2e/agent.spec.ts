@@ -17,7 +17,7 @@ let client: Client;
 test.beforeAll(async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  for (const table of ["graph_nodes", "routines", "deadlines", "alarms", "meals", "recipes", "stock_items", "default_meals"]) {
+  for (const table of ["graph_nodes", "routines", "deadlines", "events", "alarms", "meals", "recipes", "stock_items", "default_meals"]) {
     const { error: wipeError } = await db.from(table).delete().not("id", "is", null);
     if (wipeError) throw wipeError;
   }
@@ -215,24 +215,34 @@ test("agent tools", async () => {
     expect(body).not.toContain("Dentist");
   });
 
-  await test.step("alarms are edited in place; events are set, listed apart, given an end, and never skipped as rings", async () => {
+  await test.step("alarms are edited in place; events are set with details, listed apart, edited, and ring at their start only through their own alarm", async () => {
     let { body } = await call("overview");
     const wake = /Wake \[([^\]]+)\]/.exec(body)![1];
     expect((await call("update_alarm", { id: wake, time: "06:30", weekdays: ["Tue"] })).ok).toBe(true);
     expect((await call("update_alarm", { id: wake, date: "2099-11-05" })).ok).toBe(false);
-    expect((await call("add_event", { title: "Aptitude test", start: "11:00", end: "13:00", date: "2099-11-05" })).ok).toBe(true);
-    expect((await call("add_event", { title: "Lecture", start: "09:00", weekdays: ["Tue"] })).ok).toBe(true);
+    expect((await call("add_event", { title: "Aptitude test", start: "11:00", end: "13:00", date: "2099-11-05", details: "Hall B\nfor Acme" })).ok).toBe(true);
+    expect((await call("add_event", { title: "Lecture", start: "09:00", weekdays: ["Tue"], rings: "walk" })).ok).toBe(true);
     expect((await call("add_event", { title: "Neither", start: "09:00" })).ok).toBe(false);
     ({ body } = await call("overview"));
     expect(body).toMatch(/\[on\] 06:30 on Tue Wake \[[^\]]+\] \(situps\)/);
     const events = body.slice(body.indexOf("Events"));
-    expect(events).toMatch(/once at .*2099.* Aptitude test \[[^\]]+\] \(120 min\)/);
+    expect(events).toMatch(/once at .*2099.* Aptitude test \[[^\]]+\] \(120 min, doesn't ring\)\n    Hall B\n    for Acme/);
     const lecture = /Lecture \[([^\]]+)\]/.exec(events)![1];
-    expect((await call("update_alarm", { id: lecture, end: "10:30" })).ok).toBe(true);
-    expect((await call("skip_ring", { id: lecture, date: "2099-11-03" })).ok).toBe(false);
+    // The lecture's start alarm is derived from the event: it rings on the phone, and is changed only through the event
+    const start = /rings at its start: walk \[alarm ([^\]]+)\]/.exec(events)![1];
+    expect((await db.from("alarms").select("label, kind, time, weekdays, event_id").eq("id", start).single()).data).toEqual({ label: "Lecture", kind: "walk", time: "09:00:00", weekdays: ["Tue"], event_id: lecture });
+    expect(body.slice(body.indexOf("Alarms:"), body.indexOf("Events"))).not.toContain("Lecture");
+    expect((await call("update_alarm", { id: start, time: "10:00" })).ok).toBe(false);
+    expect((await call("delete_alarm", { id: start })).ok).toBe(false);
+    expect((await call("update_event", { id: lecture, end: "10:30", time: "08:30" })).ok).toBe(true);
+    expect((await db.from("alarms").select("time").eq("id", start).single()).data).toEqual({ time: "08:30:00" });
+    expect((await call("skip_ring", { id: start, date: "2099-11-03" })).ok).toBe(true);
+    expect((await call("restore_ring", { id: start, date: "2099-11-03" })).ok).toBe(true);
+    expect((await call("update_event", { id: lecture, rings: null })).ok).toBe(true);
+    expect((await db.from("alarms").select("id").eq("event_id", lecture)).data).toEqual([]);
     ({ body } = await call("overview"));
-    expect(body).toMatch(/09:00 on Tue Lecture \[[^\]]+\] \(90 min\)/);
-    for (const id of [lecture, /Aptitude test \[([^\]]+)\]/.exec(body)![1]]) expect((await call("delete_alarm", { id })).ok).toBe(true);
+    expect(body).toMatch(/08:30 on Tue Lecture \[[^\]]+\] \(120 min, doesn't ring\)/);
+    for (const id of [lecture, /Aptitude test \[([^\]]+)\]/.exec(body)![1]]) expect((await call("delete_event", { id })).ok).toBe(true);
   });
 
   await test.step("a routine's ring is skipped or moved on one date only, restored, and the routine edited keeping its ticks", async () => {

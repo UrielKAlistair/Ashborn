@@ -62,7 +62,7 @@ export function PhoneHome({ snapshot, act, screen, away }: { snapshot: Snapshot;
       ) : screen === "character" ? (
         // Centred by auto margins, which give way when the card is taller than the screen (the phone
         // on its side): centring by justify-content would push its top out of scrolling's reach
-        <div className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="panel-scroll to-edge flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
           <div className="my-auto flex w-full justify-center">
             <CharacterPanel model={model} card />
           </div>

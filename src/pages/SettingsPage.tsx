@@ -17,7 +17,7 @@ const CONNECT_SETTLE_MS = 5000;
 export function SettingsPage({ permissions, sync }: { permissions: AlarmPermissions | null; sync: () => Promise<void> }) {
   const theme = useTheme();
   return (
-    <div className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto">
+    <div className="panel-scroll to-edge flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto">
       <Group title="Theme">
         <div role="radiogroup" aria-label="Theme" className="flex gap-1 rounded-xl bg-ink/[0.04] p-1">
           {themes.map((option) => (

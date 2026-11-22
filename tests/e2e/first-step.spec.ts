@@ -18,7 +18,7 @@ const shots = "research/lower-cost/shots";
 test("a quest with a priority and no steps", async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  for (const table of ["graph_nodes", "routines", "deadlines", "alarms"]) await db.from(table).delete().not("id", "is", null);
+  for (const table of ["graph_nodes", "routines", "deadlines", "events", "alarms"]) await db.from(table).delete().not("id", "is", null);
   const idea = crypto.randomUUID();
   const other = crypto.randomUUID();
   const { error: seedError } = await db.from("graph_nodes").insert([

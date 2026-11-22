@@ -21,6 +21,7 @@ import {
   mealDaysBack,
   type Alarm,
   type AlarmKind,
+  type ScheduleEvent,
   type AshbornApi,
   type Deadline,
   type Delta,
@@ -69,7 +70,8 @@ export type NodeRow = {
   y: number | null;
 };
 export type RoutineRow = { id: string; title: string; cue: string; weekdays: Weekday[]; time: string | null; alarm: AlarmKind };
-export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; sound: Alarm["sound"]; minutes: number | null; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean };
+export type AlarmRow = { id: string; label: string; kind: Alarm["kind"]; sound: Alarm["sound"]; at: string | null; time: string | null; weekdays: Weekday[]; enabled: boolean; event_id: string | null };
+export type EventRow = { id: string; title: string; details: string; at: string | null; time: string | null; weekdays: Weekday[]; minutes: number | null; rings: ScheduleEvent["rings"] };
 export type DeadlineRow = { id: string; title: string; due_date: string; done_at: string | null; alarm_time: string | null; node_id: string | null };
 type StockRow = { id: string; name: string; unit: StockUnit; target: number; on_hand: number; read_at: string | null };
 type RecipeRow = {
@@ -97,6 +99,9 @@ type DefaultMealRow = { weekday: Weekday; slot: MealSlot; description: string; d
 export function createApi(db: SupabaseClient, clock: () => Date = () => new Date()): AshbornApi {
   const nodes = () => db.from("nodes_with_xp");
 
+  // An event's start alarm, as a list: none, or the one
+  const eventAlarms = async (eventId: string) => (must(await db.from("alarms").select().eq("event_id", eventId)) as AlarmRow[]).map(toAlarm);
+
   const readNode = async (id: string) => toNode(must(await nodes().select().eq("id", id).single()));
 
   // Reopens the done boxes from `id` out to its quest, for a step opened or put inside them, in one
@@ -107,7 +112,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
   return inRowOrder(db, {
     async getSnapshot() {
       const day = today();
-      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, skipRows, kitchen, settingsRow] = await Promise.all([
+      const [nodeRows, edgeRows, routineRows, checkRows, deadlineRows, alarmRows, skipRows, eventRows, kitchen, settingsRow] = await Promise.all([
         // A second key for rows made at the same moment: without one, an update can move a row among them,
         // or a page boundary skip it
         allPages((from, to) => nodes().select().order("created_at").order("id").range(from, to)),
@@ -119,6 +124,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         db.from("alarms").select().or(`at.is.null,at.gt.${new Date(Date.now() - RING_LOOKBACK_MS).toISOString()}`).order("created_at"),
         // From yesterday, as the one-offs above
         db.from("alarm_skips").select("key, date").eq("skipped", true).gte("date", addDays(day, -1)),
+        db.from("events").select().order("created_at"),
         readKitchen(db, day),
         readSettings(db),
       ]);
@@ -131,6 +137,7 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
         deadlines: must(deadlineRows).map(toDeadline),
         alarms: must(alarmRows).map(toAlarm),
         skippedAlarms: must(skipRows).map((row) => ({ key: row.key, date: row.date })),
+        events: must(eventRows).map(toEvent),
         kitchen,
         settings: settingsRow,
       };
@@ -299,7 +306,8 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       return { removedDeadlineIds: [id] };
     },
 
-    async createAlarm(alarm) {
+    async createAlarm({ id, label, kind, sound, at, time, weekdays, enabled }) {
+      const alarm = { id, label, kind, sound, at, time, weekdays, enabled };
       must(await db.from("alarms").upsert(alarm, { onConflict: "id", ignoreDuplicates: true }));
       return { alarms: [toAlarm(must(await db.from("alarms").select().eq("id", alarm.id).single()))] };
     },
@@ -315,6 +323,30 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
       must(await db.from("alarms").delete().eq("id", id));
 
       return { removedAlarmIds: [id] };
+    },
+
+    // The database makes, moves or removes the event's start alarm (sync_event_alarm); each returns it as left
+    async createEvent({ id, title, details, at, time, weekdays, minutes, rings }) {
+      must(await db.from("events").upsert({ id, title, details, at, time, weekdays, minutes, rings }, { onConflict: "id", ignoreDuplicates: true }));
+      const row = must(await db.from("events").select().eq("id", id).single()) as EventRow;
+      return { events: [toEvent(row)], alarms: await eventAlarms(id) };
+    },
+
+    async updateEvent(id, patch) {
+      const before = await eventAlarms(id);
+      const row = must(await db.from("events").update({ ...patch, changed_at: stamps(patch, clock().toISOString()) }).eq("id", id).select().maybeSingle());
+      if (!row) throw new Error("This event was deleted on another device.");
+      const alarms = await eventAlarms(id);
+      const removedAlarmIds = before.filter((alarm) => !alarms.some((kept) => kept.id === alarm.id)).map((alarm) => alarm.id);
+
+      return { events: [toEvent(row as EventRow)], alarms, removedAlarmIds };
+    },
+
+    async deleteEvent(id) {
+      const removedAlarmIds = (await eventAlarms(id)).map((alarm) => alarm.id);
+      must(await db.from("events").delete().eq("id", id));
+
+      return { removedEventIds: [id], removedAlarmIds };
     },
 
     // Absolute and stamped, like a routine's tick: the later choice wins. Returns what the database kept.
@@ -435,6 +467,9 @@ const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string
   updateAlarm: (id) => [`alarm:${id}`],
   deleteAlarm: (id) => [`alarm:${id}`],
   setAlarmSkip: (key) => [`skip:${key}`],
+  createEvent: (event) => [`event:${event.id}`],
+  updateEvent: (id) => [`event:${id}`],
+  deleteEvent: (id) => [`event:${id}`],
   createStockItem: () => ["kitchen"],
   updateStockItem: () => ["kitchen"],
   deleteStockItem: () => ["kitchen"],
@@ -579,7 +614,11 @@ export function toDeadline(row: DeadlineRow): Deadline {
 }
 
 export function toAlarm(row: AlarmRow): Alarm {
-  return { id: row.id, label: row.label, kind: row.kind, sound: row.sound, minutes: row.minutes ?? null, at: row.at, time: toClock(row.time), weekdays: row.weekdays, enabled: row.enabled };
+  return { id: row.id, label: row.label, kind: row.kind, sound: row.sound, at: row.at, time: toClock(row.time), weekdays: row.weekdays, enabled: row.enabled, eventId: row.event_id };
+}
+
+export function toEvent(row: EventRow): ScheduleEvent {
+  return { id: row.id, title: row.title, details: row.details, at: row.at, time: toClock(row.time), weekdays: row.weekdays, minutes: row.minutes, rings: row.rings };
 }
 
 // Postgres gives times as HH:MM:SS

@@ -15,13 +15,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createApi, readKitchen } from "../src/lib/api";
 import { buildGraphModel, isDone, isFinished, questOf, statKeys, trainedStats, type GraphModel } from "../src/shared/graphModel";
-import { addDays, atTime, clockOf, currentTimeZone, daysBetween, minutesFrom, today, toISODate, week, weekdayOf } from "../src/shared/dates";
+import { addDays, atTime, clockAfter, clockOf, currentTimeZone, daysBetween, minutesFrom, today, toISODate, week, weekdayOf } from "../src/shared/dates";
 import { DEFAULT_REMINDER, fromBase, mealDeductions, sameKind, sameName, shownMeal, toBase } from "../src/shared/kitchen";
 import { nodeLevel } from "../src/shared/progression";
 import { byTime, movedLabel, nextOccurrence } from "../src/shared/schedule";
 import { derivePriorities, needsFirstStep, prioritisedSteps, type Priorities } from "../src/shared/priority";
 import { goneQuiet } from "../src/shared/goneQuiet";
-import { mealDaysAhead, mealDaysBack, mealSlots, stockUnits, type Alarm, type AlarmPatch, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type DeadlinePatch, type RoutinePatch, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
+import { EVENT_DETAILS_MAX, mealDaysAhead, mealDaysBack, mealSlots, stockUnits, type Alarm, type AlarmPatch, type EventPatch, type ScheduleEvent, type AshbornApi, type Delta, type GraphNode, type Kitchen, type Priority, type Recipe, type DeadlinePatch, type RoutinePatch, type Snapshot, type StockItem, type StockUnit } from "../src/shared/types";
 
 // Bounds on what one call may carry, generous for a plan or a week of meals, so a call can't ask for
 // unbounded work: ids and refs, titles and short texts, a recipe's method, and any list
@@ -437,7 +437,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
               time: recurring ? time! : null,
               weekdays: recurring ? (weekdays as typeof week) : [],
               enabled: true,
-              minutes: null,
+              eventId: null,
               sound: "default",
             }),
         ],
@@ -446,39 +446,98 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
     },
   );
 
+  const ringsAtStart = z.enum(["plain", "walk", "situps"]).nullable().optional().describe("An alarm at its start, and how it stops (walk, sit-ups); null or left out for none");
+  const eventDetails = z.string().max(EVENT_DETAILS_MAX).optional().describe("Where, who, notes: free text the user reads on tapping the event");
+
   register(
     "add_event",
     {
       description:
-        "Puts an event on the user's schedule: a time that doesn't ring (a test from 11 to 1, a lecture every Tuesday). It shows on the Alarms screen's day, in time order among the rings, and on the Calendar. Once on `date`, or recurring on `weekdays`. For a ring at the start too, add an alarm as well. Change it with update_alarm, remove it with delete_alarm.",
+        "Puts an event on the user's schedule: a time with an optional end (a test from 2 to 4, a lecture every Tuesday), and details to read on tapping it. It shows on the Alarms screen's day, in time order among the rings, and on the Calendar. Once on `date`, or recurring on `weekdays`. It doesn't ring unless `rings` is given: then an alarm rings at its start (leave it off for a test or an exam, where a ring would be harmful). Change it with update_event, remove it with delete_event.",
       inputSchema: {
         title: z.string().min(1).max(TITLE_MAX),
         start: clock.describe("When it starts"),
         end: clock.optional().describe("When it ends; past midnight if earlier than start"),
         date: date.optional().describe("The day of a one-off event"),
         weekdays: z.array(z.enum(week as [string, ...string[]])).min(1).optional().describe("Repeat on these days"),
+        details: eventDetails,
+        rings: ringsAtStart,
       },
     },
-    async ({ title, start, end, date: day, weekdays }) => {
+    async ({ title, start, end, date: day, weekdays, details, rings }) => {
       if ((day === undefined) === (weekdays === undefined)) return failure("Give either date or weekdays.");
-      const minutes = end ? minutesFrom(start, end) : null;
+      const at = day ? atTime(day, start) : null;
+      if (at && rings && at.getTime() <= Date.now()) return failure(`${day} ${start} has passed, so it can't ring at its start. Nothing was changed.`);
       return run(
         [
           () =>
-            api.createAlarm({
+            api.createEvent({
               id: crypto.randomUUID(),
-              label: title,
-              kind: "none",
-              at: day ? atTime(day, start).toISOString() : null,
+              title,
+              details: details?.trim() ?? "",
+              at: at ? at.toISOString() : null,
               time: day ? null : start,
               weekdays: day ? [] : (weekdays as typeof week),
-              enabled: true,
-              minutes,
-              sound: "default",
+              minutes: end ? minutesFrom(start, end) : null,
+              rings: rings ?? null,
             }),
         ],
-        `Event set: ${title}, ${day ?? (weekdays as string[]).join(" ")} ${start}${end ? `–${end}` : ""}. It doesn't ring.`,
+        `Event set: ${title}, ${day ?? (weekdays as string[]).join(" ")} ${start}${end ? `–${end}` : ""}. ${rings ? `It rings at its start. ${RINGS_ON_PHONE}` : "It doesn't ring."}`,
       );
+    },
+  );
+
+  register(
+    "update_event",
+    {
+      description:
+        "Changes one of the user's events: its title, start (`time`), end, the day of a one-off (`date`), a recurring one's weekdays, its details, or whether an alarm rings at its start (`rings`; null for none). Only the fields given change. A one-off stays a one-off. To skip or move one day's start ring of a recurring event, use skip_ring with the event's alarm id from `overview`.",
+      inputSchema: {
+        id: z.string().max(ID_MAX).describe("An event id, as shown by `overview`"),
+        title: z.string().min(1).max(TITLE_MAX).optional(),
+        time: clock.optional().describe("Its new start"),
+        end: clock.nullable().optional().describe("When it ends; null for a moment"),
+        date: date.optional().describe("A one-off event's new day"),
+        weekdays: z.array(z.enum(week as [string, ...string[]])).min(1).optional().describe("A recurring event's new days"),
+        details: eventDetails,
+        rings: ringsAtStart,
+      },
+    },
+    async ({ id, title, time, end, date: day, weekdays, details, rings }) => {
+      const event = (await api.getSnapshot()).events.find((candidate) => candidate.id === id);
+      if (!event) return failure(`No event ${id}.`);
+      const patch: EventPatch = Object.fromEntries(Object.entries({ title, rings }).filter(([, value]) => value !== undefined));
+      if (details !== undefined) patch.details = details.trim();
+      const start = time ?? event.time ?? clockOf(new Date(event.at!));
+      if (event.at) {
+        if (weekdays) return failure("That is a one-off event: to make it recurring, delete it and add_event with weekdays.");
+        if (day !== undefined || time !== undefined) patch.at = atTime(day ?? toISODate(new Date(event.at)), start).toISOString();
+        const at = new Date(patch.at ?? event.at);
+        const ringsAfter = rings !== undefined ? rings : event.rings;
+        if (ringsAfter && (patch.at || rings) && at.getTime() <= Date.now()) return failure(`${toISODate(at)} ${clockOf(at)} has passed, so it can't ring at its start. Nothing was changed.`);
+      } else {
+        if (day !== undefined) return failure("That event recurs, so it has no date: give weekdays.");
+        if (time !== undefined) patch.time = time;
+        if (weekdays) patch.weekdays = weekdays as typeof week;
+      }
+      // The end is kept as a length, so a new start with no end given keeps the end where it was
+      if (end !== undefined) patch.minutes = end ? minutesFrom(start, end) : null;
+      else if (time !== undefined && event.minutes) {
+        const was = event.time ?? clockOf(new Date(event.at!));
+        patch.minutes = minutesFrom(start, clockAfter(was, event.minutes));
+      }
+      if (Object.keys(patch).length === 0) return failure("Nothing to change was given.");
+      const ringing = rings !== undefined ? rings : event.rings;
+      return run([() => api.updateEvent(id, patch)], `Updated event${ringing ? `; it rings at its start. ${RINGS_ON_PHONE}` : "; it doesn't ring."}`);
+    },
+  );
+
+  register(
+    "delete_event",
+    { description: "Deletes one of the user's events, with the alarm at its start if it has one.", inputSchema: { id: z.string().max(ID_MAX).describe("An event id, as shown by `overview`") } },
+    async ({ id }) => {
+      if (!(await db.from("events").select("id").eq("id", id).maybeSingle()).data) return failure(`No event ${id}.`);
+      return run([() => api.deleteEvent(id)], "Deleted event");
     },
   );
 
@@ -486,32 +545,29 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
     "update_alarm",
     {
       description:
-        "Changes one of the user's own alarms or events (an event is an alarm of kind 'none', which doesn't ring): its label, its time, when what it marks ends (`end`), the day a one-off rings (`date`), a recurring one's weekdays, how it stops (kind 'none' makes it an event), or whether it is on. Only the fields given change. A one-off moved to a new date or time stays a one-off. To move a single day's ring of a recurring alarm or routine, use skip_ring with instead_at.",
+        "Changes one of the user's own alarms: its label, its time, the day a one-off rings (`date`), a recurring one's weekdays, how it stops, or whether it is on. Only the fields given change. An event's start alarm is changed through its event (update_event). A one-off moved to a new date or time stays a one-off. To move a single day's ring of a recurring alarm or routine, use skip_ring with instead_at.",
       inputSchema: {
         id: z.string().max(ID_MAX).describe("An alarm id, as shown by `overview`"),
         label: z.string().max(TITLE_MAX).optional(),
         time: clock.optional(),
         date: date.optional().describe("A one-off alarm's new day"),
         weekdays: z.array(z.enum(week as [string, ...string[]])).min(1).optional().describe("A recurring alarm's new days"),
-        kind: z.enum(["none", "plain", "walk", "situps"]).optional(),
-        end: clock.nullable().optional().describe("When what it marks ends; null for a moment"),
+        kind: z.enum(["plain", "walk", "situps"]).optional(),
         enabled: z.boolean().optional(),
       },
     },
-    async ({ id, label, time, date: day, weekdays, kind, end, enabled }) => {
+    async ({ id, label, time, date: day, weekdays, kind, enabled }) => {
       const snapshot = await api.getSnapshot();
       const alarm = snapshot.alarms.find((candidate) => candidate.id === id);
-      if (!alarm) return failure(`No alarm ${id}. Routines and deadlines have their own update tools.`);
+      if (!alarm) return failure(`No alarm ${id}. Routines, deadlines and events have their own update tools.`);
+      if (alarm.eventId) return failure(`That alarm rings at the start of event ${alarm.eventId}: change it with update_event, or skip one day's ring with skip_ring.`);
       const patch: AlarmPatch = Object.fromEntries(Object.entries({ label, kind, enabled }).filter(([, value]) => value !== undefined));
-      if (end !== undefined) patch.minutes = end ? minutesFrom(time ?? alarm.time ?? clockOf(new Date(alarm.at!)), end) : null;
-      // A one-off event has no off (the app shows no switch for one), so an alarm switched off and made one comes back on
-      if (alarm.at && enabled === undefined && (kind ?? alarm.kind) === "none" && !alarm.enabled) patch.enabled = true;
       if (alarm.at) {
         if (weekdays) return failure("That is a one-off alarm: to make it recurring, delete it and add_alarm with weekdays.");
         if (day !== undefined || time !== undefined) {
           const was = new Date(alarm.at);
           const at = atTime(day ?? toISODate(was), time ?? clockOf(was));
-          if (at.getTime() <= Date.now() && (kind ?? alarm.kind) !== "none") return failure(`${toISODate(at)} ${clockOf(at)} has passed. Nothing was changed.`);
+          if (at.getTime() <= Date.now()) return failure(`${toISODate(at)} ${clockOf(at)} has passed. Nothing was changed.`);
           patch.at = at.toISOString();
         }
       } else {
@@ -537,7 +593,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
       const id = crypto.randomUUID();
       const at = new Date();
       return run(
-        [() => api.createAlarm({ id, label: message, kind: "plain", at: at.toISOString(), time: null, weekdays: [], enabled: true, sound: "call", minutes: null })],
+        [() => api.createAlarm({ id, label: message, kind: "plain", at: at.toISOString(), time: null, weekdays: [], enabled: true, sound: "call", eventId: null })],
         `Calling now [${id}]. The phone rings as the push reaches it, within seconds even asleep; if the phone is offline the call is dropped after 2 minutes`,
       );
     },
@@ -612,7 +668,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
       if (moved && moved.getTime() <= Date.now()) return failure(`${day} ${instead_at} has passed.`);
       const alarmId = crypto.randomUUID();
       const changes = [() => api.setAlarmSkip(ring.key, day, true)];
-      if (moved) changes.push(() => api.createAlarm({ id: alarmId, label: movedLabel(ring.title, ring.time), kind: ring.kind, at: moved.toISOString(), time: null, weekdays: [], enabled: true, sound: "default", minutes: null }));
+      if (moved) changes.push(() => api.createAlarm({ id: alarmId, label: movedLabel(ring.title, ring.time), kind: ring.kind, at: moved.toISOString(), time: null, weekdays: [], enabled: true, sound: "default", eventId: null }));
       const when = (at: Date) => at.toLocaleString(undefined, { timeZone: currentTimeZone() });
       return run(
         changes,
@@ -651,7 +707,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
     const ring: Ring = routine
       ? { key: `routine:${ringId}@${day}`, title: routine.title, kind: routine.alarm === "none" ? null : routine.alarm, time: routine.time ?? "", weekdays: routine.weekdays }
       : { key: `alarm:${ringId}@${day}`, title: alarm!.label || "Alarm", kind: alarm!.kind, time: alarm!.time!, weekdays: alarm!.weekdays };
-    if (!ring.kind || ring.kind === "none" || !ring.time) return { problem: `${ring.title} has no alarm${ring.kind === "none" ? ": it is an event, which doesn't ring (move it with update_alarm)" : ""}.` };
+    if (!ring.kind || !ring.time) return { problem: `${ring.title} has no alarm.` };
     if (!ring.weekdays.includes(weekdayOf(day))) return { problem: `${ring.title} does not ring on ${day}, a ${weekdayOf(day)}; it rings on ${ring.weekdays.join(" ")}.` };
     return { ring: ring as Ring & { kind: Alarm["kind"] }, snapshot };
   };
@@ -660,7 +716,9 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
     "delete_alarm",
     { description: "Deletes one of the user's alarms (not a routine's or a deadline's).", inputSchema: { id: z.string().describe("An alarm id, as shown by `overview`") } },
     async ({ id }) => {
-      if (!(await db.from("alarms").select("id").eq("id", id).maybeSingle()).data) return failure(`No alarm ${id}.`);
+      const alarm = (await db.from("alarms").select("id, event_id").eq("id", id).maybeSingle()).data;
+      if (!alarm) return failure(`No alarm ${id}.`);
+      if (alarm.event_id) return failure(`That alarm rings at the start of event ${alarm.event_id}: stop it with update_event and rings null, or delete the event.`);
       return run([() => api.deleteAlarm(id)], "Deleted alarm");
     },
   );
@@ -990,11 +1048,20 @@ async function run(changes: Array<() => Promise<Delta>>, done: string, labels: s
 }
 
 // One date's ring of a routine or a recurring alarm (skip_ring). `at` places a clock time on its date;
-// An alarm or event in the overview: on or off, when, its label and id, then how long or how it stops
+// An alarm in the overview: on or off, when, its label and id, then how it stops
 function describeAlarm(alarm: Alarm) {
   const when = alarm.at ? `once at ${new Date(alarm.at).toLocaleString(undefined, { timeZone: currentTimeZone() })}` : `${alarm.time} on ${alarm.weekdays.join(" ")}`;
-  const extra = [alarm.minutes ? `${alarm.minutes} min` : "", alarm.kind !== "plain" && alarm.kind !== "none" ? alarm.kind : ""].filter(Boolean).join(", ");
-  return `- [${alarm.enabled ? "on" : "off"}] ${when} ${alarm.label || (alarm.kind === "none" ? "Event" : "Alarm")} [${alarm.id}]${extra ? ` (${extra})` : ""}`;
+  return `- [${alarm.enabled ? "on" : "off"}] ${when} ${alarm.label || "Alarm"} [${alarm.id}]${alarm.kind !== "plain" ? ` (${alarm.kind})` : ""}`;
+}
+
+// An event in the overview: when, how long, its title and id, whether it rings at its start (with that
+// alarm's id, which skip_ring takes), then its details indented
+function describeEvent(event: ScheduleEvent, alarms: Alarm[]) {
+  const when = event.at ? `once at ${new Date(event.at).toLocaleString(undefined, { timeZone: currentTimeZone() })}` : `${event.time} on ${event.weekdays.join(" ")}`;
+  const alarm = alarms.find((candidate) => candidate.eventId === event.id);
+  const extra = [event.minutes ? `${event.minutes} min` : "", event.rings ? `rings at its start: ${event.rings}${alarm ? ` [alarm ${alarm.id}]` : ""}` : "doesn't ring"].filter(Boolean).join(", ");
+  const details = event.details ? `\n${event.details.replace(/^/gm, "    ")}` : "";
+  return `- ${when} ${event.title || "Event"} [${event.id}] (${extra})${details}`;
 }
 
 type Ring = { key: string; title: string; kind: Alarm["kind"] | null; time: string; weekdays: string[] };
@@ -1064,8 +1131,7 @@ function describe(snapshot: Snapshot, questId?: string) {
       return source ? `${"title" in source ? source.title : source.label || "Alarm"} [${ringId}]` : key;
     };
     const skips = snapshot.skippedAlarms.filter((skip) => skip.date >= today()).sort((a, b) => a.date.localeCompare(b.date));
-    const rings = snapshot.alarms.filter((alarm) => alarm.kind !== "none");
-    const events = snapshot.alarms.filter((alarm) => alarm.kind === "none");
+    const rings = snapshot.alarms.filter((alarm) => !alarm.eventId);
     lines.push(
       "Routines (today's tick shown for those due today):",
       ...(snapshot.routines.length
@@ -1081,8 +1147,8 @@ function describe(snapshot: Snapshot, questId?: string) {
       "Alarms:",
       ...(rings.length ? rings.map(describeAlarm) : ["- none"]),
       "",
-      "Events (times on the schedule that don't ring; change with update_alarm):",
-      ...(events.length ? events.map(describeAlarm) : ["- none"]),
+      "Events (change with update_event):",
+      ...(snapshot.events.length ? snapshot.events.map((event) => describeEvent(event, snapshot.alarms)) : ["- none"]),
       "",
       "Open deadlines:",
       ...(snapshot.deadlines.length ? snapshot.deadlines.map(describeDeadline) : ["- none"]),

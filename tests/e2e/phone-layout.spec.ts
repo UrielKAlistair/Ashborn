@@ -23,7 +23,7 @@ const desktop = { [ids.placed]: { x: 900, y: 700 }, [ids.second]: { x: 400, y: 3
 test.beforeAll(async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  for (const table of ["graph_nodes", "routines", "deadlines", "alarms"]) {
+  for (const table of ["graph_nodes", "routines", "deadlines", "events", "alarms"]) {
     const { error: wipeError } = await db.from(table).delete().not("id", "is", null);
     if (wipeError) throw wipeError;
   }

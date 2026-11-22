@@ -23,7 +23,7 @@ const pageErrors: string[] = [];
 test.beforeAll(async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  for (const table of ["graph_nodes", "routines", "deadlines", "alarms", "meals", "default_meals", "recipes", "stock_items"]) {
+  for (const table of ["graph_nodes", "routines", "deadlines", "events", "alarms", "meals", "default_meals", "recipes", "stock_items"]) {
     const { error: wipeError } = await db.from(table).delete().not("id", "is", null);
     if (wipeError) throw wipeError;
   }

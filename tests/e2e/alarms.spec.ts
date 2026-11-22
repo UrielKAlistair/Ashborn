@@ -17,7 +17,7 @@ const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABAS
 test("alarms", async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  for (const table of ["alarms", "alarm_skips", "routines", "deadlines"]) {
+  for (const table of ["events", "alarms", "alarm_skips", "routines", "deadlines"]) {
     const { error: wipeError } = await db.from(table).delete().not("user_id", "is", null);
     if (wipeError) throw wipeError;
   }
@@ -184,7 +184,7 @@ test("alarms", async () => {
     await expect(ring("Tea")).toBeVisible();
   });
 
-  await test.step("an event from + is on the day's schedule, lit while on, and never rings", async () => {
+  await test.step("an event from + is on the day's schedule, lit while on with now drawn across it, never rings, and opens on its details", async () => {
     const from = new Date(Date.now() - 30 * 60_000);
     const to = new Date(Date.now() + 60 * 60_000);
     if (toISODate(from) !== toISODate(to)) {
@@ -197,12 +197,23 @@ test("alarms", async () => {
     await pop.getByLabel("Starts", { exact: true }).fill(clock(from));
     await pop.getByLabel("Ends (optional)", { exact: true }).fill(clock(to));
     await pop.getByPlaceholder("What is on").fill("Aptitude test");
-    await pop.getByRole("button", { name: "Set" }).click();
-    await expect.poll(async () => (await db.from("alarms").select("kind, minutes").eq("label", "Aptitude test").maybeSingle()).data).toEqual({ kind: "none", minutes: 90 });
+    await pop.getByLabel("Details").fill("Hall B, for Acme");
+    await pop.getByRole("button", { name: "Add" }).click();
+    await expect.poll(async () => (await db.from("events").select("minutes, rings, details").eq("title", "Aptitude test").maybeSingle()).data).toEqual({ minutes: 90, rings: null, details: "Hall B, for Acme" });
+    expect((await db.from("alarms").select("id").eq("label", "Aptitude test")).data).toEqual([]);
     const row = ring("Aptitude test");
     await expect(row.getByText("on now", { exact: true })).toBeVisible();
     await expect(row.getByText(`Event · ${showTime(clock(from))} – ${showTime(clock(to))} · 1h 30m`, { exact: true })).toBeVisible();
     await expect(row.getByRole("switch")).toHaveCount(0);
+    // A third of the way through, the line for now crosses the event's row a third of the way down
+    const line = await page.getByRole("separator", { name: "Now" }).boundingBox();
+    const box = await row.boundingBox();
+    expect(Math.abs(line!.y + line!.height / 2 - (box!.y + box!.height / 3))).toBeLessThan(4);
+    await row.getByRole("button", { name: /Aptitude test/ }).first().click();
+    const shown = page.getByRole("dialog", { name: "Event" });
+    await expect(shown.getByText("Hall B, for Acme")).toBeVisible();
+    await expect(shown.getByText("Doesn't ring")).toBeVisible();
+    await shown.getByRole("button", { name: "Close" }).click();
   });
 
   await app.close();

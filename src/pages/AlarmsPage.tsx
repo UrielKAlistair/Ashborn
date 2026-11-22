@@ -4,10 +4,10 @@ import { Switch } from "../components/Switch";
 import { TimeField } from "../components/TimeField";
 import { alarmsAvailable } from "../lib/alarms";
 import { useToday } from "../lib/useToday";
-import { addDays, clockAfter, minutesFrom, week } from "../shared/dates";
+import { addDays, week } from "../shared/dates";
 import { buildGraphModel } from "../shared/graphModel";
 import { nextOccurrence, type AlarmInstance } from "../shared/schedule";
-import type { Alarm, ISODate, Snapshot, Weekday } from "../shared/types";
+import type { Alarm, ISODate, ScheduleEvent, Snapshot, Weekday } from "../shared/types";
 import type { Act } from "./home/HomePage";
 import { field, kindLabels } from "./alarmParts";
 import { EventDialog, type Editing } from "./calendar/EventDialog";
@@ -16,13 +16,13 @@ import { DayRings, MoveRing, Row, RowList } from "./DayRings";
 /**
  * The Alarms screen, in two views. The day: today's or tomorrow's schedule, rings, events and
  * deadlines (DayRings, the same view as a day of the Calendar), each ring with a switch that skips it
- * alone; a tap changes that one alone: a one-time alarm or event or a deadline opens in the Calendar's
- * form (calendar/EventDialog.tsx), a ring of a repeating alarm or a routine can be moved to another
- * time that day (MoveRing), a repeating event opens for every day.
- * Repeating: the user's repeating alarms, each with a switch that turns it off on every day; a tap
- * edits it for every day.
+ * alone; a tap changes that one alone: a one-time alarm, an event or a deadline opens in the Calendar's
+ * pop-up (calendar/EventDialog.tsx), a ring of a repeating alarm or a routine can be moved to another
+ * time that day (MoveRing). A repeating event opens for every day.
+ * Repeating: the user's repeating alarms, each with a switch that turns it off on every day, and their
+ * repeating events; a tap edits one for every day.
  * The round + adds to the day shown, in the Calendar's pop-up: an event, an alarm (one-tap ones for
- * soon among them) or a deadline; on the repeating view it adds a repeating alarm or event.
+ * soon among them) or a deadline; on the repeating view it adds a repeating alarm.
  */
 
 export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
@@ -43,8 +43,8 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
   // The ring of a repeating alarm or a routine being moved, that day only
   const [moving, setMoving] = useState<AlarmInstance | null>(null);
 
-  const save = (alarm: Omit<Alarm, "id" | "enabled">) => {
-    if (editing === "new") void act("createAlarm", { ...alarm, id: crypto.randomUUID(), enabled: true });
+  const save = (alarm: Omit<Alarm, "id" | "enabled" | "eventId">) => {
+    if (editing === "new") void act("createAlarm", { ...alarm, id: crypto.randomUUID(), enabled: true, eventId: null });
     else if (editing) {
       // Only what was changed since the form opened: each field sent is stamped as changed now, so one sent
       // as it was would win over a change made to it meanwhile on another device
@@ -60,12 +60,12 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
   };
 
   const toggle = "shrink-0 whitespace-nowrap rounded-lg border border-ink/12 px-3 py-1.5 font-['Silkscreen'] text-[11px] uppercase text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11";
-  // The panel scrolls inside itself on the desktop. On the phone the screen scrolls instead, and the
-  // panel is as tall as its rows (at least the screen): a column that neither shrinks it nor stretches it.
+  // The whole screen width scrolls, so the scrollbar is at the window's edge; the column of rows is
+  // centred in it on the desktop, and is as tall as its rows (at least the screen)
   return (
-    <div className="relative mx-auto flex min-h-0 w-full min-w-0 max-w-xl flex-1 phone:max-w-none">
-      <div className="panel-scroll flex min-h-0 min-w-0 flex-1 phone:flex-col phone:overflow-y-auto">
-        <section className="panel-scroll flex min-h-0 w-full flex-col gap-5 overflow-y-auto px-1 pt-2 pb-24 phone:shrink-0 phone:grow phone:overflow-visible phone:px-0">
+    <div className="relative flex min-h-0 w-full min-w-0 flex-1">
+      <div className="panel-scroll to-edge flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <section className="mx-auto flex w-full max-w-xl shrink-0 grow flex-col gap-5 px-1 pt-2 pb-24 phone:max-w-none phone:px-0">
           <div className="flex items-center justify-between gap-3">
             {view === "day" ? (
               <div className="flex items-center gap-1">
@@ -99,11 +99,12 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
               date={date}
               act={act}
               onOpenAlarm={(alarm) => (alarm.time ? edit(alarm) : setOpening({ kind: "alarm", id: alarm.id }))}
+              onOpenEvent={(event) => setOpening({ kind: "event", id: event.id })}
               onOpenDeadline={(deadline) => setOpening({ kind: "deadline", id: deadline.id })}
               onMove={setMoving}
             />
           ) : (
-            <AllAlarms alarms={snapshot.alarms} act={act} onEdit={edit} />
+            <AllAlarms alarms={snapshot.alarms} events={snapshot.events} act={act} onEdit={edit} onOpenEvent={(event) => setOpening({ kind: "event", id: event.id })} />
           )}
         </section>
       </div>
@@ -112,7 +113,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
         type="button"
         onClick={() => (view === "day" ? setOpening({ kind: "new", date }) : setEditingId("new"))}
         aria-label={view === "day" ? "New on this day" : "New repeating alarm"}
-        className="absolute right-4 bottom-4 flex h-14 w-14 items-center justify-center rounded-full bg-ember text-3xl leading-none text-canvas shadow-[var(--card-shadow)] hover:brightness-110"
+        className="absolute right-[max(1rem,calc(50%-18rem+1rem))] bottom-4 flex h-14 w-14 phone:right-4 items-center justify-center rounded-full bg-ember text-3xl leading-none text-canvas shadow-[var(--card-shadow)] hover:brightness-110"
       >
         +
       </button>
@@ -126,7 +127,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
       {opening ? <EventDialog editing={opening} snapshot={snapshot} model={model} today={today} act={act} onClose={() => setOpening(null)} /> : null}
 
       {editing ? (
-        <Popup label={editing === "new" ? "New repeating alarm" : editing.kind === "none" ? "Edit event" : "Edit alarm"} onClose={() => setEditingId(null)}>
+        <Popup label={editing === "new" ? "New repeating alarm" : "Edit alarm"} onClose={() => setEditingId(null)}>
           <AlarmForm alarm={editing === "new" ? null : editing} onSave={save} />
           {editing === "new" ? null : (
             <button
@@ -137,7 +138,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
               }}
               className="text-[12.5px] text-muted hover:text-red-300 phone:min-h-11"
             >
-              Delete this {editing.kind === "none" ? "event" : "alarm"}
+              Delete this alarm
             </button>
           )}
         </Popup>
@@ -146,15 +147,40 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
   );
 }
 
-// The user's repeating alarms, by time of day: the switch turns a whole alarm off, every day it repeats on
-function AllAlarms({ alarms: all, act, onEdit }: { alarms: Alarm[]; act: Act; onEdit: (alarm: Alarm) => void }) {
-  const alarms = all.filter((alarm) => alarm.time);
-  if (alarms.length === 0) return <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">None set. One-time alarms are on the Calendar; routines, deadlines and meals ring from their own settings.</p>;
+// The user's repeating alarms and events, by time of day: an alarm's switch turns it off, every day it
+// repeats on. An event's start alarm is its event's, so it shows as that event.
+function AllAlarms({ alarms: all, events: allEvents, act, onEdit, onOpenEvent }: { alarms: Alarm[]; events: ScheduleEvent[]; act: Act; onEdit: (alarm: Alarm) => void; onOpenEvent: (event: ScheduleEvent) => void }) {
+  const alarms = all.filter((alarm) => alarm.time && !alarm.eventId);
+  const events = allEvents.filter((event) => event.time);
+  if (alarms.length === 0 && events.length === 0) return <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">None set. One-time alarms are on the Calendar; routines, deadlines and meals ring from their own settings.</p>;
+  const rows = [...alarms.map((alarm) => ({ time: alarm.time!, alarm })), ...events.map((event) => ({ time: event.time!, event }))].sort((a, b) => a.time.localeCompare(b.time));
   return (
     <RowList>
-      {[...alarms].sort((a, b) => a.time!.localeCompare(b.time!)).map((alarm) => {
+      {rows.map((row) => {
+        if ("event" in row) {
+          const { event } = row;
+          return (
+            <Row
+              key={event.id}
+              time={event.time!}
+              tone="event"
+              title={event.title || "Event"}
+              detail={
+                <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                  <WeekStrip weekdays={event.weekdays} />
+                  <span>{event.rings ? "rings at its start" : "event"}</span>
+                </span>
+              }
+              dim={false}
+              onOpen={() => onOpenEvent(event)}
+            >
+              {null}
+            </Row>
+          );
+        }
+        const { alarm } = row;
         const stops = alarm.kind === "plain" ? "" : kindLabels[alarm.kind].toLowerCase();
-        const name = alarm.label || (alarm.kind === "none" ? "Event" : "Alarm");
+        const name = alarm.label || "Alarm";
         return (
           <Row
             key={alarm.id}
@@ -188,26 +214,21 @@ function DayArrow({ label, disabled, onClick, children }: { label: string; disab
 
 // A time, days (none: once, at the next such time), a label and how it stops; filled from `alarm`
 // when editing a repeating one
-function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omit<Alarm, "id" | "enabled">) => unknown }) {
+function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omit<Alarm, "id" | "enabled" | "eventId">) => unknown }) {
   const [time, setTime] = useState(alarm?.time ?? "07:00");
   const [days, setDays] = useState<Weekday[]>(alarm?.weekdays ?? []);
   const [label, setLabel] = useState(alarm?.label ?? "");
   const [kind, setKind] = useState<Alarm["kind"]>(alarm?.kind ?? "plain");
-  const [end, setEnd] = useState(alarm?.time && alarm.minutes ? clockAfter(alarm.time, alarm.minutes) : "");
 
   const submit = () => {
     if (!time) return;
     const at = days.length === 0 ? nextOccurrence(time).toISOString() : null;
-    onSave({ label: label.trim(), kind, sound: alarm?.sound ?? "default", at, time: at ? null : time, weekdays: days, minutes: end ? minutesFrom(time, end) : null });
+    onSave({ label: label.trim(), kind, sound: alarm?.sound ?? "default", at, time: at ? null : time, weekdays: days });
   };
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <TimeField label={kind === "none" ? "Starts" : "Time"} value={time} onChange={setTime} className={`${field} min-w-0 flex-1 text-base`} />
-        <span className="text-[12px] text-muted">to</span>
-        <TimeField label="Ends (optional)" optional value={end} onChange={setEnd} className={`${field} min-w-0 flex-1 text-base`} />
-      </div>
+      <TimeField label="Time" value={time} onChange={setTime} className={`${field} w-40 text-base`} />
       <textarea value={label} onChange={(event) => setLabel(event.target.value)} rows={4} placeholder="Label (optional)" aria-label="Label" className={`${field} block w-full resize-y leading-5`} />
       <div className="flex gap-1">
         {week.map((weekday) => (

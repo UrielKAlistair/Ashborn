@@ -42,6 +42,7 @@ const snapshot: Snapshot = {
   routineChecks: [],
   deadlines: [],
   alarms: [],
+  events: [],
   skippedAlarms: [],
   kitchen: emptyKitchen,
   settings: { timeZone: null },

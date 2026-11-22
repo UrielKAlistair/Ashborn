@@ -1,34 +1,40 @@
 /**
- * What the calendar shows, by day: the one-time alarms, the events (an alarm that doesn't ring), one-time
- * and repeating, and the open deadlines. Repeating rings, routines and meal reminders stay off it: they
- * would fill every day, and a day's own view (DayRings) lists them.
- * A one-time alarm falls on the calendar date of its moment; a deadline on its due date, which is a
- * day as the app counts days. Done deadlines are never in the snapshot, so every deadline here is open.
+ * What the calendar shows, by day: the one-time alarms, the events, one-time and repeating, and the
+ * open deadlines. Repeating rings, routines and meal reminders stay off it: they would fill every day,
+ * and a day's own view (DayRings) lists them. An event's start alarm shows as its event.
+ * A one-time alarm or event falls on the calendar date of its start; a deadline on its due date, which
+ * is a day as the app counts days. Done deadlines are never in the snapshot, so every deadline here is open.
  */
 import { addDays, atTime, clockOf, toISODate, week, weekdayOf } from "../../shared/dates";
-import type { Alarm, ClockTime, Deadline, ISODate, Snapshot } from "../../shared/types";
+import type { Alarm, ClockTime, Deadline, ISODate, ScheduleEvent, Snapshot } from "../../shared/types";
 
 export type CalendarEvent =
   | { kind: "alarm"; id: string; date: ISODate; time: ClockTime; at: Date; title: string; alarm: Alarm }
+  | { kind: "event"; id: string; date: ISODate; time: ClockTime; at: Date; title: string; event: ScheduleEvent }
   | { kind: "deadline"; id: string; date: ISODate; time: ClockTime | null; title: string; deadline: Deadline };
 
 // The dated events by day, and the repeating events, which fall on every matching weekday
-export type CalendarDays = { byDay: Map<ISODate, CalendarEvent[]>; repeating: Alarm[] };
+export type CalendarDays = { byDay: Map<ISODate, CalendarEvent[]>; repeating: ScheduleEvent[] };
 
 // Each day's dated events: deadlines first (they hold the whole day), then by time
 export function calendarEvents(snapshot: Snapshot): CalendarDays {
   const events: CalendarEvent[] = [];
   for (const alarm of snapshot.alarms) {
-    if (!alarm.at) continue;
+    if (!alarm.at || alarm.eventId) continue;
     const at = new Date(alarm.at);
-    events.push({ kind: "alarm", id: alarm.id, date: toISODate(at), time: clockOf(at), at, title: alarm.label || (alarm.kind === "none" ? "Event" : "Alarm"), alarm });
+    events.push({ kind: "alarm", id: alarm.id, date: toISODate(at), time: clockOf(at), at, title: alarm.label || "Alarm", alarm });
+  }
+  for (const event of snapshot.events) {
+    if (!event.at) continue;
+    const at = new Date(event.at);
+    events.push({ kind: "event", id: event.id, date: toISODate(at), time: clockOf(at), at, title: event.title || "Event", event });
   }
   for (const deadline of snapshot.deadlines) {
     events.push({ kind: "deadline", id: deadline.id, date: deadline.dueDate, time: deadline.alarmTime, title: deadline.title, deadline });
   }
   const byDay = new Map<ISODate, CalendarEvent[]>();
   for (const event of events.sort(byWithinDay)) byDay.set(event.date, [...(byDay.get(event.date) ?? []), event]);
-  const repeating = snapshot.alarms.filter((alarm) => alarm.kind === "none" && alarm.enabled && alarm.time);
+  const repeating = snapshot.events.filter((event) => event.time);
   return { byDay, repeating };
 }
 
@@ -37,8 +43,8 @@ export function dayEvents({ byDay, repeating }: CalendarDays, date: ISODate): Ca
   const own = byDay.get(date) ?? [];
   const weekday = weekdayOf(date);
   const repeats = repeating
-    .filter((alarm) => alarm.weekdays.includes(weekday))
-    .map((alarm): CalendarEvent => ({ kind: "alarm", id: alarm.id, date, time: alarm.time!, at: atTime(date, alarm.time!), title: alarm.label || "Event", alarm }));
+    .filter((event) => event.weekdays.includes(weekday))
+    .map((event): CalendarEvent => ({ kind: "event", id: event.id, date, time: event.time!, at: atTime(date, event.time!), title: event.title || "Event", event }));
   return repeats.length === 0 ? own : [...own, ...repeats].sort(byWithinDay);
 }
 

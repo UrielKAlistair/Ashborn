@@ -11,7 +11,7 @@ import type { RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/s
 import { addDays, today } from "../shared/dates";
 import { PROGRESS_UNIT } from "../shared/progression";
 import type { Delta, Snapshot } from "../shared/types";
-import { readKitchen, readSettings, toAlarm, toDeadline, toEdge, toNode, toRoutine, type AlarmRow, type DeadlineRow, type NodeRow, type RoutineRow } from "./api";
+import { readKitchen, readSettings, toAlarm, toDeadline, toEdge, toEvent, toNode, toRoutine, type AlarmRow, type DeadlineRow, type EventRow, type NodeRow, type RoutineRow } from "./api";
 import { isConnectionError } from "./offline";
 
 type Row = Record<string, unknown>;
@@ -147,6 +147,19 @@ export function watchChanges(db: SupabaseClient, current: () => Snapshot | null,
           row,
           () => db.from("alarms").select().eq("id", row.id).maybeSingle(),
           (fresh) => ({ alarms: [toAlarm(fresh)] }),
+        ),
+      );
+    }),
+    on("events", (change) => {
+      if (change.eventType === "DELETE") return deleted(`event:${change.old.id}`, { removedEventIds: [change.old.id as string] });
+      const row = change.new as EventRow;
+      emit(
+        checked(
+          `event:${row.id}`,
+          (snapshot) => snapshot.events.some((event) => event.id === row.id),
+          row,
+          () => db.from("events").select().eq("id", row.id).maybeSingle(),
+          (fresh) => ({ events: [toEvent(fresh)] }),
         ),
       );
     }),

@@ -17,7 +17,7 @@ const daysAgo = (days: number) => new Date(Date.now() - days * 864e5).toISOStrin
 test("gone quiet", async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  for (const table of ["graph_nodes", "routines", "deadlines", "alarms"]) await db.from(table).delete().not("id", "is", null);
+  for (const table of ["graph_nodes", "routines", "deadlines", "events", "alarms"]) await db.from(table).delete().not("id", "is", null);
   const ids = { urgent: uuid(), notYet: uuid(), moved: uuid(), levelled: uuid(), given: uuid(), extended: uuid(), shelved: uuid(), fresh: uuid() };
   const old = (id: string, title: string, days: number, priority: number | null = null) => ({ id, title, parent_id: null, created_at: daysAgo(days), priority });
   const { error: questError } = await db.from("graph_nodes").insert([

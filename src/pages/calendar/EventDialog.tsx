@@ -2,48 +2,59 @@ import { useEffect, useState } from "react";
 import { Popup } from "../../components/Popup";
 import { Switch } from "../../components/Switch";
 import { TimeField } from "../../components/TimeField";
-import { atTime, clockAfter, clockOf, daysBetween, minutesFrom, toISODate } from "../../shared/dates";
+import { atTime, clockAfter, clockOf, daysBetween, minutesFrom, showTime, toISODate, week } from "../../shared/dates";
 import type { GraphModel } from "../../shared/graphModel";
-import type { Alarm, Deadline, ISODate, Snapshot } from "../../shared/types";
+import { EVENT_DETAILS_MAX, type Alarm, type Deadline, type ISODate, type ScheduleEvent, type Snapshot, type Weekday } from "../../shared/types";
 import { field, kindLabels } from "../alarmParts";
+import { lasts, weekdaysText } from "../DayRings";
 import type { Act } from "../home/HomePage";
 import { NodePicker } from "../home/nodePickers";
 import { dayLabel } from "./calendarViews";
 
 /**
  * The Calendar's one pop-up. New: on a day, an event, an alarm or a deadline, chosen by three tabs.
- * An event and an alarm are one thing, a time on the day with an optional end, which rings or not;
- * the tab picks the default. Either: its day, times, label and how it rings, switch it off, or delete it. A deadline: its title,
- * day, alarm on the day and quest; tick it done, or delete it.
+ * An event (EventFields) is a time on the schedule, once or repeating, with an optional end, details,
+ * and an alarm at its start or none. An alarm (AlarmFields) is a one-time ring. A deadline: its title,
+ * day, alarm on the day and quest. An event opens on what it is (EventSummary: when, how long,
+ * whether it rings, its details), with Edit for its form; an alarm or a deadline opens on its form.
  * What is open is held by id and read from the latest data, so one deleted elsewhere closes it.
  */
 
 // One-tap alarms on today, in minutes from now
 const QUICK_MINUTES = [10, 30, 60, 120];
 
-export type Editing = { kind: "new"; date: ISODate } | { kind: "alarm"; id: string } | { kind: "deadline"; id: string };
+export type Editing = { kind: "new"; date: ISODate } | { kind: "alarm"; id: string } | { kind: "event"; id: string } | { kind: "deadline"; id: string };
 
 type DialogProps = { editing: Editing; snapshot: Snapshot; model: GraphModel; today: ISODate; act: Act; onClose: () => void };
 
 export function EventDialog({ editing, snapshot, model, today, act, onClose }: DialogProps) {
   const alarm = editing.kind === "alarm" ? snapshot.alarms.find((candidate) => candidate.id === editing.id) : undefined;
+  const event = editing.kind === "event" ? snapshot.events.find((candidate) => candidate.id === editing.id) : undefined;
   const deadline = editing.kind === "deadline" ? snapshot.deadlines.find((candidate) => candidate.id === editing.id) : undefined;
-  const gone = editing.kind !== "new" && !alarm && !deadline;
+  const gone = editing.kind !== "new" && !alarm && !event && !deadline;
+  const [changing, setChanging] = useState(false);
   useEffect(() => {
     if (gone) onClose();
   }, [gone, onClose]);
   if (gone) return null;
 
+  if (event) {
+    return (
+      <Popup label={changing ? "Edit event" : "Event"} onClose={onClose}>
+        {changing ? <EventFields event={event} date={event.at ? toISODate(new Date(event.at)) : today} act={act} onDone={onClose} /> : <EventSummary event={event} onEdit={() => setChanging(true)} />}
+      </Popup>
+    );
+  }
   if (alarm?.time) {
     return (
-      <Popup label={alarm.kind === "none" ? "Event" : "Alarm"} onClose={onClose}>
+      <Popup label="Alarm" onClose={onClose}>
         <p className="text-[12.5px] text-muted">{alarm.label || "This"} repeats; change it under Alarms, Repeating.</p>
       </Popup>
     );
   }
   if (alarm) {
     return (
-      <Popup label={alarm.kind === "none" ? "Event" : "Alarm"} onClose={onClose}>
+      <Popup label="Alarm" onClose={onClose}>
         <AlarmFields alarm={alarm} date={toISODate(new Date(alarm.at!))} act={act} onDone={onClose} />
       </Popup>
     );
@@ -55,11 +66,11 @@ export function EventDialog({ editing, snapshot, model, today, act, onClose }: D
       </Popup>
     );
   }
-  return <NewEvent date={(editing as { date: ISODate }).date} model={model} today={today} act={act} onClose={onClose} />;
+  return <NewEntry date={(editing as { date: ISODate }).date} model={model} today={today} act={act} onClose={onClose} />;
 }
 
 // A new event, alarm or deadline on `date`, the kind picked by three tabs
-function NewEvent({ date, model, today, act, onClose }: { date: ISODate; model: GraphModel; today: ISODate; act: Act; onClose: () => void }) {
+function NewEntry({ date, model, today, act, onClose }: { date: ISODate; model: GraphModel; today: ISODate; act: Act; onClose: () => void }) {
   const [kind, setKind] = useState<"event" | "alarm" | "deadline">("event");
   const tab = (value: typeof kind, label: string) => (
     <button
@@ -79,51 +90,151 @@ function NewEvent({ date, model, today, act, onClose }: { date: ISODate; model: 
         {tab("alarm", "Alarm")}
         {tab("deadline", "Deadline")}
       </div>
-      {kind !== "deadline" ? <AlarmFields key={kind} alarm={null} rings={kind === "alarm"} date={date} act={act} onDone={onClose} /> : <DeadlineFields deadline={null} date={date} model={model} today={today} act={act} onDone={onClose} />}
+      {kind === "event" ? <EventFields event={null} date={date} act={act} onDone={onClose} /> : null}
+      {kind === "alarm" ? <AlarmFields alarm={null} date={date} act={act} onDone={onClose} /> : null}
+      {kind === "deadline" ? <DeadlineFields deadline={null} date={date} model={model} today={today} act={act} onDone={onClose} /> : null}
     </Popup>
   );
 }
 
-// A one-time alarm's or event's day, start, optional end, label and how it rings (or not); with
-// `alarm`, that one's, which can also be switched off or deleted. New, `rings` picks the default. Only what changed is sent, so a field sent as it was can't win over a change
-// made to it meanwhile on another device.
-export function AlarmFields({ alarm, rings = true, date: initialDate, act, onDone }: { alarm: Alarm | null; rings?: boolean; date: ISODate; act: Act; onDone: () => void }) {
+// What an event is, to read: its title, when and how long, whether it rings at its start, its details
+function EventSummary({ event, onEdit }: { event: ScheduleEvent; onEdit: () => void }) {
+  const start = event.time ?? clockOf(new Date(event.at!));
+  const day = event.time ? `Every ${weekdaysText(event.weekdays)}` : dayLabel(toISODate(new Date(event.at!)), { weekday: "long", day: "numeric", month: "long" });
+  const span = event.minutes ? `${showTime(start)} – ${showTime(clockAfter(start, event.minutes))} (${lasts(event.minutes)})` : showTime(start);
+  return (
+    <div className="space-y-3">
+      <p className="text-[15px] leading-snug text-ink/90 [overflow-wrap:anywhere] whitespace-pre-line">{event.title || "Event"}</p>
+      <p className="text-[12.5px] text-muted">
+        {day} · {span}
+        <br />
+        {event.rings ? `Rings at its start${event.rings === "plain" ? "" : `, stops after ${kindLabels[event.rings].toLowerCase()}`}` : "Doesn't ring"}
+      </p>
+      {event.details ? <p className="max-h-72 overflow-y-auto border-t border-ink/8 pt-3 text-[13px] leading-5 text-ink/85 [overflow-wrap:anywhere] whitespace-pre-line select-text">{event.details}</p> : null}
+      <div className="flex justify-end">
+        <button type="button" onClick={onEdit} className="rounded-lg border border-ink/12 px-3 py-1.5 text-[13px] text-ink/80 hover:bg-ink/6 phone:min-h-11">
+          Edit
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// An event's title, day (or the weekdays it repeats on), start, optional end, ring at its start and
+// details; with `event`, that one's, which can also be deleted. Only what changed is sent, so a field
+// sent as it was can't win over a change made to it meanwhile on another device.
+function EventFields({ event, date: initialDate, act, onDone }: { event: ScheduleEvent | null; date: ISODate; act: Act; onDone: () => void }) {
+  const initialTime = event ? (event.time ?? clockOf(new Date(event.at!))) : "09:00";
+  const [title, setTitle] = useState(event?.title ?? "");
+  const [date, setDate] = useState(initialDate);
+  const [days, setDays] = useState<Weekday[]>(event?.weekdays ?? []);
+  const [time, setTime] = useState(initialTime);
+  const [end, setEnd] = useState(event?.minutes ? clockAfter(initialTime, event.minutes) : "");
+  const [rings, setRings] = useState<ScheduleEvent["rings"]>(event?.rings ?? null);
+  const [details, setDetails] = useState(event?.details ?? "");
+  const repeating = days.length > 0;
+  // Left at its day and start, a one-off keeps its exact moment, which its start ring's key holds
+  const unmoved = event?.at != null && !repeating && date === initialDate && time === initialTime;
+  const at = repeating ? null : unmoved ? event!.at : date && time ? atTime(date, time).toISOString() : null;
+  const ready = Boolean(title.trim() && time && (repeating || at));
+
+  const save = () => {
+    if (!ready) return;
+    const fields: Omit<ScheduleEvent, "id"> = { title: title.trim(), details: details.trim(), at, time: repeating ? time : null, weekdays: repeating ? days : [], minutes: end ? minutesFrom(time, end) : null, rings };
+    if (!event) void act("createEvent", { ...fields, id: crypto.randomUUID() });
+    else {
+      const changed = Object.fromEntries(Object.entries(fields).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(event[key as keyof ScheduleEvent])));
+      if (Object.keys(changed).length > 0) void act("updateEvent", event.id, changed);
+    }
+    onDone();
+  };
+
+  return (
+    <div className="space-y-3">
+      <input autoFocus={!event} value={title} onChange={(input) => setTitle(input.target.value)} placeholder="What is on" aria-label="Event" className={`${field} w-full`} />
+      {repeating ? null : <input type="date" aria-label="Day" value={date} onChange={(input) => setDate(input.target.value)} className={`${field} w-full`} />}
+      <div className="flex gap-1" role="group" aria-label="Repeats on">
+        {week.map((weekday) => (
+          <button
+            key={weekday}
+            type="button"
+            aria-pressed={days.includes(weekday)}
+            aria-label={`Repeats on ${weekday}`}
+            onClick={() => setDays((current) => (current.includes(weekday) ? current.filter((d) => d !== weekday) : [...current, weekday]))}
+            className={`flex-1 rounded-md border py-1.5 text-[11.5px] phone:min-h-11 ${days.includes(weekday) ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
+          >
+            {weekday.slice(0, 2)}
+          </button>
+        ))}
+      </div>
+      <p className="-mt-1 text-[11.5px] text-muted">{repeating ? `Every ${weekdaysText(days)}` : "Once; pick days to repeat it"}</p>
+      <div className="flex items-center gap-2">
+        <TimeField label="Starts" value={time} onChange={setTime} className={`${field} min-w-0 flex-1`} />
+        <span className="text-[12px] text-muted">to</span>
+        <TimeField label="Ends (optional)" optional value={end} onChange={setEnd} className={`${field} min-w-0 flex-1`} />
+      </div>
+      <select value={rings ?? ""} aria-label="At its start" onChange={(input) => setRings((input.target.value || null) as ScheduleEvent["rings"])} className={`${field} w-full`}>
+        <option value="">Doesn't ring</option>
+        {(Object.keys(kindLabels) as Alarm["kind"][]).map((kind) => (
+          <option key={kind} value={kind}>
+            Rings at its start: {kindLabels[kind].toLowerCase()}
+          </option>
+        ))}
+      </select>
+      <textarea value={details} onChange={(input) => setDetails(input.target.value)} maxLength={EVENT_DETAILS_MAX} rows={4} placeholder="Details: where, who, notes (optional)" aria-label="Details" className={`${field} block w-full resize-y leading-5`} />
+      <div className="flex items-center justify-end gap-3">
+        {event ? (
+          <button
+            type="button"
+            onClick={() => {
+              void act("deleteEvent", event.id);
+              onDone();
+            }}
+            className="mr-auto text-[12.5px] text-muted hover:text-red-300 phone:min-h-11"
+          >
+            Delete this event
+          </button>
+        ) : null}
+        <button type="button" onClick={save} disabled={!ready} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
+          {event ? "Save" : "Add"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// A one-time alarm's day, time, label and how it stops; with `alarm`, that one's, which can also be
+// switched off or deleted. Only what changed is sent (as for an event, above).
+export function AlarmFields({ alarm, date: initialDate, act, onDone }: { alarm: Alarm | null; date: ISODate; act: Act; onDone: () => void }) {
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState(alarm ? clockOf(new Date(alarm.at!)) : "09:00");
-  const [end, setEnd] = useState(alarm?.minutes ? clockAfter(clockOf(new Date(alarm.at!)), alarm.minutes) : "");
   const [label, setLabel] = useState(alarm?.label ?? "");
-  const [kind, setKind] = useState<Alarm["kind"]>(alarm?.kind ?? (rings ? "plain" : "none"));
-  const event = kind === "none";
+  const [kind, setKind] = useState<Alarm["kind"]>(alarm?.kind ?? "plain");
   // Left at its day and time, an alarm keeps its exact moment: the form shows only minutes, and the
   // ring's key (which a skip or a snooze holds) is that moment
   const unmoved = alarm !== null && date === initialDate && time === clockOf(new Date(alarm.at!));
   const at = unmoved ? new Date(alarm.at!) : date && time ? atTime(date, time) : null;
-  // An alarm already rung (kept a day for its snooze) can still be relabelled where it is; an event,
-  // which never rings, can be put anywhere
-  const past = !event && !unmoved && at !== null && at.getTime() <= Date.now();
 
   const save = () => {
-    if (!at || past) return;
-    const fields = { label: label.trim(), kind, at: at.toISOString(), minutes: end && time ? minutesFrom(time, end) : null };
-    if (!alarm) void act("createAlarm", { ...fields, id: crypto.randomUUID(), sound: "default", time: null, weekdays: [], enabled: true });
+    if (!at) return;
+    const fields = { label: label.trim(), kind, at: at.toISOString() };
+    if (!alarm) void act("createAlarm", { ...fields, id: crypto.randomUUID(), sound: "default", time: null, weekdays: [], enabled: true, eventId: null });
     else {
       // The moment is compared as a moment: the same instant can be written two ways
-      const changed: Partial<Alarm> = Object.fromEntries(Object.entries(fields).filter(([key, value]) => (key === "at" ? Date.parse(value as string) !== Date.parse(alarm.at!) : value !== alarm[key as keyof Alarm])));
-      // An event has no off: an alarm switched off and made an event comes back on
-      if (event && !alarm.enabled) changed.enabled = true;
+      const changed: Partial<Alarm> = Object.fromEntries(Object.entries(fields).filter(([key, value]) => (key === "at" ? Date.parse(value) !== Date.parse(alarm.at!) : value !== alarm[key as keyof Alarm])));
       if (Object.keys(changed).length > 0) void act("updateAlarm", alarm.id, changed);
     }
     onDone();
   };
 
   const quick = (minutes: number) => {
-    void act("createAlarm", { id: crypto.randomUUID(), label: "", kind: "plain", sound: "default", at: new Date(Date.now() + minutes * 60_000).toISOString(), time: null, weekdays: [], enabled: true, minutes: null });
+    void act("createAlarm", { id: crypto.randomUUID(), label: "", kind: "plain", sound: "default", at: new Date(Date.now() + minutes * 60_000).toISOString(), time: null, weekdays: [], enabled: true, eventId: null });
     onDone();
   };
 
   return (
     <div className="space-y-3">
-      {!alarm && rings && initialDate === toISODate(new Date()) ? (
+      {!alarm && initialDate === toISODate(new Date()) ? (
         <div className="flex flex-wrap gap-2">
           {QUICK_MINUTES.map((minutes) => (
             <button key={minutes} type="button" onClick={() => quick(minutes)} className="rounded-lg border border-ink/12 px-3.5 py-1.5 text-[13px] text-ink/80 hover:bg-ink/6 active:bg-ink/10 phone:min-h-11">
@@ -133,37 +244,28 @@ export function AlarmFields({ alarm, rings = true, date: initialDate, act, onDon
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <input type="date" aria-label="Day" value={date} onChange={(event) => setDate(event.target.value)} className={`${field} min-w-0 flex-1`} />
+        <input type="date" aria-label="Day" value={date} onChange={(input) => setDate(input.target.value)} className={`${field} min-w-0 flex-1`} />
+        <TimeField label="Time" value={time} onChange={setTime} className={`${field} min-w-0 flex-1`} />
       </div>
-      <div className="flex items-center gap-2">
-        <TimeField label={event ? "Starts" : "Time"} value={time} onChange={setTime} className={`${field} min-w-0 flex-1`} />
-        <span className="text-[12px] text-muted">to</span>
-        <TimeField label="Ends (optional)" optional value={end} onChange={setEnd} className={`${field} min-w-0 flex-1`} />
-      </div>
-      <textarea autoFocus={!alarm} value={label} onChange={(event) => setLabel(event.target.value)} rows={3} placeholder={event ? "What is on" : "What for (optional)"} aria-label="Label" className={`${field} block w-full resize-y leading-5`} />
+      <textarea autoFocus={!alarm} value={label} onChange={(input) => setLabel(input.target.value)} rows={3} placeholder="What for (optional)" aria-label="Label" className={`${field} block w-full resize-y leading-5`} />
       <div className="flex items-center gap-3">
-        <select value={kind} aria-label="How it rings" onChange={(event) => setKind(event.target.value as Alarm["kind"])} className={`${field} flex-1`}>
+        <select value={kind} aria-label="How it rings" onChange={(input) => setKind(input.target.value as Alarm["kind"])} className={`${field} flex-1`}>
           {(Object.keys(kindLabels) as Alarm["kind"][]).map((option) => (
             <option key={option} value={option}>
               {kindLabels[option]}
             </option>
           ))}
         </select>
-        <button type="button" onClick={save} disabled={!at || past} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
+        <button type="button" onClick={save} disabled={!at} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
           {alarm ? "Save" : "Set"}
         </button>
       </div>
-      {past ? <p className="text-[11.5px] text-muted">That moment has passed.</p> : null}
       {alarm ? (
         <div className="flex items-center justify-between gap-3 border-t border-ink/8 pt-3">
-          {alarm.kind !== "none" ? (
-            <label className="flex items-center gap-3 text-[12.5px] text-ink/80">
-              <Switch label="Rings" on={alarm.enabled} onChange={(enabled) => void act("updateAlarm", alarm.id, { enabled })} />
-              {alarm.enabled ? "Rings" : "Off"}
-            </label>
-          ) : (
-            <span />
-          )}
+          <label className="flex items-center gap-3 text-[12.5px] text-ink/80">
+            <Switch label="Rings" on={alarm.enabled} onChange={(enabled) => void act("updateAlarm", alarm.id, { enabled })} />
+            {alarm.enabled ? "Rings" : "Off"}
+          </label>
           <button
             type="button"
             onClick={() => {
@@ -172,7 +274,7 @@ export function AlarmFields({ alarm, rings = true, date: initialDate, act, onDon
             }}
             className="text-[12.5px] text-muted hover:text-red-300 phone:min-h-11"
           >
-            Delete this {alarm.kind === "none" ? "event" : "alarm"}
+            Delete this alarm
           </button>
         </div>
       ) : null}

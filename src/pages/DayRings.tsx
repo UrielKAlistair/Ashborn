@@ -3,8 +3,8 @@ import { Switch } from "../components/Switch";
 import { TimeField } from "../components/TimeField";
 import { useNow } from "../lib/useNow";
 import { addDays, atTime, clockAfter, clockOf, daysBetween, showTime, startOfDay, toISODate, week } from "../shared/dates";
-import { eventsOn, movedLabel, upcomingAlarms, type AlarmInstance, type DayEvent } from "../shared/schedule";
-import type { Alarm, Deadline, ISODate, Snapshot, Weekday } from "../shared/types";
+import { eventsOn, movedLabel, nowPlace, upcomingAlarms, type AlarmInstance, type DayEvent } from "../shared/schedule";
+import type { Alarm, Deadline, ISODate, ScheduleEvent, Snapshot, Weekday } from "../shared/types";
 import { field, kindLabels } from "./alarmParts";
 import { canHover } from "./home/graphLayout";
 import { Tick } from "./home/Tick";
@@ -13,12 +13,14 @@ import type { Act } from "./home/HomePage";
 /**
  * One day's schedule: the times on it, in order, whether they ring or not. The rings come from every
  * source (the user's alarms, routines, deadlines' alarms, meal reminders); the events are the user's
- * times that don't ring (a test from 11 to 1), with how long they last. The deadlines due that day,
- * which have no time, sit above. The Alarms screen's day and the Calendar's day are this one view.
+ * times (a test from 2 to 4), with how long they last; one that rings at its start shows its ring on
+ * its own row, a bell and the ring's switch. The deadlines due that day, which have no time, sit above.
+ * The Alarms screen's day and the Calendar's day are this one view.
  * Each ring still to come shows how long until it rings and a switch that skips that ring alone; an
- * event shows how long until it starts, and is lit while it is on. On today a blue line marks now,
- * and what is over is greyed. Taps are reported up: a one-time alarm or event or a deadline to open,
- * a repeating event to edit, a ring of a repeating alarm or a routine to move (MoveRing).
+ * event shows how long until it starts, and is lit while it is on. On today a blue line marks now
+ * (nowPlace): between rows, or across an event that is on, as far down it as the event has gone.
+ * What is over is greyed. Taps are reported up: a one-time alarm, an event or a deadline to open,
+ * a ring of a repeating alarm or a routine to move (MoveRing), before or after it has rung.
  * Rings are computed from the snapshot (shared/schedule.ts), as the phone computes them.
  */
 
@@ -27,13 +29,14 @@ type DayRingsProps = {
   date: ISODate;
   act: Act;
   onOpenAlarm: (alarm: Alarm) => void;
+  onOpenEvent: (event: ScheduleEvent) => void;
   onOpenDeadline: (deadline: Deadline) => void;
   onMove: (ring: AlarmInstance) => void;
 };
 
-type Entry = { type: "ring"; at: Date; ring: AlarmInstance } | { type: "event"; at: Date; event: DayEvent };
+type Entry = { type: "ring"; at: Date; ring: AlarmInstance } | { type: "event"; at: Date; minutes: number | null; event: DayEvent; ring?: AlarmInstance };
 
-export function DayRings({ snapshot, date, act, onOpenAlarm, onOpenDeadline, onMove }: DayRingsProps) {
+export function DayRings({ snapshot, date, act, onOpenAlarm, onOpenEvent, onOpenDeadline, onMove }: DayRingsProps) {
   const now = useNow();
   const today = toISODate(now);
   const start = startOfDay(date);
@@ -45,11 +48,15 @@ export function DayRings({ snapshot, date, act, onOpenAlarm, onOpenDeadline, onM
     .filter((ring) => ring.at >= start && ring.at < end)
     // A ring moved to another time shows once, at its new time
     .filter((ring) => skipped.has(ring.key) === false || movedCopies(ring, snapshot).length === 0);
-  const entries: Entry[] = [...rings.map((ring) => ({ type: "ring" as const, at: ring.at, ring })), ...eventsOn(snapshot, date).map((event) => ({ type: "event" as const, at: event.at, event }))].sort((a, b) => a.at.getTime() - b.at.getTime());
+  // An event's start alarm rings on the event's row
+  const startRing = (event: DayEvent) => rings.find((ring) => ownAlarm(ring, snapshot)?.eventId === event.event.id && ring.at.getTime() === event.at.getTime());
+  const entries: Entry[] = [
+    ...rings.filter((ring) => !ownAlarm(ring, snapshot)?.eventId).map((ring) => ({ type: "ring" as const, at: ring.at, ring })),
+    ...eventsOn(snapshot, date).map((event) => ({ type: "event" as const, at: event.at, minutes: event.minutes, event, ring: startRing(event) })),
+  ].sort((a, b) => a.at.getTime() - b.at.getTime());
   // An overdue deadline moves to today, and leaves the day it was due on, until it is ticked or deleted
   const deadlines = snapshot.deadlines.filter((deadline) => (deadline.dueDate === date && date >= today) || (date === today && deadline.dueDate < today));
-  // Now sits before the first time still to come; an event already on stays above it
-  const nowAt = date === today ? entries.findIndex((entry) => entry.at > now) : -1;
+  const place = date === today ? nowPlace(entries, now) : null;
 
   if (entries.length === 0 && deadlines.length === 0) return <p className="rounded-xl bg-ink/[0.02] px-3 py-2.5 text-[12px] text-muted">Nothing on this day.</p>;
   return (
@@ -59,15 +66,17 @@ export function DayRings({ snapshot, date, act, onOpenAlarm, onOpenDeadline, onM
       ))}
       {entries.map((entry, index) => (
         <div key={entry.type === "ring" ? entry.ring.key : entry.event.key} className="space-y-2.5">
-          {index === nowAt ? <NowLine now={now} /> : null}
-          {entry.type === "event" ? (
-            <EventRow event={entry.event} now={now} onOpen={() => onOpenAlarm(entry.event.alarm)} />
-          ) : (
-            <RingRow ring={entry.ring} on={!skipped.has(entry.ring.key)} snapshot={snapshot} now={now} act={act} onOpenAlarm={onOpenAlarm} onMove={onMove} />
-          )}
+          {place?.row === index && place.inside === null ? <NowLine now={now} /> : null}
+          <NowAcross now={now} inside={place?.row === index ? place.inside : null}>
+            {entry.type === "event" ? (
+              <EventRow event={entry.event} ring={entry.ring} on={entry.ring ? !skipped.has(entry.ring.key) : false} now={now} act={act} onOpen={() => onOpenEvent(entry.event.event)} />
+            ) : (
+              <RingRow ring={entry.ring} on={!skipped.has(entry.ring.key)} snapshot={snapshot} now={now} act={act} onOpenAlarm={onOpenAlarm} onMove={onMove} />
+            )}
+          </NowAcross>
         </div>
       ))}
-      {date === today && entries.length > 0 && nowAt === -1 ? <NowLine now={now} /> : null}
+      {place && entries.length > 0 && place.row === entries.length ? <NowLine now={now} /> : null}
     </RowList>
   );
 }
@@ -78,7 +87,7 @@ function RingRow({ ring, on, snapshot, now, act, onOpenAlarm, onMove }: { ring: 
   const alarm = ownAlarm(ring, snapshot);
   const moved = /^(.*) \(moved from (.+)\)$/s.exec(ring.title);
   const repeating = ring.key.startsWith("routine:") || Boolean(alarm?.time);
-  const onOpen = passed ? undefined : repeating ? () => onMove(ring) : alarm ? () => onOpenAlarm(alarm) : undefined;
+  const onOpen = repeating ? () => onMove(ring) : alarm ? () => onOpenAlarm(alarm) : undefined;
   return (
     <Row time={clockOf(ring.at)} title={moved ? moved[1] : ring.title} detail={moved ? `Moved from ${moved[2]}` : detailOf(ring, snapshot)} until={passed || !on ? undefined : ringsIn(ring.at, now)} dim={passed || !on} onOpen={onOpen}>
       {passed ? null : (
@@ -95,37 +104,65 @@ function RingRow({ ring, on, snapshot, now, act, onOpenAlarm, onMove }: { ring: 
   );
 }
 
-// One event of the day: its start, how long until it starts (or that it is on), its span; lit while on
-function EventRow({ event, now, onOpen }: { event: DayEvent; now: Date; onOpen: () => void }) {
+// One event of the day: its start, how long until it starts (or that it is on), its span; lit while
+// on. One that rings at its start has a bell, and that ring's switch until it has rung.
+function EventRow({ event, ring, on, now, act, onOpen }: { event: DayEvent; ring?: AlarmInstance; on: boolean; now: Date; act: Act; onOpen: () => void }) {
   const ends = new Date(event.at.getTime() + (event.minutes ?? 0) * 60_000);
-  const on = event.at <= now && now < ends;
-  const over = !on && ends <= now;
+  const running = event.at <= now && now < ends;
+  const over = !running && ends <= now;
   const start = clockOf(event.at);
   const span = event.minutes ? `${showTime(start)} – ${showTime(clockAfter(start, event.minutes))} · ${lasts(event.minutes)}` : showTime(start);
+  const { weekdays, time, rings, details } = event.event;
+  const rung = !ring || ring.at <= now;
   return (
     <Row
       time={start}
       tone="event"
-      lit={on}
+      lit={running}
       title={event.title}
-      detail={`${event.alarm.time ? "Every " + daysText(event.alarm.weekdays) : "Event"} · ${span}`}
-      until={on ? "on now" : over ? undefined : ringsIn(event.at, now)}
+      detail={
+        <span className="flex flex-wrap items-center gap-x-1.5">
+          {rings ? <BellMark off={!rung && !on} /> : null}
+          {details ? <LinesMark /> : null}
+          <span>{`${time ? "Every " + weekdaysText(weekdays) : "Event"} · ${span}${rings && rings !== "plain" ? ` · ${kindLabels[rings].toLowerCase()}` : ""}`}</span>
+        </span>
+      }
+      until={running ? "on now" : over ? undefined : ringsIn(event.at, now)}
       dim={over}
       onOpen={onOpen}
     >
-      {null}
+      {ring && !rung ? <Switch label={`${event.title} rings at its start on ${toISODate(ring.at)}`} on={on} onChange={(rings) => void act("setAlarmSkip", ring.key, toISODate(ring.at), !rings)} /> : null}
     </Row>
   );
 }
 
+// An event that rings at its start; struck through while that ring is skipped
+function BellMark({ off }: { off: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-label={off ? "Ring skipped" : "Rings at its start"} className={`h-3.5 w-3.5 shrink-0 ${off ? "text-muted" : "text-ember"}`} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3L4 11ZM6.5 14a1.5 1.5 0 0 0 3 0" />
+      {off ? <path d="M2.5 2.5l11 11" /> : null}
+    </svg>
+  );
+}
+
+// An event with details to read
+function LinesMark() {
+  return (
+    <svg viewBox="0 0 16 16" aria-label="Has details" className="h-3.5 w-3.5 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <path d="M3 4.5h10M3 8h10M3 11.5h6" />
+    </svg>
+  );
+}
+
 // How long an event lasts: "45 min", "2h", "1h 30m"
-function lasts(minutes: number) {
+export function lasts(minutes: number) {
   if (minutes < 60) return `${minutes} min`;
   return `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;
 }
 
 // The weekdays a repeating event is on, short: "day" for all seven, else "Mon, Wed"
-function daysText(weekdays: Weekday[]) {
+export function weekdaysText(weekdays: Weekday[]) {
   return weekdays.length === 7 ? "day" : week.filter((day) => weekdays.includes(day)).join(", ");
 }
 
@@ -139,14 +176,30 @@ export function ringsIn(at: Date, now: Date) {
   return `in ${Math.floor(hours / 24)}d${hours % 24 ? ` ${hours % 24}h` : ""}`;
 }
 
-// The current time, as a blue rule across the list
-export function NowLine({ now }: { now: Date }) {
+// The current time, as a blue rule across the list; `across` a row, its words sit on a patch of the
+// page's colour so the row's text under them doesn't show through
+export function NowLine({ now, across = false }: { now: Date; across?: boolean }) {
   return (
     <div role="separator" aria-label="Now" className="flex items-center gap-2 py-1 font-['Silkscreen'] whitespace-nowrap text-sky-400">
       <span className="h-0.5 min-w-2 flex-1 rounded-full bg-sky-400" />
-      <span className="text-[12px] tracking-wider">NOW</span>
-      <span className="text-[11px] tabular-nums">{showTime(clockOf(now))}</span>
+      <span className={`flex items-baseline gap-2 ${across ? "rounded bg-canvas px-1.5" : ""}`}>
+        <span className="text-[12px] tracking-wider">NOW</span>
+        <span className="text-[11px] tabular-nums">{showTime(clockOf(now))}</span>
+      </span>
       <span className="h-0.5 flex-1 rounded-full bg-sky-400" />
+    </div>
+  );
+}
+
+// A row with, while `inside` is set, the line for now drawn across it that share of the way down
+export function NowAcross({ now, inside, children }: { now: Date; inside: number | null; children: ReactNode }) {
+  if (inside === null) return <>{children}</>;
+  return (
+    <div className="relative">
+      {children}
+      <div className="pointer-events-none absolute inset-x-0 -translate-y-1/2" style={{ top: `${inside * 100}%` }}>
+        <NowLine now={now} across />
+      </div>
     </div>
   );
 }
@@ -256,13 +309,12 @@ export function MoveRing({ ring, snapshot, act, onDone }: { ring: AlarmInstance;
   const day = toISODate(ring.at);
   const [time, setTime] = useState(was);
   const at = time ? atTime(day, time) : null;
-  const passed = at !== null && at.getTime() <= Date.now();
 
   const move = () => {
-    if (!at || passed) return;
+    if (!at) return;
     for (const moved of movedCopies(ring, snapshot)) void act("deleteAlarm", moved.id);
     void act("setAlarmSkip", ring.key, day, true);
-    void act("createAlarm", { id: crypto.randomUUID(), label: movedLabel(ring.title, was), kind: ring.kind, sound: ring.sound, at: at.toISOString(), time: null, weekdays: [], enabled: true, minutes: null });
+    void act("createAlarm", { id: crypto.randomUUID(), label: movedLabel(ring.title, was), kind: ring.kind, sound: ring.sound, at: at.toISOString(), time: null, weekdays: [], enabled: true, eventId: null });
     onDone();
   };
 
@@ -272,11 +324,10 @@ export function MoveRing({ ring, snapshot, act, onDone }: { ring: AlarmInstance;
       <p className="text-[11.5px] text-muted">This day only: it rings at {showTime(was)} on its other days.</p>
       <div className="flex items-center gap-3">
         <TimeField label="Ring at" value={time} onChange={setTime} className={`${field} w-36 text-base`} />
-        <button type="button" onClick={move} disabled={!at || passed || time === was} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
+        <button type="button" onClick={move} disabled={!at || time === was} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
           Move
         </button>
       </div>
-      {passed ? <p className="text-[11.5px] text-muted">That time has passed.</p> : null}
     </div>
   );
 }

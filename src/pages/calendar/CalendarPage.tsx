@@ -45,7 +45,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
       setMonday(picked);
       setPhoneView("week");
     },
-    onOpen: (event) => setEditing(event.kind === "alarm" ? { kind: "alarm", id: event.id } : { kind: "deadline", id: event.id }),
+    onOpen: (event) => setEditing({ kind: event.kind, id: event.id }),
     onDay: setDay,
     now,
     act,
@@ -76,6 +76,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
               date={day}
               act={act}
               onOpenAlarm={(alarm) => setEditing({ kind: "alarm", id: alarm.id })}
+              onOpenEvent={(event) => setEditing({ kind: "event", id: event.id })}
               onOpenDeadline={(deadline) => setEditing({ kind: "deadline", id: deadline.id })}
               onMove={setMoving}
             />
@@ -103,7 +104,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
     // On the phone the panel is as tall as its contents and scrolls under the fixed +, as on the Alarms screen
     return (
       <div className="relative flex min-h-0 w-full min-w-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="to-edge flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
           <section className="flex shrink-0 grow flex-col gap-5 pt-1 pb-24">
             <div className="flex items-center gap-3">
               <h1 className="caps mr-auto font-display text-[15px] font-bold text-ink/90">Calendar</h1>
@@ -124,7 +125,7 @@ export function CalendarPage({ snapshot, act }: { snapshot: Snapshot; act: Act }
   return (
     <div className="relative flex min-h-0 w-full min-w-0 flex-1 gap-4">
       {narrow ? (
-        <section className="panel-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto pr-3 pb-24">
+        <section className="panel-scroll to-edge flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto pb-24">
           <h1 className="caps font-display text-[15px] font-bold text-ink/90">Calendar</h1>
           <WeekList {...view} />
         </section>

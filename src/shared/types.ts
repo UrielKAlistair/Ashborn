@@ -1,6 +1,6 @@
 /**
  * The data, as every part of Ashborn sees it: the app on desktop and phone, and the agent server.
- * Quests and steps (GraphNode, GraphEdge), routines, deadlines, alarms and the Kitchen, gathered in a
+ * Quests and steps (GraphNode, GraphEdge), routines, deadlines, alarms, events and the Kitchen, gathered in a
  * Snapshot loaded once at start. A change returns a Delta of only the rows it touched, which the
  * caller merges into its Snapshot. AshbornApi, at the end, is every change there is.
  */
@@ -62,19 +62,40 @@ export type RoutineCheck = {
 };
 
 // An alarm of its own: a one-off at `at`, or recurring at `time` on `weekdays`. Rings on the phone.
+// One with an eventId is an event's alarm at its start: the database keeps it as the event says, so
+// it is changed only through its event.
 export type Alarm = {
   id: string;
   label: string;
-  kind: AlarmKind; // "none": a time on the schedule that doesn't ring (an event)
+  kind: Exclude<AlarmKind, "none">;
   sound: AlarmSound;
-  minutes: number | null; // how long what it marks lasts; null for a moment
   at: string | null; // ISO timestamp, for a one-off
   time: ClockTime | null; // for a recurring alarm
   weekdays: Weekday[]; // empty for a one-off
   enabled: boolean;
+  eventId: string | null;
 };
 
-export type AlarmPatch = Partial<Omit<Alarm, "id">>;
+export type AlarmPatch = Partial<Omit<Alarm, "id" | "eventId">>;
+
+// A time on the schedule (a test from 2 to 4, a lecture every Tuesday): a one-off starting at `at`, or
+// repeating at `time` on `weekdays`, lasting `minutes` (null: a moment). It rings only when `rings`
+// says how: then it has an alarm at its start (Alarm.eventId). The phone never reads events.
+export type ScheduleEvent = {
+  id: string;
+  title: string;
+  details: string; // where, who, notes; up to EVENT_DETAILS_MAX characters
+  at: string | null;
+  time: ClockTime | null;
+  weekdays: Weekday[];
+  minutes: number | null;
+  rings: Exclude<AlarmKind, "none"> | null;
+};
+
+export type EventPatch = Partial<Omit<ScheduleEvent, "id">>;
+
+// As the database's check on events.details
+export const EVENT_DETAILS_MAX = 4000;
 export type RoutinePatch = Partial<Omit<Routine, "id">>;
 
 // One ring skipped: the schedule's key for it (see AlarmInstance) and the day it rings on
@@ -176,6 +197,7 @@ export type Snapshot = {
   deadlines: Deadline[];
   alarms: Alarm[]; // recurring ones, and one-offs from a day back
   skippedAlarms: AlarmSkip[]; // rings skipped, from yesterday on
+  events: ScheduleEvent[]; // all of them, past ones too, for the Calendar
   kitchen: Kitchen;
   settings: Settings;
 };
@@ -198,6 +220,8 @@ export type Delta = {
   alarms?: Alarm[];
   removedAlarmIds?: string[];
   alarmSkip?: AlarmSkip & { skipped: boolean };
+  events?: ScheduleEvent[];
+  removedEventIds?: string[];
   kitchen?: Kitchen; // replaces the whole Kitchen
   settings?: Settings;
 };
@@ -239,6 +263,9 @@ export type AshbornApi = {
   updateAlarm(id: string, patch: AlarmPatch): Promise<Delta>;
   deleteAlarm(id: string): Promise<Delta>;
   setAlarmSkip(key: string, date: ISODate, skipped: boolean): Promise<Delta>;
+  createEvent(event: ScheduleEvent): Promise<Delta>; // the id is made by the caller, so it works offline; with its start alarm when it rings
+  updateEvent(id: string, patch: EventPatch): Promise<Delta>; // with its start alarm, as the change leaves it
+  deleteEvent(id: string): Promise<Delta>; // with its start alarm
   updateSettings(patch: Partial<Settings>): Promise<Delta>;
 
   // The Kitchen. Cooking, uncooking and adjusting stock work offline; the rest needs a connection.

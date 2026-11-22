@@ -57,7 +57,7 @@ export function TodayPanel({ snapshot, model, act }: TodayPanelProps) {
 
 
   return (
-    <section className="panel-scroll flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-1 py-2">
+    <section className="panel-scroll to-edge flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-1 py-2">
       <div className="flex items-baseline justify-between px-1">
         <h2 className="caps font-display text-[13px] font-bold text-ink/90">Today</h2>
         <span className="font-mono text-[11px] text-muted tabular-nums">

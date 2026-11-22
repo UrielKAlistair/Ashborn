@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { emptyKitchen } from "../../src/shared/kitchen";
-import { eventsOn, upcomingAlarms } from "../../src/shared/schedule";
-import type { Alarm, Deadline, Routine, Snapshot } from "../../src/shared/types";
+import { eventsOn, nowPlace, upcomingAlarms } from "../../src/shared/schedule";
+import type { Alarm, Deadline, Routine, Snapshot, ScheduleEvent } from "../../src/shared/types";
 
 // Which alarms the phone should schedule, from routines and deadlines
 
 const routine = (overrides: Partial<Routine>): Routine => ({ id: "r", title: "Routine", cue: "", weekdays: [], time: null, alarm: "none", ...overrides });
 const deadline = (overrides: Partial<Deadline>): Deadline => ({ id: "d", nodeId: null, title: "Deadline", dueDate: "2026-10-20", alarmTime: null, ...overrides });
-const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", sound: "default", minutes: null, at: null, time: null, weekdays: [], enabled: true, ...overrides });
+const alarm = (overrides: Partial<Alarm>): Alarm => ({ id: "a", label: "", kind: "plain", sound: "default", at: null, time: null, weekdays: [], enabled: true, eventId: null, ...overrides });
+const event = (overrides: Partial<ScheduleEvent>): ScheduleEvent => ({ id: "e", title: "", details: "", at: null, time: null, weekdays: [], minutes: null, rings: null, ...overrides });
 const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   nodes: [],
   edges: [],
@@ -15,6 +16,7 @@ const snapshot = (parts: Partial<Snapshot>): Snapshot => ({
   routineChecks: [],
   deadlines: [],
   alarms: [],
+  events: [],
   skippedAlarms: [],
   kitchen: emptyKitchen,
   settings: { timeZone: null },
@@ -115,12 +117,23 @@ test("meal reminders join the schedule as plain alarms; those already past are d
   expect(upcomingAlarms(snapshot({ kitchen }), new Date("2026-10-19T08:00:00"), 1)[0]).toMatchObject({ kind: "plain", title: "Start prep (lunch: Dal)" });
 });
 
-test("an event never rings, and is on its day's schedule: repeating on its weekdays, a one-off on its date", () => {
-  const exam = alarm({ id: "exam", label: "Exam", kind: "none", minutes: 120, at: new Date("2026-10-19T11:00:00").toISOString() });
-  const lecture = alarm({ id: "lecture", kind: "none", minutes: 60, time: "09:00", weekdays: ["Mon", "Wed"] });
-  const off = alarm({ id: "off", kind: "none", time: "10:00", weekdays: ["Mon"], enabled: false });
-  const all = snapshot({ alarms: [exam, lecture, off] });
+test("an event is on its day's schedule, repeating on its weekdays, a one-off on its date; it never rings itself", () => {
+  const exam = event({ id: "exam", title: "Exam", minutes: 120, at: new Date("2026-10-19T11:00:00").toISOString() });
+  const lecture = event({ id: "lecture", minutes: 60, time: "09:00", weekdays: ["Mon", "Wed"], rings: "plain" });
+  const all = snapshot({ events: [exam, lecture] });
   expect(upcomingAlarms(all, monday6am, 3)).toEqual([]);
-  expect(eventsOn(all, "2026-10-19").map((event) => `${event.title} ${event.at.toString().slice(16, 21)} ${event.minutes}`)).toEqual(["Event 09:00 60", "Exam 11:00 120"]);
+  expect(eventsOn(all, "2026-10-19").map((shown) => `${shown.title} ${shown.at.toString().slice(16, 21)} ${shown.minutes}`)).toEqual(["Event 09:00 60", "Exam 11:00 120"]);
   expect(eventsOn(all, "2026-10-20")).toEqual([]);
+});
+
+test("the line for now sits below every row that has started, and across an event still on", () => {
+  const at = (clock: string) => new Date(`2026-10-19T${clock}:00`);
+  const rows = [{ at: at("09:00") }, { at: at("10:00"), minutes: 120 }, { at: at("11:00") }, { at: at("13:00") }];
+  expect(nowPlace(rows, at("08:00"))).toEqual({ row: 0, inside: null });
+  expect(nowPlace(rows, at("10:30"))).toEqual({ row: 1, inside: 0.25 });
+  // An alarm at 11 inside the 10 to 12 event: once it has rung the line is below it
+  expect(nowPlace(rows, at("11:30"))).toEqual({ row: 3, inside: null });
+  expect(nowPlace(rows, at("12:30"))).toEqual({ row: 3, inside: null });
+  expect(nowPlace(rows, at("14:00"))).toEqual({ row: 4, inside: null });
+  expect(nowPlace([{ at: at("10:00"), minutes: 60 }], at("10:00"))).toEqual({ row: 0, inside: 0 });
 });

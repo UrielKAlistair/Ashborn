@@ -20,7 +20,7 @@ const ids = { talk: uuid(), first: uuid(), second: uuid(), third: uuid(), fourth
 test.beforeAll(async () => {
   const { error } = await db.auth.signInWithPassword({ email: process.env.E2E_EMAIL!, password: process.env.E2E_PASSWORD! });
   if (error) throw error;
-  for (const table of ["graph_nodes", "routines", "deadlines", "alarms"]) await db.from(table).delete().not("id", "is", null);
+  for (const table of ["graph_nodes", "routines", "deadlines", "events", "alarms"]) await db.from(table).delete().not("id", "is", null);
   const insert = async (rows: Array<Record<string, unknown>>) => {
     const { error: insertError } = await db.from("graph_nodes").insert(rows);
     if (insertError) throw insertError;

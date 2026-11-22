@@ -228,14 +228,14 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": null,
             "time": "08:00",
             "weekdays": [
               "Mon",
               "Tue"
             ],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           }
         ],
         "deadlines": [],
@@ -305,7 +305,7 @@
       ]
     },
     {
-      "name": "standalone alarms: recurring, one-off as Postgres writes it, a call, switched off, beyond the window, past, and events, which never ring",
+      "name": "standalone alarms: recurring, one-off as Postgres writes it, a call, switched off, beyond the window, past, and an event's start alarm, which rings like any other",
       "input": {
         "settings": {
           "timeZone": null
@@ -319,128 +319,128 @@
             "label": "Wake up",
             "kind": "situps",
             "sound": "default",
-            "minutes": null,
             "at": null,
             "time": "06:00",
             "weekdays": [
               "Tue",
               "Wed"
             ],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           },
           {
             "id": "nap",
             "label": "",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": "2026-10-19T10:00:00+00:00",
             "time": null,
             "weekdays": [],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           },
           {
             "id": "precise",
             "label": "Precise",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": "2026-10-20T01:30:00.123456+00:00",
             "time": null,
             "weekdays": [],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           },
           {
             "id": "zulu",
             "label": "",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": "2026-10-20T04:00:00Z",
             "time": null,
             "weekdays": [],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           },
           {
             "id": "call",
             "label": "Claude needs you",
             "kind": "plain",
             "sound": "call",
-            "minutes": null,
             "at": "2026-10-19T08:00:00Z",
             "time": null,
             "weekdays": [],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           },
           {
             "id": "off",
             "label": "",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": null,
             "time": "07:00",
             "weekdays": [
               "Tue"
             ],
-            "enabled": false
+            "enabled": false,
+            "eventId": null
           },
           {
             "id": "offOnce",
             "label": "",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": "2026-10-20T03:00:00+00:00",
             "time": null,
             "weekdays": [],
-            "enabled": false
+            "enabled": false,
+            "eventId": null
           },
           {
             "id": "far",
             "label": "",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": "2026-11-30T09:00:00+00:00",
             "time": null,
             "weekdays": [],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           },
           {
             "id": "gone",
             "label": "",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": "2026-10-19T00:00:00+00:00",
             "time": null,
             "weekdays": [],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           },
           {
-            "id": "test",
-            "label": "Aptitude test",
-            "kind": "none",
+            "id": "soak",
+            "label": "Soak",
+            "kind": "plain",
             "sound": "default",
-            "minutes": 120,
             "at": "2026-10-19T11:00:00+00:00",
             "time": null,
             "weekdays": [],
-            "enabled": true
+            "enabled": true,
+            "eventId": "soakEvent"
           },
           {
             "id": "lecture",
             "label": "Lecture",
-            "kind": "none",
+            "kind": "walk",
             "sound": "default",
-            "minutes": 60,
             "at": null,
             "time": "09:00",
             "weekdays": [
               "Tue"
             ],
-            "enabled": true
+            "enabled": true,
+            "eventId": "lectureEvent"
           }
         ],
         "deadlines": [],
@@ -468,6 +468,13 @@
           "sound": "default"
         },
         {
+          "key": "alarm:soak@1792407600000",
+          "at": "2026-10-19T16:30:00",
+          "title": "Soak",
+          "kind": "plain",
+          "sound": "default"
+        },
+        {
           "key": "alarm:wake@2026-10-20",
           "at": "2026-10-20T06:00:00",
           "title": "Wake up",
@@ -479,6 +486,13 @@
           "at": "2026-10-20T07:00:00",
           "title": "Precise",
           "kind": "plain",
+          "sound": "default"
+        },
+        {
+          "key": "alarm:lecture@2026-10-20",
+          "at": "2026-10-20T09:00:00",
+          "title": "Lecture",
+          "kind": "walk",
           "sound": "default"
         },
         {
@@ -874,13 +888,13 @@
             "label": "",
             "kind": "plain",
             "sound": "default",
-            "minutes": null,
             "at": null,
             "time": "07:00",
             "weekdays": [
               "Mon"
             ],
-            "enabled": true
+            "enabled": true,
+            "eventId": null
           }
         ],
         "deadlines": [
