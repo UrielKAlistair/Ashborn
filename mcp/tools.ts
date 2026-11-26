@@ -584,7 +584,7 @@ export function registerTools(server: McpServer, db: SupabaseClient, blocked: ()
     "call_user",
     {
       description:
-        "Calls the user's phone: a ring with Ashborn's call tune, at once, that plays its tune once (about 22 seconds) and obeys the phone's silent mode. If unanswered it leaves a \"Missed call from Claude\" notification showing `message`. Use only when work is blocked on the user (see the ring-user skill). Delete the call with delete_alarm once the user has answered.",
+        "Calls the user's phone: a ring at once, about 24 seconds long (Ashborn's call tune, or the phone's ringtone in a build without one), that obeys the phone's silent mode. If unanswered it leaves a \"Missed call from Claude\" notification showing `message`. Use only when work is blocked on the user (see the ring-user skill). Delete the call with delete_alarm once the user has answered.",
       inputSchema: {
         message: z.string().trim().min(1).max(TITLE_MAX).describe("Who is calling and what is needed, readable on the lock screen"),
       },
