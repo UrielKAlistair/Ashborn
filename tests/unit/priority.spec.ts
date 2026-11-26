@@ -18,7 +18,6 @@ const node = (id: string, parentId: string | null, fields: Partial<GraphNode> = 
   ownXp: 0,
   lastActive: "2026-01-01T00:00:00.000Z",
   stamps: {},
-  position: null,
   ...fields,
 });
 const deadline = (nodeId: string | null, dueDate: string): Deadline => ({ id: `d-${dueDate}`, title: "due", dueDate, alarmTime: null, nodeId });

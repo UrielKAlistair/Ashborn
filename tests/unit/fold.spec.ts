@@ -17,7 +17,6 @@ const node = (id: string, parentId: string | null, completedAt: string | null): 
   ownXp: 0,
   lastActive: "2026-01-01T00:00:00.000Z",
   stamps: {},
-  position: null,
 });
 const model = (nodes: GraphNode[]) =>
   buildGraphModel({

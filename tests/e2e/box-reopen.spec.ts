@@ -38,12 +38,10 @@ test("a step added inside a done box reopens it", async () => {
   expect(await done(id.box)).toBe(false);
 });
 
-test("a step moved into a done box reopens it, and is placed afresh", async () => {
+test("a step moved into a done box reopens it", async () => {
   await api.updateNode(id.box, { done: true });
-  await api.placeNodes([{ id: id.loose, position: { x: 500, y: 600 } }]);
-  const { nodes } = await api.moveNode(id.loose, id.box);
+  await api.moveNode(id.loose, id.box);
   expect(await done(id.box)).toBe(false);
-  expect(nodes!.find((node) => node.id === id.loose)!.position).toBeNull();
 });
 
 test.afterAll(async () => {

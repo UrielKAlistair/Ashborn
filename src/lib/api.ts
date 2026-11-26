@@ -194,39 +194,13 @@ export function createApi(db: SupabaseClient, clock: () => Date = () => new Date
     async moveNode(id, parentId) {
       const at = clock().toISOString();
       const removed = must(await db.rpc("move_node", { target: id, new_parent: parentId, at })) as Array<{ from_id: string; to_id: string }>;
-      // A move that stood: its place in the old box means nothing in the new one, and an open step
-      // put into done boxes reopens them
+      // A move that stood puts an open step into done boxes, which reopens them; a done step leaves
+      // them done
       const after = await readNode(id);
       const moved = after.parentId === parentId;
-      const unplace = async () => void must(await nodes().update({ x: null, y: null, changed_at: stamps({ x: null, y: null }, at) }).eq("id", id));
-      // The reopen touches only the boxes above the step, so it runs beside clearing the step's place.
-      // A done step leaves done boxes done.
-      const reopen = async () => (after.completedAt ? [] : reopenAround(parentId, at));
-      const [, reopened] = moved ? await Promise.all([unplace(), reopen()]) : [undefined, []];
+      const reopened = moved && !after.completedAt ? await reopenAround(parentId, at) : [];
 
       return { nodes: [await readNode(id), ...reopened], removedEdges: removed.map(toEdge) };
-    },
-
-    async placeNodes(places) {
-      const rows = places.map(({ id, position }) => ({ id, ...position }));
-      const placed = must(await db.rpc("place_nodes", { places: rows, at: clock().toISOString() })) as string[];
-
-      const read: NodeRow[] = [];
-      for (let from = 0; from < placed.length; from += IDS_PER_REQUEST) {
-        read.push(...(must(await nodes().select().in("id", placed.slice(from, from + IDS_PER_REQUEST))) as NodeRow[]));
-      }
-      return { nodes: read.map(toNode) };
-    },
-
-    async resetLayout(ids) {
-      const fields = { x: null, y: null };
-      const at = clock().toISOString();
-      const rows: NodeRow[] = [];
-      for (let from = 0; from < ids.length; from += IDS_PER_REQUEST) {
-        rows.push(...(must(await nodes().update({ ...fields, changed_at: stamps(fields, at) }).in("id", ids.slice(from, from + IDS_PER_REQUEST)).select()) as NodeRow[]));
-      }
-
-      return { nodes: rows.map(toNode) };
     },
 
     async addEdge(edge) {
@@ -450,8 +424,6 @@ const rowKeys: { [K in Mutation]: (...args: Parameters<AshbornApi[K]>) => string
   updateNode: (id) => [`node:${id}`],
   deleteNode: (id) => [`node:${id}`],
   moveNode: (id, parentId) => [`node:${id}`, ...(parentId ? [`node:${parentId}`] : [])],
-  placeNodes: (places) => places.map((place) => `node:${place.id}`),
-  resetLayout: (ids) => ids.map((id) => `node:${id}`),
   addEdge: (edge) => [`edge:${edge.from}->${edge.to}`, `node:${edge.from}`, `node:${edge.to}`],
   removeEdge: (edge) => [`edge:${edge.from}->${edge.to}`, `node:${edge.from}`, `node:${edge.to}`],
   levelUp: (nodeId) => [`node:${nodeId}`],
@@ -581,7 +553,6 @@ export function toNode(row: NodeRow): GraphNode {
     priority: row.priority,
     ownXp: (row.logged_xp ?? 0) + (row.completed_at ? PROGRESS_UNIT : 0),
     lastActive: lastActive(row),
-    position: row.x === null || row.y === null ? null : { x: row.x, y: row.y },
     stamps: row.changed_at ?? {},
   };
 }

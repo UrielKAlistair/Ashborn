@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { phoneWindow } from "../phoneWindow";
 
-// The quests' automatic layout: packed to the canvas, reflowing when one is added elsewhere,
-// dragged quests staying put with the rest around them, and the two resets.
+// The quests' automatic layout: packed to the canvas, reflowing when one is added elsewhere, and
+// cards that can't be dragged out of it.
 
 const db = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
 const shots = "research/graph-layout/shots";
@@ -108,36 +108,16 @@ test("quest layout", async () => {
     await page.screenshot({ path: `${shots}/after-agent-add.png` });
   });
 
-  await test.step("a dragged quest keeps its place and pins only itself; the rest pack around it", async () => {
-    const dragged = page.locator(".react-flow__node-quest", { hasText: "DDP Work" });
-    const before = (await dragged.boundingBox())!;
-    await page.mouse.move(before.x + 120, before.y + 40);
+  await test.step("dragging a card leaves the layout as it was", async () => {
+    const card = page.locator(".react-flow__node-quest", { hasText: "DDP Work" });
+    const before = await rects();
+    const box = (await card.boundingBox())!;
+    await page.mouse.move(box.x + 120, box.y + 40);
     await page.mouse.down();
-    await page.mouse.move(before.x + 300, before.y + 260, { steps: 8 });
+    await page.mouse.move(box.x + 300, box.y + 260, { steps: 8 });
     await page.mouse.up();
-    await expect.poll(() => savedX(ids.a)).not.toBeNull();
-    expect(await savedX(ids.b)).toBeNull();
-    expect(await savedX(ids.c)).toBeNull();
-    const list = await rects();
-    const placed = list.find(({ title }) => title.includes("DDP Work"))!;
-    expect(placed.x).toBeCloseTo((await savedX(ids.a))!, 2);
-    expectNoOverlap(list);
-    await page.screenshot({ path: `${shots}/after-drag.png` });
-  });
-
-  await test.step("a layout that lands mid-drag leaves the dragged quest where the pointer has it", async () => {
-    const dragged = questBoxes().filter({ hasText: "Placement" });
-    const start = (await dragged.boundingBox())!;
-    await page.mouse.move(start.x + 120, start.y + 40);
-    await page.mouse.down();
-    await page.mouse.move(start.x + 140, start.y + 360, { steps: 8 });
-    const held = await canvasPosition(dragged);
-    await db.from("graph_nodes").insert({ title: "Added mid-drag", parent_id: null });
-    await expect(questBoxes()).toHaveCount(5, { timeout: 10_000 });
-    await page.waitForTimeout(500);
-    expect(await canvasPosition(dragged)).toEqual(held);
-    await page.mouse.up();
-    await expect.poll(() => savedX(ids.b)).not.toBeNull();
+    expect(await rects()).toEqual(before);
+    expect(await savedX(ids.a)).toBeNull();
   });
 
   await test.step("a priority that only reorders the quests keeps the view where it was", async () => {
@@ -155,41 +135,6 @@ test("quest layout", async () => {
     await expect.poll(order, { timeout: 10_000 }).not.toBe(before);
     await page.waitForTimeout(800);
     expect(await view()).toBe(panned);
-  });
-
-  await test.step("clicking away from Reset layout changes nothing", async () => {
-    await page.getByRole("button", { name: "Reset layout", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Reset quests?" })).toBeVisible();
-    await page.screenshot({ path: `${shots}/after-reset-options.png` });
-    await page.locator(".react-flow__pane").click({ position: { x: 5, y: 400 } });
-    await expect(page.getByRole("button", { name: "Reset layout", exact: true })).toBeVisible();
-    expect(await savedX(ids.a)).not.toBeNull();
-  });
-
-  await test.step("Reset quests leaves the steps inside boxes where they were", async () => {
-    await db.from("graph_nodes").update({ x: 16, y: 200 }).eq("id", ids.step);
-    await page.getByRole("button", { name: "Reset layout", exact: true }).click();
-    await page.getByRole("button", { name: "Reset quests?" }).click();
-    await expect.poll(() => savedX(ids.a)).toBeNull();
-    expect(await savedX(ids.step)).toBe(16);
-    expectNoOverlap(await rects());
-  });
-
-  await test.step("a step placed under the header stays clear of it when the title grows to more lines", async () => {
-    await db.from("graph_nodes").update({ x: 16, y: 10, changed_at: { x: new Date().toISOString(), y: new Date().toISOString() } }).eq("id", ids.step);
-    await db.from("graph_nodes").update({ title: "DDP Work: the survey, both presentations and the five-fold results", changed_at: { title: new Date().toISOString() } }).eq("id", ids.a);
-    const quest = page.locator(".react-flow__node-quest", { hasText: "five-fold" });
-    await expect(quest).toBeVisible({ timeout: 10_000 });
-    await rects();
-    const header = (await quest.locator("div.group.relative").first().boundingBox())!;
-    const card = (await page.locator(".react-flow__node-step", { hasText: "DDP one" }).boundingBox())!;
-    expect(card.y).toBeGreaterThanOrEqual(header.y + header.height - 1);
-  });
-
-  await test.step("the sub-option resets the steps too", async () => {
-    await page.getByRole("button", { name: "Reset layout", exact: true }).click();
-    await page.getByRole("button", { name: "Also steps in every box" }).click();
-    await expect.poll(() => savedX(ids.step)).toBeNull();
   });
 
   await test.step("a window that settles at a new size is fitted again, unless the view was moved", async () => {

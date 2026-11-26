@@ -55,8 +55,8 @@ const upNext = () => page.getByRole("region", { name: "Now" });
 const addInput = () => page.getByPlaceholder("Step name, Enter to add");
 const windowVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible());
 
-// Where a box or dot is once the layout has left it still for 600 ms: after a reload the layout
-// worker starts cold, so a shorter pause can come before it has placed anything. A box that never
+// Where a box or dot is once the layout has left it still for 600 ms: after a reload the graph's
+// code loads first, so a shorter pause can come before it has placed anything. A box that never
 // settles fails the step here rather than running on to the test's timeout.
 async function settledBox(handle: Locator) {
   const deadline = Date.now() + SETTLE_LIMIT_MS;
@@ -297,58 +297,25 @@ test("home graph", async () => {
     await expect(card("Deep Learning II")).toBeVisible();
   });
 
-  await test.step("desktop: dragging a quest sticks, and survives a reload", async () => {
+  await test.step("desktop: dragging a card moves nothing and saves nothing", async () => {
     await page.locator(".react-flow__pane").click({ position: { x: 5, y: 400 } }); // closes the Quests list over the canvas
     const quest = page.locator(".react-flow__node-quest").first();
+    const step = card("Added by an agent");
     const before = await settledBox(quest);
+    const where = async () => [await quest.evaluate((element) => element.style.transform), await step.evaluate((element) => element.style.transform)];
+    const held = await where();
     await page.mouse.move(before.x + 120, before.y + 50);
     await page.mouse.down();
     await page.mouse.move(before.x + 220, before.y + 130, { steps: 8 });
     await page.mouse.up();
-    await expect
-      .poll(async () => (await db.from("graph_nodes").select("x").eq("title", "Deep Learning II").single()).data?.x)
-      .not.toBeNull();
-    // The canvas position, not the screen one: a reload fits the view again
-    const dropped = await quest.evaluate((element) => element.style.transform);
-
-    await page.reload();
-    await expect(card("Deep Learning II")).toBeVisible();
-    // Cards exist before their layout lands, hidden until the first fit
-    await expect.poll(() => page.locator(".react-flow__node-quest").first().evaluate((element) => element.style.transform)).toBe(dropped);
-  });
-
-  await test.step("a quest's steps stay put until it is unlocked; its Reset layout leaves the quest in place", async () => {
-    const x = async (title: string) => (await db.from("graph_nodes").select("x").eq("title", title).single()).data?.x;
-    const dragStep = async () => {
-      const box = await settledBox(card("Added by an agent"));
-      await page.mouse.move(box.x + 60, box.y + box.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(box.x + 100, box.y + box.height / 2 + 40, { steps: 8 });
-      await page.mouse.up();
-    };
-
-    await dragStep();
-    await page.waitForTimeout(1000);
-    expect(await x("Added by an agent")).toBeNull();
-
-    await card("Deep Learning II").getByTitle(/^Unlock/).click();
-    await dragStep();
-    await expect.poll(() => x("Added by an agent")).not.toBeNull();
-
-    await card("Deep Learning II").getByTitle("Options").click();
-    await page.getByRole("button", { name: /Reset layout: arrange its steps/ }).click();
-    await expect.poll(() => x("Added by an agent")).toBeNull();
-    expect(await x("Deep Learning II")).not.toBeNull();
-    await card("Deep Learning II").getByTitle(/^Lock/).click();
-  });
-
-  await test.step("Reset layout asks first, then puts every box back to automatic placement", async () => {
-    const placed = async () => (await db.from("graph_nodes").select("id").not("x", "is", null)).data?.length;
-    expect(await placed()).toBeGreaterThan(0);
-    await page.getByRole("button", { name: "Reset layout" }).click();
-    expect(await placed()).toBeGreaterThan(0);
-    await page.getByRole("button", { name: "Also steps in every box" }).click();
-    await expect.poll(placed).toBe(0);
+    const box = await settledBox(step);
+    await page.mouse.move(box.x + 60, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 100, box.y + box.height / 2 + 40, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(600);
+    expect(await where()).toEqual(held);
+    expect((await db.from("graph_nodes").select("id").not("x", "is", null)).data?.length).toBe(0);
   });
 
   await test.step("alarms: a quick one, a recurring one with a challenge, switched off and on", async () => {

@@ -22,7 +22,6 @@ const node = (id: string, parentId: string | null, completedAt: string | null = 
   ownXp: completedAt ? PROGRESS_UNIT : 0,
   lastActive: "2026-10-20T00:00:00.000Z",
   stamps: {},
-  position: null,
 });
 // A two-pointer box with a nested box, one step already done and one shelved
 const nodes = [
@@ -87,7 +86,6 @@ test("offline, a step added or moved into a done box reopens it", () => {
   expect(added.nodes!.map(({ id, completedAt }) => [id, completedAt])).toEqual([["new", null], ["inner", null], ["box", null]]);
   const moved = previewChange(allDone, "moveNode", ["elsewhere", "inner"], AT);
   expect(moved.nodes!.map(({ id }) => id)).toEqual(["elsewhere", "inner", "box"]);
-  expect(moved.nodes![0].position).toBeNull();
 });
 
 test("offline, a link the server would refuse is refused at once: across boxes, or closing a loop", () => {

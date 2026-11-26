@@ -27,7 +27,6 @@ import type {
   Meal,
   MealSlot,
   NodePatch,
-  Placement,
   Recipe,
   Routine,
   DeadlinePatch,
@@ -73,7 +72,6 @@ const preview: Record<Mutation, Preview> = {
       priority: null,
       ownXp: 0,
       lastActive: at,
-      position: null,
       stamps: {},
     };
     return { nodes: [node, ...around] };
@@ -111,19 +109,10 @@ const preview: Record<Mutation, Preview> = {
     // An open step put into done boxes reopens them; a done one leaves them done
     const around = node.completedAt ? [] : reopened(snapshot, parentId);
     return {
-      nodes: [{ ...node, parentId, position: null, lastActive: at }, ...around],
+      nodes: [{ ...node, parentId, lastActive: at }, ...around],
       removedEdges: snapshot.edges.filter((edge) => edge.from === id || edge.to === id),
     };
   },
-  placeNodes: (snapshot, [places]) => ({
-    nodes: (places as Placement[]).flatMap(({ id, position }) => {
-      const node = snapshot.nodes.find((candidate) => candidate.id === id);
-      return node ? [{ ...node, position }] : [];
-    }),
-  }),
-  resetLayout: (snapshot, [ids]) => ({
-    nodes: snapshot.nodes.filter((node) => (ids as string[]).includes(node.id)).map((node) => ({ ...node, position: null })),
-  }),
   // The server's checks, so a link it would refuse never shows
   addEdge: (snapshot, [edge]) => {
     const { from, to } = edge as GraphEdge;

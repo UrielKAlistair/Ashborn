@@ -31,7 +31,6 @@ export type GraphNode = {
   priority: Priority | null; // null: none
   ownXp: number; // level-ups plus the completion credit
   lastActive: string; // when it was last made, ticked, levelled up or otherwise worked on; layout and looks don't count
-  position: Point | null; // where the user put it, relative to its box; null: laid out automatically
   stamps: Record<string, string>; // column name → when the server last changed it
 };
 
@@ -235,9 +234,6 @@ export type NodePatch = {
   done?: boolean;
 };
 
-// Where the user put a node on the desktop canvas
-export type Placement = { id: string; position: Point };
-
 // Everything the app and the agent server can ask of the data store. Reads return data; changes
 // return a Delta.
 export type AshbornApi = {
@@ -246,8 +242,6 @@ export type AshbornApi = {
   updateNode(id: string, patch: NodePatch): Promise<Delta>;
   deleteNode(id: string): Promise<Delta>;
   moveNode(id: string, parentId: string | null): Promise<Delta>; // drops the node's links
-  placeNodes(places: Placement[]): Promise<Delta>;
-  resetLayout(ids: string[]): Promise<Delta>; // back to automatic placement
   addEdge(edge: GraphEdge): Promise<Delta>;
   removeEdge(edge: GraphEdge): Promise<Delta>;
   levelUp(nodeId: string, id: string): Promise<Delta>; // ids made by the caller, so a resend counts once

@@ -1,8 +1,8 @@
 /**
- * Places the quests on the canvas: quests the user dragged stay where they are, and the rest fill
- * the region that lets the whole layout fit the screen largest.
+ * Places the quests on the canvas, filling the region that lets the whole layout fit the screen
+ * largest.
  *
- * Packing is greedy: each loose quest, in order, takes the topmost then leftmost free spot in a
+ * Packing is greedy: each quest, in order, takes the topmost then leftmost free spot in a
  * region of a given width. The desktop tries every width a row of the quests could need and keeps
  * the best fit (packQuests); the phone fixes the width to the screen and scrolls. The order given is
  * prerequisites first (prerequisitesFirst).
@@ -11,7 +11,6 @@ import type { GraphEdge, Point } from "./types";
 
 export type Size = { width: number; height: number };
 export type PackedQuest = { id: string; size: Size };
-export type PinnedQuest = { position: Point; size: Size };
 export type Canvas = { width: number; height: number; maxZoom: number }; // the room a fit has
 
 // Prerequisites before what they lead to, otherwise in the given order
@@ -35,24 +34,24 @@ export function prerequisitesFirst<T extends { id: string }>(quests: T[], edges:
 // region widths, the one kept shows the layout largest; among those tied (usually at maxZoom) it is
 // the one with more than one column, then the closest to the canvas's shape. Given a width instead
 // (the phone, read by scrolling down), the region is that wide, or as wide as the widest quest.
-export function packQuests(pinned: PinnedQuest[], loose: PackedQuest[], canvas: Canvas | number, gap: number): Record<string, Point> {
-  if (loose.length === 0) return {};
-  const widest = Math.max(...loose.map(({ size }) => size.width));
-  if (typeof canvas === "number") return packWithin(Math.max(widest, canvas), pinned, loose, gap);
+export function packQuests(quests: PackedQuest[], canvas: Canvas | number, gap: number): Record<string, Point> {
+  if (quests.length === 0) return {};
+  const widest = Math.max(...quests.map(({ size }) => size.width));
+  if (typeof canvas === "number") return packWithin(Math.max(widest, canvas), quests, gap);
 
   // Every width a row of the quests in order can need
   let row = -gap;
-  const regionWidths = loose.map(({ size }) => Math.max(widest, (row += size.width + gap)));
+  const regionWidths = quests.map(({ size }) => Math.max(widest, (row += size.width + gap)));
 
   const scored = regionWidths.map((regionWidth) => {
-    const positions = packWithin(regionWidth, pinned, loose, gap);
-    const rects = [...pinned, ...loose.map(({ id, size }) => ({ position: positions[id], size }))];
+    const positions = packWithin(regionWidth, quests, gap);
+    const rects = quests.map(({ id, size }) => ({ position: positions[id], size }));
     const width = Math.max(...rects.map((r) => r.position.x + r.size.width)) - Math.min(...rects.map((r) => r.position.x));
     const height = Math.max(...rects.map((r) => r.position.y + r.size.height)) - Math.min(...rects.map((r) => r.position.y));
     return {
       positions,
       zoom: Math.min(canvas.maxZoom, canvas.width / width, canvas.height / height),
-      columns: new Set(loose.map(({ id }) => positions[id].x)).size > 1,
+      columns: new Set(quests.map(({ id }) => positions[id].x)).size > 1,
       shapeError: Math.abs(Math.log((width / height) / (canvas.width / canvas.height))),
     };
   });
@@ -64,8 +63,8 @@ export function packQuests(pinned: PinnedQuest[], loose: PackedQuest[], canvas: 
 }
 
 // Each quest in turn takes the topmost, then leftmost, free spot in a region this wide
-function packWithin(regionWidth: number, pinned: PinnedQuest[], loose: PackedQuest[], gap: number): Record<string, Point> {
-  const taken = [...pinned];
+function packWithin(regionWidth: number, quests: PackedQuest[], gap: number): Record<string, Point> {
+  const taken: Array<{ position: Point; size: Size }> = [];
 
   const free = (x: number, y: number, size: Size) =>
     taken.every(
@@ -77,7 +76,7 @@ function packWithin(regionWidth: number, pinned: PinnedQuest[], loose: PackedQue
     );
 
   const positions: Record<string, Point> = {};
-  for (const { id, size } of loose) {
+  for (const { id, size } of quests) {
     // A topmost-leftmost free spot always touches the region's edge or another quest's far side
     const xs = [0, ...taken.map((other) => other.position.x + other.size.width + gap)].sort((a, b) => a - b);
     const ys = [0, ...taken.map((other) => other.position.y + other.size.height + gap)].sort((a, b) => a - b);

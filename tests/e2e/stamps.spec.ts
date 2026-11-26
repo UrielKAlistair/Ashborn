@@ -48,14 +48,6 @@ test("a move made earlier but sent later loses to the one made later, and keeps 
   expect(await links(step)).toEqual([{ from_id: step, to_id: other }]);
 });
 
-test("a placement made earlier but sent later loses to the one made later", async () => {
-  const id = crypto.randomUUID();
-  await deviceAt(hoursAgo(3)).createNode("Placed", null, id);
-  await deviceAt(hoursAgo(1)).placeNodes([{ id, position: { x: 100, y: 200 } }]);
-  await deviceAt(hoursAgo(2)).placeNodes([{ id, position: { x: 900, y: 900 } }]);
-  expect(await node(id)).toMatchObject({ x: 100, y: 200 });
-});
-
 test("a box's tick that lost to a later untick ticks nothing inside it", async () => {
   const [box, step] = [crypto.randomUUID(), crypto.randomUUID()];
   const setup = deviceAt(hoursAgo(3));

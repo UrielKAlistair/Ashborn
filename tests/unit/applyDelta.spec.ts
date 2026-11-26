@@ -20,12 +20,11 @@ const node = (id: string, overrides: Partial<GraphNode> = {}): GraphNode => ({
   ownXp: 0,
   lastActive: "2026-01-01T00:00:00.000Z",
   stamps: {},
-  position: null,
   size: null,
   ...overrides,
 });
 const snapshot: Snapshot = {
-  nodes: [node("a"), node("b", { position: { x: 10, y: 20 } })],
+  nodes: [node("a"), node("b", { title: "second" })],
   edges: [{ from: "a", to: "b" }],
   routines: [],
   routineChecks: [{ routineId: "r", date: "2026-10-20" }],
@@ -36,7 +35,7 @@ const snapshot: Snapshot = {
 };
 
 test("an echo equal to what is shown returns the snapshot itself", () => {
-  const echo = { nodes: [node("b", { position: { x: 10, y: 20 } })], edges: [{ from: "a", to: "b" }] };
+  const echo = { nodes: [node("b", { title: "second" })], edges: [{ from: "a", to: "b" }] };
   expect(applyDelta(snapshot, echo)).toBe(snapshot);
   expect(applyDelta(snapshot, { routineCheck: { routineId: "r", date: "2026-10-20", checked: true } })).toBe(snapshot);
   expect(applyDelta(snapshot, { kitchen: { ...emptyKitchen } })).toBe(snapshot);
@@ -75,12 +74,6 @@ test("a description is kept when the one arriving was stamped earlier", () => {
   const shown = node("a", { description: "newer", stamps: { description: "2026-11-03T00:00:05Z" } });
   const [merged] = applyDelta({ ...snapshot, nodes: [shown] }, { nodes: [node("a", { description: "older", priority: 2, stamps: { description: "2026-11-03T00:00:02Z", priority: "2026-11-03T00:00:03Z" } })] }).nodes;
   expect(merged).toMatchObject({ description: "newer", priority: 2, stamps: { description: "2026-11-03T00:00:05Z" } });
-});
-
-test("a position is one field, across its two columns", () => {
-  const shown = node("a", { position: { x: 1, y: 2 }, stamps: { x: "2026-11-03T00:00:05Z", y: "2026-11-03T00:00:05Z" } });
-  const [merged] = applyDelta({ ...snapshot, nodes: [shown] }, { nodes: [node("a", { position: { x: 9, y: 9 }, stamps: { x: "2026-11-03T00:00:06Z", y: "2026-11-03T00:00:01Z" } })] }).nodes;
-  expect(merged.position).toEqual({ x: 1, y: 2 });
 });
 
 test("equal stamps are one write, so what arrived stands; a missing stamp is oldest", () => {

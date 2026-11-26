@@ -34,7 +34,6 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@supabase/supabase-js": "^2.118.0",
     "@xyflow/react": "^12.12.0",
-    "elkjs": "^0.11.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zod": "^4.6.7"

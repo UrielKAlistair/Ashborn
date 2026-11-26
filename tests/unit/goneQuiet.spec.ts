@@ -21,7 +21,6 @@ const node = (id: string, parentId: string | null, lastActive: string, extra: Pa
   ownXp: 0,
   lastActive,
   stamps: {},
-  position: null,
   ...extra,
 });
 

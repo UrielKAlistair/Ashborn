@@ -3,15 +3,15 @@
  *
  * Input: the quests shown, the steps each box shows, and their links. Output: a Box per card (its
  * position relative to its parent box, its size and its title row's height), from layoutTree.
- * Inside a box, steps the user placed keep their place and ELK lays out the rest, prerequisites
- * first; a box is as big as its contents. Quests are then packed on the canvas (shared/questPacking).
+ * Inside a box, the steps are laid out in layers, prerequisites first (shared/layeredLayout); a box
+ * is as big as its contents. Quests are then packed on the canvas
+ * (shared/questPacking).
  * Sizes come from the titles as the browser wraps them (titleLines.ts), so the constants here and the
  * cards' classes (graphCards.tsx) must agree. The phone's camera, at the end, frames this layout.
  */
-import ELK, { type ElkNode } from "elkjs/lib/elk-api.js";
-import elkWorkerUrl from "elkjs/lib/elk-worker.min.js?url";
 import { type XYPosition } from "@xyflow/react";
 import { type GraphModel } from "../../shared/graphModel";
+import { layeredLayout } from "../../shared/layeredLayout";
 import { packQuests, prerequisitesFirst, type Canvas, type Size } from "../../shared/questPacking";
 import { type GraphEdge, type GraphNode } from "../../shared/types";
 import { labelWidth, lineHeight, measureTitles, titleLines, type TitleText } from "./titleLines";
@@ -41,14 +41,6 @@ export const canHover = window.matchMedia("(hover: hover)").matches;
 const questGap = 40;
 export const zoomRange = { min: 0.15, max: 2 };
 
-// ELK (1.6 MB) is loaded and runs in a worker, so neither holds the main thread
-const elk = new ELK({ workerUrl: elkWorkerUrl });
-
-// Each box's layout is kept by its input (its nodes in order, their sizes, its links), so a
-// relayout sends the worker only the boxes that changed. Oldest dropped first.
-const levelLayouts = new Map<string, ElkNode>();
-const maxLevelLayouts = 500;
-
 // position is relative to the parent box; header is the height of its title row
 export type Box = { position: XYPosition; size: Size; header: number };
 
@@ -57,13 +49,11 @@ type Measured = Size & { header: number };
 // What sits beside a card's title, which sets the room the title has
 export type CardShape = { phone: boolean; hasSteps: (id: string) => boolean; collapsed: (id: string) => boolean; folded: (id: string) => boolean };
 
-// Lays out every rendered level. Inside a box, steps the user has placed keep their place and
-// the rest are laid out automatically (prerequisites to the left) below them. A box is as big as
-// its content needs. Quests are packed on the canvas around the ones the user placed.
-// The phone has a layout of its own: nothing placed is read, prerequisites run top to bottom, and
-// the quests fill rows as wide as the screen at the phone's zoom, in the order given (one column
-// upright, more on its side).
-export async function layoutTree(
+// Lays out every rendered level. Inside a box, the steps are laid out with prerequisites to the left;
+// a box is as big as its content needs. Quests are packed to the canvas's shape.
+// On the phone prerequisites run top to bottom, and the quests fill rows as wide as the screen at
+// the phone's zoom, in the order given (one column upright, more on its side).
+export function layoutTree(
   quests: GraphNode[],
   edges: GraphEdge[],
   stepsOf: (id: string) => GraphNode[],
@@ -72,7 +62,6 @@ export async function layoutTree(
   shape: CardShape,
 ) {
   const placements: Record<string, Box> = {};
-  const placedAt = (node: GraphNode) => (shape.phone ? null : node.position);
   const direction = shape.phone ? "DOWN" : "RIGHT";
   const headerOf = (node: GraphNode, depth: number, width: number) => headerHeight(node, depth, width, shape);
   // Every title at its card's narrowest, in one pass; only a box wider than that is measured again
@@ -85,73 +74,28 @@ export async function layoutTree(
   quests.forEach((quest) => collect(quest, 0));
   measureTitles(titles);
 
-  const layoutSteps = async (nodes: GraphNode[], sizes: Size[]): Promise<ElkNode> => {
+  const layoutSteps = (nodes: GraphNode[], sizes: Size[]): Record<string, XYPosition> => {
     const ids = new Set(nodes.map((node) => node.id));
     const links = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
-    const key = JSON.stringify([direction, nodes.map((node, i) => [node.id, sizes[i].width, sizes[i].height]), links.map((edge) => [edge.from, edge.to])]);
-    const known = levelLayouts.get(key);
-    if (known) return known;
-    const result = await elk.layout({
-      id: "level",
-      layoutOptions: {
-        "elk.algorithm": "layered",
-        "elk.direction": direction,
-        "elk.padding": "[top=0,left=0,bottom=0,right=0]",
-        "elk.spacing.nodeNode": "12",
-        // Room for a link's arrow between layers: across on the desktop, down on the phone
-        "elk.layered.spacing.nodeNodeBetweenLayers": shape.phone ? "28" : "48",
-        "elk.spacing.componentComponent": "12",
-        "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-        // Otherwise an unlinked step goes above the chains, whatever its priority
-        "elk.layered.considerModelOrder.components": "MODEL_ORDER",
-      },
-      children: nodes.map((node, i) => ({ id: node.id, width: sizes[i].width, height: sizes[i].height })),
-      edges: links.map((edge, i) => ({ id: `e${i}`, sources: [edge.from], targets: [edge.to] })),
-    });
-    levelLayouts.set(key, result);
-    if (levelLayouts.size > maxLevelLayouts) levelLayouts.delete(levelLayouts.keys().next().value!);
-    return result;
+    // Room for a link's arrow between layers: across on the desktop, down on the phone
+    return layeredLayout(nodes.map((node, i) => ({ id: node.id, size: sizes[i] })), links, direction, { step: 12, layer: shape.phone ? 28 : 48, component: 12 });
   };
 
   // Places `nodes` in a box whose content starts at `origin`; returns the content's far corner
-  const arrange = async (nodes: GraphNode[], sizes: Measured[], origin: XYPosition) => {
+  const arrange = (nodes: GraphNode[], sizes: Measured[], origin: XYPosition) => {
+    const positions = layoutSteps(nodes, sizes);
     let right = origin.x;
     let bottom = origin.y;
-    const extend = (position: XYPosition, size: Size) => {
-      right = Math.max(right, position.x + size.width);
-      bottom = Math.max(bottom, position.y + size.height);
-    };
-
-    // Steps placed by hand keep their arrangement, moved down together when the header has grown over
-    // them since (a longer title wraps to more lines)
-    const tops = nodes.flatMap((node) => (placedAt(node) ? [placedAt(node)!.y] : []));
-    const lift = tops.length > 0 ? Math.max(0, origin.y - Math.min(...tops)) : 0;
     nodes.forEach((node, i) => {
-      const at = placedAt(node);
-      if (!at) return;
-      const position = { x: at.x, y: at.y + lift };
+      const position = { x: origin.x + positions[node.id].x, y: origin.y + positions[node.id].y };
       placements[node.id] = placed(position, sizes[i]);
-      extend(position, sizes[i]);
+      right = Math.max(right, position.x + sizes[i].width);
+      bottom = Math.max(bottom, position.y + sizes[i].height);
     });
-
-    const loose = nodes.flatMap((node, i) => (placedAt(node) ? [] : [{ node, size: sizes[i] }]));
-    if (loose.length > 0) {
-      const result = await layoutSteps(
-        loose.map(({ node }) => node),
-        loose.map(({ size }) => size),
-      );
-      const top = bottom > origin.y ? bottom + 12 : origin.y;
-      (result.children ?? []).forEach((child) => {
-        const { size } = loose.find(({ node }) => node.id === child.id)!;
-        const position = { x: origin.x + (child.x ?? 0), y: top + (child.y ?? 0) };
-        placements[child.id] = placed(position, size);
-        extend(position, size);
-      });
-    }
     return { right, bottom };
   };
 
-  const measure = async (node: GraphNode, depth: number): Promise<Measured> => {
+  const measure = (node: GraphNode, depth: number): Measured => {
     const base = depth === 0 ? questHeader : stepRow;
     const addRow = node.id === addingTo ? addRowHeight : 0;
     const steps = stepsOf(node.id);
@@ -162,28 +106,25 @@ export async function layoutTree(
 
     // A box is as wide as its steps need, and its title wraps to that width; the steps are placed
     // again if the header then takes a different number of lines
-    const sizes = await Promise.all(steps.map((step) => measure(step, depth + 1)));
+    const sizes = steps.map((step) => measure(step, depth + 1));
     const first = headerOf(node, depth, base.width);
-    const arranged = await arrange(steps, sizes, { x: padding, y: first });
+    const arranged = arrange(steps, sizes, { x: padding, y: first });
     const width = Math.max(base.width, arranged.right + padding);
     const header = headerOf(node, depth, width);
-    const { bottom } = header === first ? arranged : await arrange(steps, sizes, { x: padding, y: header });
+    const { bottom } = header === first ? arranged : arrange(steps, sizes, { x: padding, y: header });
     return { width, height: bottom + (addRow || padding / 2), header };
   };
 
-  const sizes = await Promise.all(quests.map((quest) => measure(quest, 0)));
+  const sizes = quests.map((quest) => measure(quest, 0));
+  const sized = quests.map((quest, i) => ({ id: quest.id, size: sizes[i] }));
   if (typeof canvas === "number") {
     const row = canvas / phoneZoom(Math.max(...sizes.map((size) => size.width)), canvas);
-    const packed = packQuests([], quests.map((quest, i) => ({ id: quest.id, size: sizes[i] })), row, questGap);
+    const packed = packQuests(sized, row, questGap);
     quests.forEach((quest, i) => (placements[quest.id] = placed(packed[quest.id], sizes[i])));
     return placements;
   }
-  const sized = quests.map((quest, i) => ({ id: quest.id, position: quest.position, size: sizes[i] }));
-  const pinned = sized.flatMap(({ id, position, size }) => (position ? [{ id, position, size }] : []));
-  pinned.forEach(({ id, position, size }) => (placements[id] = placed(position, size)));
-  const loose = prerequisitesFirst(sized.filter(({ position }) => !position), edges);
-  const packed = packQuests(pinned, loose, canvas, questGap);
-  loose.forEach(({ id, size }) => (placements[id] = placed(packed[id], size)));
+  const packed = packQuests(prerequisitesFirst(sized, edges), canvas, questGap);
+  quests.forEach((quest, i) => (placements[quest.id] = placed(packed[quest.id], sizes[i])));
 
   return placements;
 }
@@ -205,7 +146,7 @@ function titleText(node: GraphNode, depth: number, width: number, shape: CardSha
     const fixed = 32 + 14 + 8;
     // The phone's menu after a gap-2; on the desktop the +1 after its gap-2, and without hover the
     // icon buttons after another gap-2, with gap-0.5 between them (with hover they float over the title)
-    const icons = !canHover ? 8 + (shape.hasSteps(node.id) ? 4 : 3) * (iconSize + 2) - 2 : 0;
+    const icons = !canHover ? 8 + (shape.hasSteps(node.id) ? 3 : 2) * (iconSize + 2) - 2 : 0;
     const buttons = shape.phone ? 8 + phoneMenuWidth : 8 + labelWidth(plusOneButton, "+1") + icons;
     return { text: node.title, className: questTitleType, width: width - fixed - buttons };
   }

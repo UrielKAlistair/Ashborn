@@ -43,7 +43,6 @@ export type CardData = {
   showsDone: boolean; // a quest opened today: those steps are shown
   shelvedSteps: number; // a quest: its shelved steps (not counting any inside one), off the graph unless shown
   showsShelved: boolean; // a quest showing its shelved steps
-  locked: boolean; // the quest it sits in, or is, keeps its steps where they are
   adding: boolean;
   menuOpen: boolean;
   look: PriorityLook;
@@ -61,10 +60,8 @@ export type CardActions = {
   open: (id: string) => void; // a folded box, or a quest's earlier done steps, until the next day starts
   close: (id: string) => void;
   toggleShelved: (id: string) => void; // shows or hides a quest's shelved steps, until the app reloads
-  toggleLocked: (id: string) => void;
   setAdding: (id: string, open: boolean) => void;
   setMenu: (id: string, open: boolean) => void;
-  subtreeIds: (id: string) => string[]; // the node and every step inside it
 };
 
 function QuestCard({ data }: NodeProps<Node<CardData>>) {
@@ -229,10 +226,8 @@ function boundActions({ node, actions }: CardData) {
   return {
     act: actions.act,
     onToggleCollapsed: () => actions.toggleCollapsed(node.id),
-    onToggleLocked: () => actions.toggleLocked(node.id),
     onAdding: (open: boolean) => actions.setAdding(node.id, open),
     onMenu: (open: boolean) => actions.setMenu(node.id, open),
-    subtreeIds: () => actions.subtreeIds(node.id),
   };
 }
 
@@ -295,11 +290,11 @@ function Handles({ height, phone }: { height?: number; phone: boolean }) {
   );
 }
 
-// The top-right buttons of every box: hide/show its steps, add a step inside, then the lock and ⋯ on
-// a quest, priority, shelve and delete on a step
+// The top-right buttons of every box: hide/show its steps, add a step inside, then ⋯ on a quest,
+// priority, shelve and delete on a step
 function BoxButtons({ data }: { data: CardData }) {
-  const { depth, hasSteps, collapsed, locked, adding } = data;
-  const { onToggleCollapsed, onToggleLocked, onAdding } = boundActions(data);
+  const { depth, hasSteps, collapsed, adding } = data;
+  const { onToggleCollapsed, onAdding } = boundActions(data);
   if (data.phone) return <PhoneMenu data={data} />;
 
   // The buttons float over the end of the title on hover or focus, so the title has the card's
@@ -341,20 +336,7 @@ function BoxButtons({ data }: { data: CardData }) {
         <PlusIcon />
       </button>
       {depth === 0 ? (
-        <>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleLocked();
-            }}
-            title={locked ? "Unlock: let its steps be moved" : "Lock: keep its steps where they are"}
-            className={`nodrag ${iconButton} hover:bg-ink/8 ${locked ? "text-muted hover:text-ink/80" : "text-ember"}`}
-          >
-            <LockIcon open={!locked} />
-          </button>
-          <MenuButton data={data} />
-        </>
+        <MenuButton data={data} />
       ) : (
         <>
           <PriorityButton data={data} />
@@ -509,15 +491,6 @@ function EyeIcon({ crossed }: { crossed: boolean }) {
   );
 }
 
-function LockIcon({ open }: { open: boolean }) {
-  return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
-      <rect x="3.5" y="7.5" width="9" height="6.5" rx="1.2" />
-      <path d={open ? "M5.5 7.5 V5 A2.5 2.5 0 0 1 10.3 4" : "M5.5 7.5 V5 A2.5 2.5 0 0 1 10.5 5 V7.5"} />
-    </svg>
-  );
-}
-
 function PlusIcon() {
   return (
     <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -568,7 +541,7 @@ function AddRow({ data }: { data: CardData }) {
 // A quest's ⋯ button and its small menu: its priority, the stats it trains, layout, shelve, delete
 function MenuButton({ data }: { data: CardData }) {
   const { node, menuOpen } = data;
-  const { act, onMenu, subtreeIds } = boundActions(data);
+  const { act, onMenu } = boundActions(data);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // The menu opens where it fits whole in the canvas, clear of the toolbar: below the card, above
   // it, or else beside it, on the side with more room and running towards the canvas's middle
@@ -608,18 +581,6 @@ function MenuButton({ data }: { data: CardData }) {
           </div>
           <DescriptionEditor node={node} act={act} rows={3} />
           <StatWeightsEditor node={node} act={act} />
-
-          <button
-            type="button"
-            onClick={() => {
-              // The quest itself stays where it is; the toolbar's Reset layout moves quests
-              void act("resetLayout", subtreeIds().slice(1));
-              onMenu(false);
-            }}
-            className="w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-ink/70 hover:bg-ink/6"
-          >
-            Reset layout: arrange its steps automatically
-          </button>
 
           <div className="flex flex-wrap items-center gap-1.5 border-t border-ink/8 pt-3">
             <button

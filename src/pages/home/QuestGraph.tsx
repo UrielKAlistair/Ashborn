@@ -1,5 +1,5 @@
 import { GraphScrollbar } from "./GraphScrollbar";
-import { Controls, MarkerType, Panel, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Connection, type Edge, type Node, type XYPosition } from "@xyflow/react";
+import { Controls, MarkerType, Panel, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Connection, type Edge, type Node } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HexMark } from "../../components/HexTile";
 import { useToday } from "../../lib/useToday";
@@ -26,13 +26,12 @@ import { CardActions, CardData, nodeTypes } from "./graphCards";
  * folded away (finished, unless opened today), and in each box its steps, less those collapsed,
  * folded, shelved or finished on an earlier day (unless asked for); that pass is drawnGraph, further
  * down. It lays them out (graphLayout.ts) when that structure changes, fits the view when the set of
- * quests changes (and after a resize or a layout reset, unless the user has moved the view), and
- * turns the result into React Flow nodes and edges, kept
- * as the same objects while unchanged so a drag redraws one card. The cards themselves are in
- * graphCards.tsx. Around the canvas: the toolbar (+ New quest, the Quests panel, Reset layout), a
- * chosen link's Remove panel, and the empty states. Drags save placements; dragging between dots adds
- * a link, or removes one dragged back along.
- * What is collapsed, unlocked or opened today is kept on this device.
+ * quests changes (and after a resize, unless the user has moved the view), and turns the result
+ * into React Flow nodes and edges, kept as the same objects while unchanged so an edit redraws only
+ * the cards it touched. The cards themselves are in graphCards.tsx. Around the canvas: the toolbar
+ * (+ New quest, the Quests panel), a chosen link's Remove panel, and the empty states. Cards are
+ * never dragged; dragging between dots adds a link, or removes one dragged back along.
+ * What is collapsed or opened today is kept on this device.
  */
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -42,9 +41,6 @@ const linkOpen = "color-mix(in oklab, var(--color-ink) 34%, transparent)";
 const linkDone = "color-mix(in oklab, var(--color-ink) 15%, transparent)";
 
 const collapsedStorageKey = "ashborn-collapsed";
-
-// Quests are locked unless the user unlocked them, so only the unlocked ones are kept
-const unlockedStorageKey = "ashborn-unlocked";
 
 // Finished boxes the user opened, with the day they did; open until the next day starts
 const openedStorageKey = "ashborn-opened";
@@ -113,12 +109,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     [phone, fitView],
   );
   const [placements, setPlacements] = useState<Record<string, Box>>({});
-  // Positions mid-drag, shown until the layout includes them; a layout that lands mid-drag keeps
-  // the dragged node's
-  const [moving, setMoving] = useState<Record<string, XYPosition>>({});
-  const dragging = useRef<string | null>(null);
   const [collapsed, setCollapsed] = useState(() => loadIds(collapsedStorageKey));
-  const [unlocked, setUnlocked] = useState(() => loadIds(unlockedStorageKey));
   const [opened, setOpened] = useState(loadOpened);
   const [showingShelved, setShowingShelved] = useState<ReadonlySet<string>>(new Set());
   const today = useToday();
@@ -148,7 +139,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
   // Titles are measured again once the fonts have loaded
   const [fontsReady, setFontsReady] = useState(false);
   useEffect(() => void fontsLoaded.then(() => setFontsReady(true)), []);
-  // Worked out again only when the graph or what is open changes, not per drag move
+  // Worked out again only when the graph or what is open changes
   const { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone, shelvedSteps } = useMemo(
     () => drawnGraph(model, snapshot.edges, priorities, view, { addingTo, fontsReady, phone }),
     [model, snapshot.edges, collapsed, opened, showingShelved, today, addingTo, priorities, fontsReady, phone],
@@ -206,23 +197,10 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
 
   useEffect(() => {
     if (!paneMeasured) return;
-    let cancelled = false;
-
     const canvas = { width: paneWidth / (1 + fitOptions.padding), height: paneHeight / (1 + fitOptions.padding), maxZoom: fitOptions.maxZoom };
     const shape: CardShape = { phone, hasSteps: (id) => model.children.has(id), collapsed: (id) => collapsed.has(id), folded };
-    void layoutTree(shown, renderedEdges, (id) => stepsOf.get(id) ?? [], addingTo, phone ? phoneRowWidth : canvas, shape).then((next) => {
-      if (cancelled) return;
-      setPlacements(next);
-      setLaidOutFor(layoutKey);
-      setMoving((current) => {
-        const held = dragging.current;
-        return held && current[held] ? { [held]: current[held] } : {};
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    setPlacements(layoutTree(shown, renderedEdges, (id) => stepsOf.get(id) ?? [], addingTo, phone ? phoneRowWidth : canvas, shape));
+    setLaidOutFor(layoutKey);
   }, [structureKey, paneMeasured, phone && phoneRowWidth, refits]);
 
   // Fit the view when the set of quests shown changes, not on every step edit, and only once
@@ -305,20 +283,12 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         if (!next.delete(id)) next.add(id);
         return next;
       }),
-    toggleLocked: (id) =>
-      setUnlocked((current) => {
-        const next = new Set(current);
-        if (!next.delete(id)) next.add(id);
-        saveIds(unlockedStorageKey, next);
-        return next;
-      }),
     // Adding to a collapsed box opens it, so the new steps are seen
     setAdding: (id, open) => {
       if (open) setCollapsedFor(id, false);
       setAddingTo(open ? id : null);
     },
     setMenu: (id, open) => setMenuFor(open ? id : null),
-    subtreeIds: (id) => subtreeOf(model, id),
   };
   const actions = useMemo<CardActions>(
     () => ({
@@ -327,25 +297,23 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       open: (id) => latest.current.open(id),
       close: (id) => latest.current.close(id),
       toggleShelved: (id) => latest.current.toggleShelved(id),
-      toggleLocked: (id) => latest.current.toggleLocked(id),
       setAdding: (id, open) => latest.current.setAdding(id, open),
       setMenu: (id, open) => latest.current.setMenu(id, open),
-      subtreeIds: (id) => latest.current.subtreeIds(id),
     }),
     [],
   );
 
-  // Each node keeps its previous object while its position, size and data are unchanged, so a
-  // drag hands React Flow one new node per move, and an edit only the nodes it touched
+  // Each node keeps its previous object while its position, size and data are unchanged, so an edit
+  // hands React Flow only the nodes it touched
   const built = useRef(new Map<string, Node<CardData>>());
   const nodes = useMemo<Node<CardData>[]>(() => {
     const previous = built.current;
     built.current = new Map();
-    return rendered.map(({ node, depth, questId }) => {
+    return rendered.map(({ node, depth }) => {
       const placement = placements[node.id];
       const base = depth === 0 ? questHeader : stepRow;
       const size = placement?.size ?? base;
-      const position = moving[node.id] ?? placement?.position ?? { x: 0, y: 0 };
+      const position = placement?.position ?? { x: 0, y: 0 };
       const data: CardData = {
         node,
         depth,
@@ -359,7 +327,6 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
         showsDone: depth === 0 && showsDone(view, node.id),
         shelvedSteps: depth === 0 ? (shelvedSteps.get(node.id) ?? 0) : 0,
         showsShelved: depth === 0 && showingShelved.has(node.id),
-        locked: !unlocked.has(questId),
         adding: addingTo === node.id,
         menuOpen: menuFor === node.id,
         look: depth === 0 ? priorities.best.get(node.id) : priorities.marked.get(node.id),
@@ -383,8 +350,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
             parentId: node.parentId ?? undefined,
             extent: node.parentId ? ("parent" as const) : undefined,
             position,
-            // A quest box moves even when locked; its steps do not
-            draggable: !phone && (depth === 0 || !data.locked),
+            draggable: false,
             selectable: false,
             deletable: false,
             zIndex: depth * 10,
@@ -400,7 +366,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       built.current.set(node.id, next);
       return next;
     });
-  }, [rendered, model, placements, moving, collapsed, opened, today, unlocked, addingTo, menuFor, priorities, phone, actions]);
+  }, [rendered, model, placements, collapsed, opened, today, addingTo, menuFor, priorities, phone, actions]);
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -429,15 +395,14 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
     [renderedEdges, depthOf, model, selectedEdge, priorities],
   );
 
-  // Each shown quest claims the hex cells around it, in its colour, following it as it is
-  // dragged. The list stays the same object until a quest moves or changes colour, so moving a
-  // step or editing one does not recolour the grid.
+  // Each shown quest claims the hex cells around it, in its colour. The list stays the same object
+  // until a quest moves or changes colour, so editing a step does not recolour the grid.
   const shownTerritories = useRef<TerritoryQuest[]>([]);
   const territories = useMemo(() => {
     const next = shown.flatMap((quest, z) => {
       const placement = placements[quest.id];
       if (!placement) return [];
-      const rect = { ...placement.position, ...placement.size, ...moving[quest.id] };
+      const rect = { ...placement.position, ...placement.size };
       return [{ id: quest.id, rect, color: priorities.best.get(quest.id) ?? ("none" as const), z }];
     });
     const previous = shownTerritories.current;
@@ -445,26 +410,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       b !== undefined && a.id === b.id && a.color === b.color && a.z === b.z && (["x", "y", "width", "height"] as const).every((key) => a.rect[key] === b.rect[key]);
     if (next.length !== previous.length || !next.every((quest, i) => same(quest, previous[i]))) shownTerritories.current = next;
     return shownTerritories.current;
-  }, [shown, placements, moving]);
-
-  // Drags show at once; the end of one saves it. A step the user places pins its siblings where
-  // they are, so the ones still placed automatically do not jump; a quest pins only itself, and the
-  // others pack around it. (React Flow's own change stream is left alone: it also carries the
-  // measurements links attach by.)
-  const follow = (id: string, position: XYPosition) => setMoving((current) => ({ ...current, [id]: position }));
-
-  const place = (node: GraphNode, position: XYPosition) => {
-    const siblings = (node.parentId ? (model.children.get(node.parentId) ?? []) : []).filter(
-      (sibling) => sibling.id !== node.id && !sibling.position && placements[sibling.id],
-    );
-    void act("placeNodes", [
-      { id: node.id, position },
-      ...siblings.map((sibling) => ({ id: sibling.id, position: placements[sibling.id].position })),
-    ]).then((saved) => {
-      // Refused, no layout follows to take the drop's position back: the card returns to its place
-      if (!saved) setMoving(({ [node.id]: _dropped, ...rest }) => rest);
-    });
-  };
+  }, [shown, placements]);
 
   // Dragging back along an existing link removes it: from its head's incoming dot to its tail,
   // or from its head's outgoing dot to its tail's incoming one. React Flow reports a drag begun
@@ -476,16 +422,6 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       : snapshot.edges.find((edge) => edge.from === target && edge.to === source);
     if (existing) void act("removeEdge", existing);
     else void act("addEdge", { from: source, to: target });
-  };
-
-  // Puts the quests (and with `alsoSteps`, the steps) the user placed back to automatic placement
-  const resetLayout = (alsoSteps: boolean) => {
-    const placed = snapshot.nodes.filter((node) => node.position && (alsoSteps || !node.parentId)).map((node) => node.id);
-    if (placed.length === 0) return;
-    // Fit again once the automatic layout lands (only when there is one to land, or a later edit would
-    // move the view)
-    fittedFor.current = null;
-    void act("resetLayout", placed);
   };
 
   return (
@@ -521,8 +457,7 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
       // On the phone the fingers pan and pinch through usePhonePanZoom
       panOnDrag={!phone}
       zoomOnPinch={!phone}
-      nodesDraggable={!phone}
-      nodeDragThreshold={4}
+      nodesDraggable={false}
       // Only where there is hover: a tap's emulated mouseenter would dim the others until the next tap elsewhere
       onNodeMouseEnter={
         canHover
@@ -541,13 +476,6 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
           : undefined
       }
       nodesConnectable={!phone}
-      onNodeDragStart={(_event, dragged) => (dragging.current = dragged.id)}
-      onNodeDrag={(_event, dragged) => follow(dragged.id, dragged.position)}
-      onNodeDragStop={(_event, dragged) => {
-        dragging.current = null;
-        const node = model.byId.get(dragged.id);
-        if (node) place(node, dragged.position);
-      }}
       zoomOnDoubleClick={false}
       deleteKeyCode={null}
       minZoom={zoomRange.min}
@@ -579,9 +507,6 @@ function GraphCanvas({ snapshot, model, act, phone }: QuestGraphProps) {
             >
               Quests <span className="ml-1 font-mono text-muted tabular-nums">{shown.length}/{quests.length}</span>
             </button>
-            {phone ? null : (
-              <ResetLayoutButton onReset={resetLayout} />
-            )}
           </div>
 
           {questsOpen ? <QuestsPanel quests={quests} completed={completed} archived={archived} act={act} onReopen={(id) => actions.open(id)} /> : null}
@@ -696,46 +621,13 @@ function drawnGraph(
   const renderedEdges = edges.filter((edge) => depthOf.has(edge.from) && depthOf.has(edge.to));
   const structureKey = JSON.stringify([
     // Collapsed and folded too: they set a title's weight and wrap, even when no step shows either way
-    rendered.map(({ node }) => [node.id, node.position, node.title, model.children.has(node.id), view.collapsed.has(node.id), isFolded(model, view, node.id)]),
+    rendered.map(({ node }) => [node.id, node.title, model.children.has(node.id), view.collapsed.has(node.id), isFolded(model, view, node.id)]),
     renderedEdges.map((edge) => [edge.from, edge.to]),
     addingTo,
     fontsReady,
     phone,
   ]);
   return { shown, rendered, stepsOf, depthOf, renderedEdges, structureKey, earlierDone, shelvedSteps };
-}
-
-// Puts nodes back to automatic placement. The first click offers the two resets (quests only, or
-// steps too); moving focus away takes them back.
-function ResetLayoutButton({ onReset }: { onReset: (alsoSteps: boolean) => void }) {
-  const [confirming, setConfirming] = useState(false);
-  const look = "rounded-lg border bg-panel px-3 py-1.5 text-[12.5px] font-medium";
-  const reset = (alsoSteps: boolean) => {
-    onReset(alsoSteps);
-    setConfirming(false);
-  };
-  if (!confirming) {
-    return (
-      <button type="button" onClick={() => setConfirming(true)} className={`${look} border-ink/10 text-ink/70 hover:border-ink/25 hover:text-ink`}>
-        Reset layout
-      </button>
-    );
-  }
-  return (
-    <div
-      className="flex items-center gap-2"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setConfirming(false);
-      }}
-    >
-      <button type="button" autoFocus onClick={() => reset(false)} className={`${look} border-red-400/40 text-red-200`}>
-        Reset quests?
-      </button>
-      <button type="button" onClick={() => reset(true)} className={`${look} border-red-400/20 text-red-200/70 hover:text-red-200`}>
-        Also steps in every box
-      </button>
-    </div>
-  );
 }
 
 // The Quests panel: a switch per quest for whether the graph shows it (off is shelved), then the
@@ -818,7 +710,7 @@ function saveOpened(opened: Record<string, ISODate>) {
   writeStored(openedStorageKey, opened);
 }
 
-// A set of box ids kept between sessions: the boxes whose steps are hidden, the unlocked quests
+// A set of box ids kept between sessions: the boxes whose steps are hidden
 function loadIds(storageKey: string): Set<string> {
   return new Set(readStored<string[]>(storageKey, []));
 }

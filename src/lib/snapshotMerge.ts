@@ -51,7 +51,6 @@ const STAMPED_FIELDS = [
   ["shelved", ["shelved"]],
   ["priority", ["priority"]],
   ["parentId", ["parent_id"]],
-  ["position", ["x", "y"]],
 ] as const;
 
 // A node as it arrived, except for fields where what is shown was changed later on the server: changes
