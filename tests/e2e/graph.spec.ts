@@ -364,12 +364,12 @@ test("home graph", async () => {
     await page.getByRole("button", { name: "Repeating ›" }).click();
     await expect(page.getByRole("group", { name: "Alarm", exact: true })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "New repeating alarm" }).click();
-    const dialog = page.getByRole("dialog", { name: "New repeating alarm" });
+    await page.getByRole("button", { name: "New repeating" }).click();
+    const dialog = page.getByRole("dialog", { name: "New repeating" });
     await dialog.getByLabel("Time", { exact: true }).fill("06:00");
     await dialog.getByPlaceholder("Label (optional)").fill("Wake up");
     for (const day of ["Mon", "Tue"]) await dialog.getByRole("button", { name: day, exact: true }).click();
-    await dialog.locator("select").selectOption("situps");
+    await dialog.getByRole("radio", { name: "Sit-ups" }).click();
     await dialog.getByRole("button", { name: /^Set/ }).click();
     const wakeRow = page.getByRole("group", { name: "Wake up", exact: true });
     await expect(wakeRow.getByLabel("Mon Tue", { exact: true })).toBeVisible();
@@ -381,6 +381,16 @@ test("home graph", async () => {
     // The switch shows the change before the server has it
     const saved = async () => (await db.from("alarms").select("enabled, time, weekdays, kind").eq("label", "Wake up").single()).data;
     await expect.poll(saved).toEqual({ enabled: false, time: "06:00:00", weekdays: ["Mon", "Tue"], kind: "situps" });
+
+    // The same + adds a repeating event, on the weekdays picked; it is listed beside the alarms
+    await page.getByRole("button", { name: "New repeating" }).click();
+    await dialog.getByRole("tab", { name: "Event" }).click();
+    await dialog.getByLabel("Event", { exact: true }).fill("Lecture");
+    await expect(dialog.getByRole("button", { name: "Add" })).toBeDisabled();
+    await dialog.getByRole("button", { name: "Repeats on Wed" }).click();
+    await dialog.getByRole("button", { name: "Add" }).click();
+    await expect(page.getByText("Lecture", { exact: true })).toBeVisible();
+    await expect.poll(async () => (await db.from("events").select("at, weekdays").eq("title", "Lecture").single()).data).toEqual({ at: null, weekdays: ["Wed"] });
     await page.getByRole("button", { name: "Home" }).click();
   });
 

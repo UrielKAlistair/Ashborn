@@ -1,3 +1,5 @@
+import { KindChoice } from "../../components/Choice";
+import { DateField } from "../../components/DateField";
 import { TimeField } from "../../components/TimeField";
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useToday } from "../../lib/useToday";
@@ -323,13 +325,9 @@ function RoutineForm({ act }: { act: Act }) {
       </div>
       <div className="flex gap-2">
         <TimeField label="Time (optional)" optional value={time} onChange={setTime} className={`${fieldClass} w-32`} />
-        <select value={alarm} disabled={!time} onChange={(e) => setAlarm(e.target.value as AlarmKind)} className={`${fieldClass} disabled:opacity-40`}>
-          {(Object.keys(alarmLabels) as AlarmKind[]).map((kind) => (
-            <option key={kind} value={kind}>
-              {alarmLabels[kind]}
-            </option>
-          ))}
-        </select>
+        <div className="min-w-0 flex-1">
+          <KindChoice label="Alarm" none="No alarm" value={alarm} onChange={setAlarm} disabled={!time} />
+        </div>
       </div>
       <FormButtons onCancel={() => setOpen(false)} onSubmit={submit} />
     </div>
@@ -366,7 +364,7 @@ function DeadlineFields({ deadline, act, model, onDone }: { deadline: Deadline |
     <div onKeyDown={closeOnEscape(onDone)} className={popoverClass}>
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && submit()} placeholder="Deadline" className={fieldClass} />
       <div className="flex gap-2">
-        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={fieldClass} />
+        <DateField label="Due" value={dueDate} onChange={setDueDate} className={fieldClass} />
         <TimeField label="Alarm on the day (optional)" optional value={alarmTime} onChange={setAlarmTime} className={`${fieldClass} w-32`} />
       </div>
       <NodePicker model={model} label="Deadline for" none="Not linked to a quest" value={nodeId} onChange={setNodeId} className={fieldClass} />

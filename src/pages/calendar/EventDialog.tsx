@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { KindChoice } from "../../components/Choice";
+import { DateField } from "../../components/DateField";
 import { Popup } from "../../components/Popup";
 import { Switch } from "../../components/Switch";
 import { TimeField } from "../../components/TimeField";
@@ -13,8 +15,9 @@ import { dayLabel } from "./calendarViews";
 
 /**
  * The Calendar's one pop-up. New: on a day, an event, an alarm or a deadline, chosen by three tabs.
- * An event (EventFields) is a time on the schedule, once or repeating, with an optional end, details,
- * and an alarm at its start or none. An alarm (AlarmFields) is a one-time ring. A deadline: its title,
+ * An event (EventFields) is a time on the schedule with an optional end, details, and an alarm at its
+ * start or none. One added on a day happens once; repeating events are added on the Alarms screen's
+ * Repeating view, and an event stays once or repeating when edited. An alarm (AlarmFields) is a one-time ring. A deadline: its title,
  * day, alarm on the day and quest. An event opens on what it is (EventSummary: when, how long,
  * whether it rings, its details), with Edit for its form; an alarm or a deadline opens on its form.
  * What is open is held by id and read from the latest data, so one deleted elsewhere closes it.
@@ -41,7 +44,7 @@ export function EventDialog({ editing, snapshot, model, today, act, onClose }: D
   if (event) {
     return (
       <Popup label={changing ? "Edit event" : "Event"} onClose={onClose}>
-        {changing ? <EventFields event={event} date={event.at ? toISODate(new Date(event.at)) : today} act={act} onDone={onClose} /> : <EventSummary event={event} onEdit={() => setChanging(true)} />}
+        {changing ? <EventFields event={event} repeating={event.time !== null} date={event.at ? toISODate(new Date(event.at)) : today} act={act} onDone={onClose} /> : <EventSummary event={event} onEdit={() => setChanging(true)} />}
       </Popup>
     );
   }
@@ -90,7 +93,7 @@ function NewEntry({ date, model, today, act, onClose }: { date: ISODate; model: 
         {tab("alarm", "Alarm")}
         {tab("deadline", "Deadline")}
       </div>
-      {kind === "event" ? <EventFields event={null} date={date} act={act} onDone={onClose} /> : null}
+      {kind === "event" ? <EventFields event={null} repeating={false} date={date} act={act} onDone={onClose} /> : null}
       {kind === "alarm" ? <AlarmFields alarm={null} date={date} act={act} onDone={onClose} /> : null}
       {kind === "deadline" ? <DeadlineFields deadline={null} date={date} model={model} today={today} act={act} onDone={onClose} /> : null}
     </Popup>
@@ -120,10 +123,10 @@ function EventSummary({ event, onEdit }: { event: ScheduleEvent; onEdit: () => v
   );
 }
 
-// An event's title, day (or the weekdays it repeats on), start, optional end, ring at its start and
+// An event's title, day (or, `repeating`, the weekdays it repeats on), start, optional end, ring at its start and
 // details; with `event`, that one's, which can also be deleted. Only what changed is sent, so a field
 // sent as it was can't win over a change made to it meanwhile on another device.
-function EventFields({ event, date: initialDate, act, onDone }: { event: ScheduleEvent | null; date: ISODate; act: Act; onDone: () => void }) {
+export function EventFields({ event, repeating, date: initialDate, act, onDone }: { event: ScheduleEvent | null; repeating: boolean; date: ISODate; act: Act; onDone: () => void }) {
   const initialTime = event ? (event.time ?? clockOf(new Date(event.at!))) : "09:00";
   const [title, setTitle] = useState(event?.title ?? "");
   const [date, setDate] = useState(initialDate);
@@ -132,11 +135,10 @@ function EventFields({ event, date: initialDate, act, onDone }: { event: Schedul
   const [end, setEnd] = useState(event?.minutes ? clockAfter(initialTime, event.minutes) : "");
   const [rings, setRings] = useState<ScheduleEvent["rings"]>(event?.rings ?? null);
   const [details, setDetails] = useState(event?.details ?? "");
-  const repeating = days.length > 0;
   // Left at its day and start, a one-off keeps its exact moment, which its start ring's key holds
   const unmoved = event?.at != null && !repeating && date === initialDate && time === initialTime;
   const at = repeating ? null : unmoved ? event!.at : date && time ? atTime(date, time).toISOString() : null;
-  const ready = Boolean(title.trim() && time && (repeating || at));
+  const ready = Boolean(title.trim() && time && (repeating ? days.length > 0 : at));
 
   const save = () => {
     if (!ready) return;
@@ -152,35 +154,13 @@ function EventFields({ event, date: initialDate, act, onDone }: { event: Schedul
   return (
     <div className="space-y-3">
       <input autoFocus={!event} value={title} onChange={(input) => setTitle(input.target.value)} placeholder="What is on" aria-label="Event" className={`${field} w-full`} />
-      {repeating ? null : <input type="date" aria-label="Day" value={date} onChange={(input) => setDate(input.target.value)} className={`${field} w-full`} />}
-      <div className="flex gap-1" role="group" aria-label="Repeats on">
-        {week.map((weekday) => (
-          <button
-            key={weekday}
-            type="button"
-            aria-pressed={days.includes(weekday)}
-            aria-label={`Repeats on ${weekday}`}
-            onClick={() => setDays((current) => (current.includes(weekday) ? current.filter((d) => d !== weekday) : [...current, weekday]))}
-            className={`flex-1 rounded-md border py-1.5 text-[11.5px] phone:min-h-11 ${days.includes(weekday) ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
-          >
-            {weekday.slice(0, 2)}
-          </button>
-        ))}
-      </div>
-      <p className="-mt-1 text-[11.5px] text-muted">{repeating ? `Every ${weekdaysText(days)}` : "Once; pick days to repeat it"}</p>
+      {repeating ? <Weekdays days={days} onChange={setDays} /> : <DateField label="Day" value={date} onChange={setDate} className={`${field} w-full`} />}
       <div className="flex items-center gap-2">
         <TimeField label="Starts" value={time} onChange={setTime} className={`${field} min-w-0 flex-1`} />
         <span className="text-[12px] text-muted">to</span>
         <TimeField label="Ends (optional)" optional value={end} onChange={setEnd} className={`${field} min-w-0 flex-1`} />
       </div>
-      <select value={rings ?? ""} aria-label="At its start" onChange={(input) => setRings((input.target.value || null) as ScheduleEvent["rings"])} className={`${field} w-full`}>
-        <option value="">Doesn't ring</option>
-        {(Object.keys(kindLabels) as Alarm["kind"][]).map((kind) => (
-          <option key={kind} value={kind}>
-            Rings at its start: {kindLabels[kind].toLowerCase()}
-          </option>
-        ))}
-      </select>
+      <KindChoice label="Ring at its start" none="No ring" value={rings ?? "none"} onChange={(choice) => setRings(choice === "none" ? null : choice)} />
       <textarea value={details} onChange={(input) => setDetails(input.target.value)} maxLength={EVENT_DETAILS_MAX} rows={4} placeholder="Details: where, who, notes (optional)" aria-label="Details" className={`${field} block w-full resize-y leading-5`} />
       <div className="flex items-center justify-end gap-3">
         {event ? (
@@ -244,18 +224,14 @@ export function AlarmFields({ alarm, date: initialDate, act, onDone }: { alarm: 
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <input type="date" aria-label="Day" value={date} onChange={(input) => setDate(input.target.value)} className={`${field} min-w-0 flex-1`} />
+        <DateField label="Day" value={date} onChange={setDate} className={`${field} min-w-0 flex-1`} />
         <TimeField label="Time" value={time} onChange={setTime} className={`${field} min-w-0 flex-1`} />
       </div>
       <textarea autoFocus={!alarm} value={label} onChange={(input) => setLabel(input.target.value)} rows={3} placeholder="What for (optional)" aria-label="Label" className={`${field} block w-full resize-y leading-5`} />
       <div className="flex items-center gap-3">
-        <select value={kind} aria-label="How it rings" onChange={(input) => setKind(input.target.value as Alarm["kind"])} className={`${field} flex-1`}>
-          {(Object.keys(kindLabels) as Alarm["kind"][]).map((option) => (
-            <option key={option} value={option}>
-              {kindLabels[option]}
-            </option>
-          ))}
-        </select>
+        <div className="flex-1">
+          <KindChoice label="How it rings" value={kind} onChange={setKind} />
+        </div>
         <button type="button" onClick={save} disabled={!at} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
           {alarm ? "Save" : "Set"}
         </button>
@@ -306,7 +282,7 @@ function DeadlineFields({ deadline, date: initialDate, model, today, act, onDone
     <div className="space-y-3">
       <input autoFocus={!deadline} value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.key === "Enter" && !event.nativeEvent.isComposing && save()} placeholder="What is due" aria-label="Deadline" className={`${field} w-full`} />
       <div className="flex flex-wrap gap-2">
-        <input type="date" aria-label="Due" value={date} onChange={(event) => setDate(event.target.value)} className={`${field} min-w-0 flex-1`} />
+        <DateField label="Due" value={date} onChange={setDate} className={`${field} min-w-0 flex-1`} />
         <TimeField label="Alarm on the day (optional)" optional value={alarmTime} onChange={setAlarmTime} className={`${field} w-32`} />
       </div>
       {date ? <p className="text-[12px] text-muted">{days < 0 ? `${-days}d late` : days === 0 ? "Due today" : `Due in ${days}d`}</p> : null}
@@ -341,5 +317,28 @@ function DeadlineFields({ deadline, date: initialDate, model, today, act, onDone
         </button>
       </div>
     </div>
+  );
+}
+
+// The weekdays a repeating event is on, as toggles
+function Weekdays({ days, onChange }: { days: Weekday[]; onChange: (days: Weekday[]) => void }) {
+  return (
+    <>
+      <div className="flex gap-1" role="group" aria-label="Repeats on">
+        {week.map((weekday) => (
+          <button
+            key={weekday}
+            type="button"
+            aria-pressed={days.includes(weekday)}
+            aria-label={`Repeats on ${weekday}`}
+            onClick={() => onChange(days.includes(weekday) ? days.filter((d) => d !== weekday) : [...days, weekday])}
+            className={`flex-1 rounded-md border py-1.5 text-[11.5px] phone:min-h-11 ${days.includes(weekday) ? "border-ember/50 bg-ember/15 text-ember" : "border-ink/10 text-muted hover:bg-ink/6"}`}
+          >
+            {weekday.slice(0, 2)}
+          </button>
+        ))}
+      </div>
+      <p className="-mt-1 text-[11.5px] text-muted">{days.length > 0 ? `Every ${weekdaysText(days)}` : "Pick the days it repeats on"}</p>
+    </>
   );
 }

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { KindChoice } from "../components/Choice";
 import { Popup } from "../components/Popup";
 import { Switch } from "../components/Switch";
 import { TimeField } from "../components/TimeField";
@@ -6,11 +7,11 @@ import { alarmsAvailable } from "../lib/alarms";
 import { useToday } from "../lib/useToday";
 import { addDays, week } from "../shared/dates";
 import { buildGraphModel } from "../shared/graphModel";
-import { nextOccurrence, type AlarmInstance } from "../shared/schedule";
+import type { AlarmInstance } from "../shared/schedule";
 import type { Alarm, ISODate, ScheduleEvent, Snapshot, Weekday } from "../shared/types";
 import type { Act } from "./home/HomePage";
 import { field, kindLabels } from "./alarmParts";
-import { EventDialog, type Editing } from "./calendar/EventDialog";
+import { EventDialog, EventFields, type Editing } from "./calendar/EventDialog";
 import { DayRings, MoveRing, Row, RowList } from "./DayRings";
 
 /**
@@ -22,7 +23,8 @@ import { DayRings, MoveRing, Row, RowList } from "./DayRings";
  * Repeating: the user's repeating alarms, each with a switch that turns it off on every day, and their
  * repeating events; a tap edits one for every day.
  * The round + adds to the day shown, in the Calendar's pop-up: an event, an alarm (one-tap ones for
- * soon among them) or a deadline; on the repeating view it adds a repeating alarm.
+ * soon among them) or a deadline; on the repeating view, a repeating alarm or a repeating event, by
+ * two tabs. Neither view turns a one-time thing into a repeating one or back.
  */
 
 export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) {
@@ -40,6 +42,8 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
   // The alarm as the pop-up opened on it, which the form starts from
   const opened = useRef<Alarm | null>(null);
   const editing = editingId === "new" ? "new" : (snapshot.alarms.find((alarm) => alarm.id === editingId) ?? null);
+  // Which the repeating view's + adds
+  const [adding, setAdding] = useState<"alarm" | "event">("alarm");
   // The ring of a repeating alarm or a routine being moved, that day only
   const [moving, setMoving] = useState<AlarmInstance | null>(null);
 
@@ -112,7 +116,7 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
       <button
         type="button"
         onClick={() => (view === "day" ? setOpening({ kind: "new", date }) : setEditingId("new"))}
-        aria-label={view === "day" ? "New on this day" : "New repeating alarm"}
+        aria-label={view === "day" ? "New on this day" : "New repeating"}
         className="absolute right-[max(1rem,calc(50%-18rem+1rem))] bottom-4 flex h-14 w-14 phone:right-4 items-center justify-center rounded-full bg-ember text-3xl leading-none text-canvas shadow-[var(--card-shadow)] hover:brightness-110"
       >
         +
@@ -127,8 +131,24 @@ export function AlarmsPage({ snapshot, act }: { snapshot: Snapshot; act: Act }) 
       {opening ? <EventDialog editing={opening} snapshot={snapshot} model={model} today={today} act={act} onClose={() => setOpening(null)} /> : null}
 
       {editing ? (
-        <Popup label={editing === "new" ? "New repeating alarm" : "Edit alarm"} onClose={() => setEditingId(null)}>
-          <AlarmForm alarm={editing === "new" ? null : editing} onSave={save} />
+        <Popup label={editing === "new" ? "New repeating" : "Edit alarm"} onClose={() => setEditingId(null)}>
+          {editing === "new" ? (
+            <div role="tablist" className="flex gap-1 rounded-lg border border-ink/10 p-1">
+              {(["alarm", "event"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={adding === value}
+                  onClick={() => setAdding(value)}
+                  className={`flex-1 rounded-md py-1.5 text-[12.5px] phone:min-h-11 ${adding === value ? "bg-ember/15 text-ember" : "text-muted hover:bg-ink/6"}`}
+                >
+                  {value === "alarm" ? "Alarm" : "Event"}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {editing === "new" && adding === "event" ? <EventFields event={null} repeating date={date} act={act} onDone={() => setEditingId(null)} /> : <AlarmForm alarm={editing === "new" ? null : editing} onSave={save} />}
           {editing === "new" ? null : (
             <button
               type="button"
@@ -221,9 +241,8 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
   const [kind, setKind] = useState<Alarm["kind"]>(alarm?.kind ?? "plain");
 
   const submit = () => {
-    if (!time) return;
-    const at = days.length === 0 ? nextOccurrence(time).toISOString() : null;
-    onSave({ label: label.trim(), kind, sound: alarm?.sound ?? "default", at, time: at ? null : time, weekdays: days });
+    if (!time || days.length === 0) return;
+    onSave({ label: label.trim(), kind, sound: alarm?.sound ?? "default", at: null, time, weekdays: days });
   };
 
   return (
@@ -245,15 +264,11 @@ function AlarmForm({ alarm, onSave }: { alarm: Alarm | null; onSave: (alarm: Omi
         ))}
       </div>
       <div className="flex items-center gap-3">
-        <select value={kind} aria-label="How it rings" onChange={(event) => setKind(event.target.value as Alarm["kind"])} className={`${field} flex-1`}>
-          {(Object.keys(kindLabels) as Alarm["kind"][]).map((option) => (
-            <option key={option} value={option}>
-              {kindLabels[option]}
-            </option>
-          ))}
-        </select>
-        <button type="button" onClick={submit} disabled={!time} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
-          {alarm ? "Save" : days.length === 0 ? "Set once" : "Set"}
+        <div className="flex-1">
+          <KindChoice label="How it rings" value={kind} onChange={setKind} />
+        </div>
+        <button type="button" onClick={submit} disabled={!time || days.length === 0} className="rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-canvas hover:brightness-110 disabled:opacity-50 phone:min-h-11">
+          {alarm ? "Save" : "Set"}
         </button>
       </div>
     </div>

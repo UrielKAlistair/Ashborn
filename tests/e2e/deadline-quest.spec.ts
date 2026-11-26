@@ -64,10 +64,15 @@ test("a linked deadline raises nothing; a priority given in Ready reaches Now", 
   // A deadline's title opens it to change; only what changed is sent
   await deadlines.getByRole("button", { name: "Reading quiz", exact: true }).click();
   await deadlines.getByPlaceholder("Deadline").fill("Reading test");
-  await deadlines.locator('input[type="date"]').fill(addDays(today(), 2));
+  // The day is picked on the app's month grid, a month on when two days ahead is next month
+  const due = addDays(today(), 2);
+  await deadlines.getByRole("button", { name: "Due", exact: true }).click();
+  const month = page.getByRole("dialog", { name: "Due" });
+  if (due.slice(0, 7) !== today().slice(0, 7)) await month.getByRole("button", { name: "Next month" }).click();
+  await month.getByRole("button", { name: new RegExp(` ${Number(due.slice(8))} ${new Date(`${due}T12:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}$`) }).click();
   await deadlines.getByRole("button", { name: "Save" }).click();
   await expect(deadlines.getByRole("button", { name: "Reading test", exact: true })).toBeVisible();
-  await expect.poll(async () => (await db.from("deadlines").select("title, due_date, node_id").eq("title", "Reading test").maybeSingle()).data).toEqual({ title: "Reading test", due_date: addDays(today(), 2), node_id: quest });
+  await expect.poll(async () => (await db.from("deadlines").select("title, due_date, node_id").eq("title", "Reading test").maybeSingle()).data).toEqual({ title: "Reading test", due_date: due, node_id: quest });
 
   await app.close();
   rmSync(profile, { recursive: true, force: true });
