@@ -34,12 +34,13 @@ import org.json.JSONObject;
 // alarm that fires while another rings joins it: one ring, named for both, with the harder stop,
 // and stopping it stops both. Left alone, a ring stops itself after it last started (ringMs: the
 // longest of its parts') and leaves a "Missed" notification, which sounds as a message does, not as
-// an alarm. A call (an agent calling the user) plays the app's own clip once, as the ringer allows,
+// an alarm. A call (an agent calling the user) plays the build's call clip once (res/raw/call, kept
+// out of the repository; without it, the phone's ringtone for the call's length), as the ringer allows,
 // rings for the clip's length, and cannot be snoozed.
 public class AlarmService extends Service {
     static final long RING_MS = 5 * 60_000;
     static final long CHALLENGE_RING_MS = 15 * 60_000;
-    // The call clip (res/raw/call) lasts 23.5 s
+    // A call rings this long: the call clip (res/raw/call) lasts 23.5 s
     static final long CALL_RING_MS = 24_000;
     // A call this late (the phone was off or out of reach) is reported missed instead of ringing
     static final long CALL_STALE_MS = 2 * 60_000;
@@ -200,11 +201,13 @@ public class AlarmService extends Service {
     // ringer's volume and Do Not Disturb apply to it as to a call. A challenge alarm sounds in every
     // ringer mode, on the alarm stream: its own volume, and Do Not Disturb only if that blocks alarms.
     // Either plays on the phone's own speaker, even with earbuds or a Bluetooth speaker connected.
-    // A call plays the app's tune (res/raw/call) instead of the phone's alarm sound.
+    // A call plays the call clip (res/raw/call) if the build has one, else the phone's ringtone, looped.
     private void startSound(boolean challenge, boolean call) {
         AudioManager audio = getSystemService(AudioManager.class);
         if (!challenge && audio.getRingerMode() != AudioManager.RINGER_MODE_NORMAL) return;
-        Uri sound = call ? Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.call) : RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+        // Looked up by name, as the clip is not in the repository
+        int clip = call ? getResources().getIdentifier("call", "raw", getPackageName()) : 0;
+        Uri sound = clip != 0 ? Uri.parse("android.resource://" + getPackageName() + "/" + clip) : RingtoneManager.getDefaultUri(call ? RingtoneManager.TYPE_RINGTONE : RingtoneManager.TYPE_ALARM);
         if (sound == null) sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
         try {
             player = new MediaPlayer();
@@ -212,9 +215,9 @@ public class AlarmService extends Service {
             player.setAudioAttributes(new AudioAttributes.Builder().setUsage(usage).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
             if (Build.VERSION.SDK_INT >= 28) player.setPreferredDevice(builtInSpeaker(audio));
             player.setDataSource(this, sound);
-            player.setLooping(!call);
+            player.setLooping(clip == 0);
             // A call rung together with a real alarm goes on with the alarm's sound once the clip ends
-            if (call) player.setOnCompletionListener(done -> {
+            if (clip != 0) player.setOnCompletionListener(done -> {
                 if (ringMs(parts) > CALL_RING_MS) {
                     stopSound();
                     startSound(challenge, false);
